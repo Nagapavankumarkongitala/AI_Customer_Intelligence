@@ -10,7 +10,7 @@ Live build tracker: `PROJECT_STATUS.md`.
 
 ## Implemented phases
 - [x] Phase 0 — Repository initialization (config, logging, sample data, tooling)
-- [ ] Phase 1 — Data foundation (upload, mapping, quality, cleaning, export)
+- [x] Phase 1 — Data foundation (upload, mapping, quality, cleaning, export)
 - [ ] Phase 2 — Customer features and RFM/LRFM
 - [ ] Phase 3 — Demographic and geographic profiling
 - [ ] Phase 4 — Advanced segmentation

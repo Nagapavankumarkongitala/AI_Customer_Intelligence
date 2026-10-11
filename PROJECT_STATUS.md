@@ -1,28 +1,32 @@
 # PROJECT_STATUS
 
 ## Current phase
-Phase 0 — Repository Initialization (complete, pending acceptance run)
+Phase 1 — Complete Data Foundation (complete, gates green)
 
 ## Completed features
-- Phase 0: pyproject/pytest/ruff/black config scoped to project paths; requirements
-  split (runtime + dev); .gitignore excluding foreign nested checkouts; .env.example;
-  Streamlit theme; Windows + Linux/macOS run scripts; `utils` package (constants,
-  exceptions, logging, validators, file I/O, model persistence); full `config.yaml`;
-  landing page `app.py`; synthetic sample-data generator (1,200 customers) + CSV;
-  setup smoke tests.
+- Phase 0: (as before — tooling, utils, config, landing page, sample data).
+- Phase 1: `column_detection` (normalize, dedupe suffixes, alias+fuzzy auto-map,
+  strict validation); `data_service` (CSV/XLSX/XLS/Parquet, encoding fallback,
+  currency/date parsers, canonical frame); `profiling_service` (0.4/0.4/0.2 quality
+  + issue breakdown, warnings separated from validity); `cleaning_service`
+  (7 configurable treatments in fixed order + full audit record);
+  `data_dictionary_service`, `export_service` (CSV/Excel/JSON bytes),
+  `state_service` (19-key contract: init/validate/reset/status).
+- Pages renumbered to the 9-page scheme: `01_Data_Upload_and_Mapping`,
+  `02_Data_Quality_and_Cleaning` (+ dictionary + downloads). Pages 03–09 arrive
+  with their phases.
 
 ## Current test results
-- `python -m compileall` clean; `ruff check .` clean; `black --check .` clean
-  (82 files); `pytest -q` 3 passed; `streamlit run app.py` health 200.
+- `python -m compileall` clean; `ruff check .` clean; `black --check .` clean;
+  `pytest -q` 28 passed; `streamlit run app.py` health 200.
   Run on 2026-10-11, Python 3.12, Streamlit 1.63.
 
 ## Known issues
 - `ponytail/`, `servers/`, `awesome-ai-agents/` are unrelated nested checkouts;
   excluded from tooling, not deleted (user decision).
-- Analytical modules (`services/`, `analytics/`, `churn/`, `segmentation/`, pages)
-  are still Phase-0 stubs; implemented in Phases 1–8.
-- `pytest`/`ruff`/`black` need installing via `requirements-dev.txt`.
+- Analytical modules beyond Phase 1 (`analytics/` RFM/demographics, `segmentation/`,
+  `churn/`, pages 03–09) are still stubs; implemented in Phases 2–8.
 
 ## Next phase
-Phase 1 — Complete Data Foundation (upload/mapping, quality/cleaning, dictionary,
-export, state service; pages renumbered to the 9-page scheme).
+Phase 2 — Customer Features and RFM/LRFM (customer feature table, RFM/LRFM scoring,
+segment naming, page 03, tests for boundaries/ties/small populations).

@@ -1,6 +1,14 @@
 # CHANGELOG
 
-## 2026-10-11 — Phase 0: Repository Initialization
+## 2026-10-11 — Phase 1: Complete Data Foundation
+- Added: `services/column_detection.py`, `data_service.py`, `profiling_service.py`,
+  `cleaning_service.py`, `data_dictionary_service.py`, `export_service.py`,
+  `state_service.py`.
+- Added: pages `01_Data_Upload_and_Mapping.py`, `02_Data_Quality_and_Cleaning.py`;
+  removed obsolete 8-page stubs (pages 03–09 arrive with their phases).
+- Added: tests `test_column_detection.py`, `test_quality.py`, `test_cleaning.py`,
+  `test_exports.py` (28 passed total); stale future-phase stub tests removed.
+- Changed: `UploadPreview` carries the full normalized frame for session state.
 - Added: `pyproject.toml` (black/ruff/pytest config), `requirements-dev.txt`,
   `.gitignore`, `.env.example`, `.streamlit/config.toml`, `run_windows.ps1`,
   `run_linux_mac.sh`.
