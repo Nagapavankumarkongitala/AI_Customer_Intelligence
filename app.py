@@ -2,9 +2,20 @@
 
 import streamlit as st
 
+from services import state_service
+from utils.config import load_config
+from utils.exceptions import ConfigurationError
 from utils.logging_config import configure_logging
 
 configure_logging()
+
+try:
+    load_config()
+except ConfigurationError as exc:
+    st.error(f"Startup blocked: {exc}")
+    st.stop()
+
+state_service.initialize(st.session_state)
 
 st.set_page_config(page_title="AI Customer Intelligence", layout="wide")
 st.title("AI Customer Intelligence Platform")
@@ -40,3 +51,18 @@ st.info(
     "No data yet? Generate the synthetic demo file with "
     "`python utils/sample_data.py` and upload `data/sample/sample_customer_transactions.csv`."
 )
+
+st.subheader("Pipeline status")
+status = state_service.status_report(st.session_state)
+stages = [
+    ("01 Upload", "raw_data"),
+    ("02 Clean", "clean_data"),
+    ("03 Features", "customer_features"),
+    ("03 RFM", "rfm_results"),
+    ("05 AI segments", "segmented_customers"),
+    ("07 Scores", "churn_scores"),
+    ("08 Actions", "retention_results"),
+]
+cols = st.columns(len(stages))
+for col, (label, key) in zip(cols, stages, strict=True):
+    col.metric(label, "done" if status.get(key) != "empty" else "—")

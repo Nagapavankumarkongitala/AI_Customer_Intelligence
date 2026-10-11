@@ -1,6 +1,18 @@
 # CHANGELOG
 
-## 2026-10-11 — Phase 7: Retention Intelligence
+## 2026-10-11 — Phase 8: Executive Dashboard and Production Readiness
+- Added: `services/dashboard_service.py` (master table, global filters, KPIs,
+  trends, portfolio, masked high-risk list), `visualization/executive_dashboard.py`,
+  `components/filters.py`, `components/export_buttons.py`,
+  page `09_Executive_Dashboard.py`, `utils/config.py` (startup validation),
+  `utils/model_card.py` (cards written on every model save), `Dockerfile`,
+  `.dockerignore`, `.github/workflows/ci.yml`, `DEPLOYMENT.md`.
+- Added: tests `test_dashboard.py`, `test_charts.py`, `test_end_to_end.py`
+  (full 14-step workflow on sample data passes).
+- Removed: out-of-spec starter stubs with no callers (basket/CLV/health/cohort
+  analytics, standalone explainability modules, encoding/feature_creation,
+  navbar/sidebar/charts components).
+- Fixed: value–risk matrix tolerates missing hover columns.
 - Added: `retention_engine/` value tiers, priority scoring, strategy matrix
   loader/validator, next-best-action, offer catalog, campaign export;
   `retention_strategies.yaml`; `services/retention_service.py`;

@@ -181,7 +181,22 @@ def save_churn_run(bundle: dict, run_name: str) -> str:
         "cutoff": bundle["cutoff"],
         "horizon_days": bundle["horizon_days"],
     }
-    return str(save_model(bundle["pipeline"], f"models/churn/{run_name}.joblib", metadata))
+    path = save_model(bundle["pipeline"], f"models/churn/{run_name}.joblib", metadata)
+    from utils.model_card import churn_card_metadata, write_model_card
+
+    write_model_card(
+        f"reports/model_cards/{run_name}.md",
+        version=run_name,
+        **churn_card_metadata(
+            bundle["model_name"],
+            bundle["feature_cols"],
+            bundle["test_metrics"],
+            bundle["suggested_threshold"],
+            bundle["cutoff"],
+            bundle["horizon_days"],
+        ),
+    )
+    return str(path)
 
 
 def available_models() -> dict[str, str | None]:

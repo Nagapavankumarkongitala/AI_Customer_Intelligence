@@ -17,7 +17,7 @@ Live build tracker: `PROJECT_STATUS.md`.
 - [x] Phase 5 — Segmentation comparison
 - [x] Phase 6 — Leakage-safe churn prediction
 - [x] Phase 7 — Retention intelligence
-- [ ] Phase 8 — Executive dashboard and production readiness
+- [x] Phase 8 — Executive dashboard and production readiness
 
 ## Input schema
 Required: `customer_id` (text), `transaction_date` (date), `amount_spent` (number).
@@ -38,6 +38,9 @@ Linux/macOS: `bash run_linux_mac.sh` (Windows: `run_windows.ps1`).
 ```powershell
 streamlit run app.py
 ```
+Docker: `docker build -t customer-intelligence .` then
+`docker run -p 8501:8501 customer-intelligence`.
+See `DEPLOYMENT.md` for clean-install, restart behavior, privacy, and access notes.
 
 ## Test & quality gates (run at the end of every phase)
 ```powershell

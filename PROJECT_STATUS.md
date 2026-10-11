@@ -1,7 +1,8 @@
 # PROJECT_STATUS
 
 ## Current phase
-Phase 7 — Retention Intelligence (complete, gates green)
+Phase 8 — Executive Dashboard and Production Readiness (complete, gates green).
+All 8 build phases done.
 
 ## Completed features
 - Phase 0: (as before — tooling, utils, config, landing page, sample data).
@@ -44,20 +45,27 @@ Phase 7 — Retention Intelligence (complete, gates green)
   schema; `services/churn_service.py` (cohort time splits, train/calibrate/
   persist); `visualization/churn_charts.py`; page `07_Churn_Prediction`
   (dataset → train/compare → threshold → explain → score + downloads).
+- Phase 7: retention tiers, priority scoring, YAML strategy matrix, traceable
+  actions, campaign export, page `08_Retention_Strategies`.
+- Phase 8: `services/dashboard_service.py`, `visualization/executive_dashboard.py`,
+  `components/filters.py` + `export_buttons.py`, page `09_Executive_Dashboard`
+  (filter-consistent KPIs/trends/portfolio/risk/demographics/retention, masked IDs,
+  gated drill-down); `utils/config.py` startup validation; model cards on save;
+  Dockerfile, CI, DEPLOYMENT.md; end-to-end workflow test.
 
 ## Current test results
 - `python -m compileall` clean; `ruff check .` clean; `black --check .` clean;
-  `pytest -q` 94 passed;
+  `pytest -q --cov` 100+ passed (incl. full 14-step workflow on sample data);
   `streamlit run app.py` health 200.
   Run on 2026-10-11, Python 3.12, Streamlit 1.63.
 
 ## Known issues
 - `ponytail/`, `servers/`, `awesome-ai-agents/` are unrelated nested checkouts;
   excluded from tooling, not deleted (user decision).
-- Only page 09 (executive dashboard) and production hardening remain (Phase 8).
-  LightGBM, SHAP, HDBSCAN, UMAP are not installed: pages show install guidance
-  and degrade gracefully (verified by tests).
+- LightGBM, SHAP, HDBSCAN, UMAP are not installed: pages show install guidance
+  and degrade gracefully (verified by tests). Single-user in-memory sessions;
+  see DEPLOYMENT.md for restart behavior.
 
 ## Next phase
-Phase 8 — Executive Dashboard + Production Readiness (filter-consistent KPIs,
-privacy masking, model cards, Dockerfile, CI, coverage, deployment guide).
+Done. All 8 build phases complete — maintenance mode (revalidate churn models
+on fresh outcome windows as behavior drifts).

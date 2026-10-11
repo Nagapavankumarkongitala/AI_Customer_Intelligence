@@ -135,4 +135,18 @@ def save_segmentation_run(
         f"models/segmentation/{run_name}.pipeline.joblib",
         {"run": run_name, "kind": "preprocessing_pipeline"},
     )
+    from utils.model_card import segmentation_card_metadata, write_model_card
+
+    card_fields = segmentation_card_metadata(
+        str(metadata.get("model", run_name)),
+        list(metadata.get("feature_names", [])),
+        metadata.get("metrics", {}),
+        metadata.get("params", {}),
+    )
+    write_model_card(
+        f"reports/model_cards/{run_name}.md",
+        version=run_name,
+        training_period=str(metadata.get("training_period", "recorded in run audit")),
+        **card_fields,
+    )
     return str(model_path)

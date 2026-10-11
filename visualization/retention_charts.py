@@ -8,13 +8,16 @@ import plotly.express as px
 
 def value_risk_matrix(table: pd.DataFrame) -> px.Figure:
     """Historical value vs churn probability, sized by revenue at risk, colored by action."""
+    hover = [
+        c for c in ("customer_id", "customer_value_tier", "risk_band") if c in table.columns
+    ]
     return px.scatter(
         table,
         x="churn_probability",
         y="expected_value_proxy_historical",
         size="revenue_at_risk",
         color="recommended_action",
-        hover_data=["customer_id", "customer_value_tier", "risk_band"],
+        hover_data=hover or None,
         title="Value–risk matrix (size = revenue at risk)",
         labels={
             "churn_probability": "Churn probability",
