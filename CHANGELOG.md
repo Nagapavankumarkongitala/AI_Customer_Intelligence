@@ -1,6 +1,10 @@
 # CHANGELOG
 
-## 2026-10-11 — Phase 2: Customer Features and RFM/LRFM
+## 2026-10-11 — Phase 3: Demographic and Geographic Profiling
+- Added: `analytics/demographics.py`, `analytics/statistical_tests.py`,
+  `visualization/demographic_charts.py`, page `04_Demographic_Profiling.py`.
+- Added: `tests/test_demographics.py` (53 passed total). Analytics helpers avoid
+  `test_*` names so pytest never collects them as tests.
 - Added: `analytics/customer_features.py`, `analytics/rfm.py`, `analytics/lrfm.py`,
   `services/feature_service.py`, `visualization/rfm_charts.py`,
   `components/metric_cards.py`, page `03_RFM_LRFM_Analysis.py`.
