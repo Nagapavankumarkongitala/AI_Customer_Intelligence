@@ -1,6 +1,12 @@
 # CHANGELOG
 
-## 2026-10-11 — Phase 3: Demographic and Geographic Profiling
+## 2026-10-11 — Phase 4: Advanced Segmentation
+- Added: `feature_engineering/preprocessing.py`, `scaling.py`; `segmentation/`
+  `common/evaluation/stability/segment_profiling/segment_naming` + six model
+  modules (incl. new `autoencoder_model.py`); `deep_learning/` autoencoder,
+  embeddings, latent viz; `services/segmentation_service.py`;
+  `visualization/segmentation_charts.py`; page `05_Advanced_Segmentation.py`.
+- Added: `tests/test_segmentation.py` (64 passed total).
 - Added: `analytics/demographics.py`, `analytics/statistical_tests.py`,
   `visualization/demographic_charts.py`, page `04_Demographic_Profiling.py`.
 - Added: `tests/test_demographics.py` (53 passed total). Analytics helpers avoid

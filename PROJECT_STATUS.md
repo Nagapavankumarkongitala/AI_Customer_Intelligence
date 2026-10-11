@@ -1,7 +1,7 @@
 # PROJECT_STATUS
 
 ## Current phase
-Phase 3 — Demographic and Geographic Profiling (complete, gates green)
+Phase 4 — Advanced Segmentation (complete, gates green)
 
 ## Completed features
 - Phase 0: (as before — tooling, utils, config, landing page, sample data).
@@ -17,26 +17,32 @@ Phase 3 — Demographic and Geographic Profiling (complete, gates green)
   `03_RFM_LRFM_Analysis` (KPIs, RFM/LRFM tabs, charts, profile, drill-down,
   downloads). Pages 04–09 arrive with their phases.
 - Phase 2: (as before — features, RFM/LRFM, page 03).
-- Phase 3: `analytics/demographics.py` (age bands incl. custom specs, gender/geo
-  tables with revenue, concentration incl. HHI, per-segment profiles, population
-  comparisons — absent fields yield notes, never crashes);
-  `analytics/statistical_tests.py` (ANOVA/Welch/Kruskal-Wallis auto-choice,
-  chi-square/Fisher + Cramer's V, Holm correction); `visualization/demographic_charts.py`;
-  page `04_Demographic_Profiling` (missing indicators, charts, treemaps, segment
-  tests, downloads).
+- Phase 3: (as before — demographics, segment tests, page 04).
+- Phase 4: `feature_engineering/preprocessing.py` + `scaling.py` (impute,
+  skew-triggered log1p inside the persisted pipeline, robust/standard scaling,
+  variance + correlation review); six `segmentation/` models (kmeans, gmm,
+  hierarchical, hdbscan-optional, autoencoder-TensorFlow, co-association
+  ensemble); `evaluation.py` (noise-aware silhouette/DB/CH), `stability.py`
+  (seed + bootstrap ARI), `segment_profiling.py`, `segment_naming.py` (value ×
+  activity grid, post-hoc only); `deep_learning/` autoencoder + embeddings +
+  latent viz; `services/segmentation_service.py` (registry, k-sweep, stability,
+  persistence); `visualization/segmentation_charts.py`; page
+  `05_Advanced_Segmentation` (prepare → sweep → run → profile → override names
+  → save run + model files).
 
 ## Current test results
 - `python -m compileall` clean; `ruff check .` clean; `black --check .` clean;
-  `pytest -q` 53 passed (incl. sample-data end to end through RFM/LRFM scoring);
+  `pytest -q` 64 passed (incl. tiny TensorFlow autoencoder run);
   `streamlit run app.py` health 200.
   Run on 2026-10-11, Python 3.12, Streamlit 1.63.
 
 ## Known issues
 - `ponytail/`, `servers/`, `awesome-ai-agents/` are unrelated nested checkouts;
   excluded from tooling, not deleted (user decision).
-- Segmentation, churn, retention analytics and pages 05–09 are still stubs;
-  implemented in Phases 4–8.
+- Churn, retention analytics and pages 06–09 are still stubs; implemented in
+  Phases 5–8. HDBSCAN and UMAP are not installed: pages show install guidance
+  and degrade gracefully (verified by tests).
 
 ## Next phase
-Phase 4 — Advanced Segmentation (feature pipeline, 6 clustering models,
-evaluation + stability, post-hoc naming, page 05).
+Phase 5 — Segmentation Comparison (RFM vs AI models, metric/stability/revenue/
+interpretability comparison, recommendation record, page 06).
