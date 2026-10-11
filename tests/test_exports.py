@@ -2,6 +2,9 @@
 
 import pandas as pd
 
+from analytics.customer_features import build_customer_features
+from analytics.lrfm import score_lrfm
+from analytics.rfm import score_rfm
 from services import state_service
 from services.cleaning_service import CleaningConfig, clean
 from services.column_detection import auto_map
@@ -52,7 +55,7 @@ def test_state_contract_lifecycle() -> None:
 
 
 def test_sample_data_end_to_end() -> None:
-    """Sample CSV auto-maps, cleans, and audits with consistent arithmetic."""
+    """Sample CSV auto-maps, cleans, audits, and scores RFM/LRFM consistently."""
     df = pd.read_csv("data/sample/sample_customer_transactions.csv")
     proposal = auto_map(list(df.columns))
     assert proposal.missing_required == []
@@ -61,3 +64,9 @@ def test_sample_data_end_to_end() -> None:
     assert audit["output_rows"] == audit["input_rows"] - audit["rows_removed"]
     dictionary = build_dictionary(frame, proposal.mapping)
     assert len(dictionary) == len(proposal.mapping)
+    result = build_customer_features(frame)
+    assert len(result.features) > 1000
+    rfm = score_rfm(result.features)
+    lrfm = score_lrfm(result.features)
+    assert len(rfm) == len(lrfm) == len(result.features)
+    assert rfm["segment"].notna().all() and lrfm["segment"].notna().all()
