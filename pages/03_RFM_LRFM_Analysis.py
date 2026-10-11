@@ -121,14 +121,18 @@ for tab, key in ((tab_rfm, "rfm_results"), (tab_lrfm, "lrfm_results")):
     with tab:
         enriched = features.merge(scored, on="customer_id", suffixes=("", "_seg"))
         profile = segment_profile(enriched, monetary_col="monetary_value")
-        st.plotly_chart(segment_distribution_bar(profile), use_container_width=True,
-                        key=f"{key}_seg_dist")
-        st.plotly_chart(revenue_by_segment_bar(profile), use_container_width=True,
-                        key=f"{key}_revenue")
-        st.plotly_chart(recency_frequency_scatter(enriched), use_container_width=True,
-                        key=f"{key}_rf")
-        st.plotly_chart(frequency_monetary_scatter(enriched), use_container_width=True,
-                        key=f"{key}_fm")
+        st.plotly_chart(
+            segment_distribution_bar(profile), use_container_width=True, key=f"{key}_seg_dist"
+        )
+        st.plotly_chart(
+            revenue_by_segment_bar(profile), use_container_width=True, key=f"{key}_revenue"
+        )
+        st.plotly_chart(
+            recency_frequency_scatter(enriched), use_container_width=True, key=f"{key}_rf"
+        )
+        st.plotly_chart(
+            frequency_monetary_scatter(enriched), use_container_width=True, key=f"{key}_fm"
+        )
         st.plotly_chart(rfm_heatmap(scored), use_container_width=True, key=f"{key}_heatmap")
 
         st.subheader("Segment profile")

@@ -7,6 +7,7 @@ import streamlit as st
 import yaml
 
 from analytics.customer_features import build_customer_features
+from churn.dataset_builder import build_churn_dataset
 from churn.evaluation import (
     calibration_table,
     classification_metrics,
@@ -17,7 +18,6 @@ from components.metric_cards import kpi_row
 from services import state_service
 from services.churn_service import (
     available_models,
-    build_churn_dataset,
     save_churn_run,
     score_all_customers,
     train_churn_model,
