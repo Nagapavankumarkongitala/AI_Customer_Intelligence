@@ -16,3 +16,4 @@ xgboost
 lightgbm
 shap
 tensorflow
+umap-learn
