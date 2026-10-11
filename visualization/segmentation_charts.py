@@ -8,7 +8,10 @@ import plotly.express as px
 import plotly.graph_objects as go
 from sklearn.decomposition import PCA
 
+from visualization.theme import VOLT_DISCRETE, VOLT_SCALE, styled
 
+
+@styled
 def pca_scatter(
     X: np.ndarray, labels: np.ndarray, names: dict[int, str] | None = None
 ) -> px.Figure:
@@ -21,10 +24,12 @@ def pca_scatter(
         x="pc_1",
         y="pc_2",
         color="cluster",
+        color_discrete_sequence=VOLT_DISCRETE,
         title="Clusters (PCA 2D)",
     )
 
 
+@styled
 def umap_scatter(
     X: np.ndarray, labels: np.ndarray, names: dict[int, str] | None = None
 ) -> px.Figure:
@@ -39,9 +44,17 @@ def umap_scatter(
     coords = umap.UMAP(n_components=2, random_state=42).fit_transform(np.asarray(X, dtype=float))
     frame = pd.DataFrame(coords, columns=["umap_1", "umap_2"])
     frame["cluster"] = [names.get(int(lab), str(lab)) if names else str(lab) for lab in labels]
-    return px.scatter(frame, x="umap_1", y="umap_2", color="cluster", title="Clusters (UMAP 2D)")
+    return px.scatter(
+        frame,
+        x="umap_1",
+        y="umap_2",
+        color="cluster",
+        color_discrete_sequence=VOLT_DISCRETE,
+        title="Clusters (UMAP 2D)",
+    )
 
 
+@styled
 def cluster_size_bar(profile: pd.DataFrame) -> px.Figure:
     """Customer counts per cluster (business names when present)."""
     data = profile.copy()
@@ -51,11 +64,12 @@ def cluster_size_bar(profile: pd.DataFrame) -> px.Figure:
         x="label",
         y="customers",
         color="customers",
-        color_continuous_scale="Blues",
+        color_continuous_scale=VOLT_SCALE,
         title="Customers per cluster",
     )
 
 
+@styled
 def profile_heatmap(profile: pd.DataFrame) -> px.Figure:
     """Cluster medians (z-scored per feature) as a heatmap."""
     medians = profile.filter(regex="^median_").copy()
@@ -77,6 +91,7 @@ def profile_heatmap(profile: pd.DataFrame) -> px.Figure:
     )
 
 
+@styled
 def sankey_mapping(contingency: pd.DataFrame, source_name: str, target_name: str) -> go.Figure:
     """Flow of customers from source segments (left) to target segments (right)."""
     sources = [f"{source_name}: {idx}" for idx in contingency.index]
@@ -92,12 +107,18 @@ def sankey_mapping(contingency: pd.DataFrame, source_name: str, target_name: str
                 values.append(value)
     return go.Figure(
         go.Sankey(
-            node={"label": labels, "pad": 12, "thickness": 16},
-            link={"source": link_source, "target": link_target, "value": values},
+            node={"label": labels, "pad": 12, "thickness": 16, "color": "#9DB800"},
+            link={
+                "source": link_source,
+                "target": link_target,
+                "value": values,
+                "color": "rgba(204,255,0,0.25)",
+            },
         )
     )
 
 
+@styled
 def metric_comparison_bar(table: pd.DataFrame, metric: str, title: str) -> px.Figure:
     """One metric across candidate models (NaN metrics are dropped from view)."""
     data = table.dropna(subset=[metric])
@@ -106,6 +127,7 @@ def metric_comparison_bar(table: pd.DataFrame, metric: str, title: str) -> px.Fi
         x="model",
         y=metric,
         color="model",
+        color_discrete_sequence=VOLT_DISCRETE,
         title=title,
         labels={"model": "Model", metric: metric},
     )

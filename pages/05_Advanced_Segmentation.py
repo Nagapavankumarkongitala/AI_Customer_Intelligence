@@ -5,6 +5,7 @@ from pathlib import Path
 import streamlit as st
 import yaml
 
+from components.filters import control_group
 from components.metric_cards import kpi_row
 from segmentation.common import labels_to_series
 from segmentation.evaluation import evaluate_clustering
@@ -28,9 +29,11 @@ from visualization.segmentation_charts import (
     profile_heatmap,
     umap_scatter,
 )
+from visualization.theme import inject_terminal_css
 
 configure_logging()
 state_service.initialize(st.session_state)
+inject_terminal_css()
 
 st.title("05 · Advanced Segmentation")
 st.markdown(
@@ -48,22 +51,22 @@ cfg = yaml.safe_load(Path("config.yaml").read_text(encoding="utf-8"))
 numeric_cols = features.select_dtypes(include="number").columns.tolist()
 defaults = [f for f in cfg["segmentation"]["default_features"] if f in numeric_cols]
 
-st.subheader("1 · Feature pipeline")
-f1, f2, f3 = st.columns(3)
-with f1:
-    selected = st.multiselect("Clustering features", numeric_cols, default=defaults or numeric_cols)
-with f2:
-    scaler = st.selectbox(
-        "Scaler",
-        ["robust", "standard"],
-        help="Robust (median/IQR) resists outliers; standard uses mean/std.",
-    )
-with f3:
-    use_log1p = st.checkbox(
-        "log1p skewed features",
-        value=True,
-        help="Applies to nonnegative columns with skew above 1.",
-    )
+with st.sidebar:
+    with control_group("Feature Set"):
+        selected = st.multiselect(
+            "Clustering features", numeric_cols, default=defaults or numeric_cols
+        )
+        use_log1p = st.checkbox(
+            "log1p skewed features",
+            value=True,
+            help="Applies to nonnegative columns with skew above 1.",
+        )
+    with control_group("Scaling"):
+        scaler = st.selectbox(
+            "Scaler",
+            ["robust", "standard"],
+            help="Robust (median/IQR) resists outliers; standard uses mean/std.",
+        )
 
 if st.button("Prepare features"):
     try:
@@ -97,7 +100,7 @@ if prepared_state is None:
     st.stop()
 
 report = prepared_state["report"]
-with st.expander("Pipeline review", expanded=True):
+with st.expander("Pipeline review", expanded=False):
     st.write(f"Kept features: {', '.join(prepared_state['feature_names'])}")
     if report["dropped_zero_variance"]:
         st.write(f"Dropped (no variance): {', '.join(report['dropped_zero_variance'])}")
@@ -107,22 +110,20 @@ with st.expander("Pipeline review", expanded=True):
         st.warning("Highly correlated pairs (review before trusting splits):")
         st.write(report["high_correlations"])
 
-st.subheader("2 · Model & cluster count")
-availability = model_availability()
-model_names = ["kmeans", "gmm", "hierarchical", "hdbscan", "autoencoder", "ensemble"]
-model = st.selectbox("Model", model_names)
+with st.sidebar:
+    with control_group("Model Setup"):
+        availability = model_availability()
+        model_names = ["kmeans", "gmm", "hierarchical", "hdbscan", "autoencoder", "ensemble"]
+        model = st.selectbox("Model", model_names)
+        n_clusters = st.slider("Clusters (k)", 2, 10, 5, disabled=(model == "hdbscan"))
+        seed = st.number_input("Random seed", value=42, step=1)
+        min_cluster_size = st.number_input(
+            "HDBSCAN min cluster size", min_value=5, value=15, step=5
+        )
+        latent_dim = st.number_input("AE latent dims", min_value=2, max_value=32, value=8)
+        epochs = st.number_input("AE max epochs", min_value=5, max_value=500, value=100)
 if availability.get(model):
     st.warning(availability[model])
-m1, m2, m3 = st.columns(3)
-with m1:
-    n_clusters = st.slider("Clusters (k)", 2, 10, 5, disabled=(model == "hdbscan"))
-with m2:
-    seed = st.number_input("Random seed", value=42, step=1)
-with m3:
-    min_cluster_size = st.number_input("HDBSCAN min cluster size", min_value=5, value=15, step=5)
-with st.expander("Autoencoder settings"):
-    latent_dim = st.number_input("Latent dimensions", min_value=2, max_value=32, value=8)
-    epochs = st.number_input("Max epochs (early stopping)", min_value=5, max_value=500, value=100)
 
 k_min, k_max = cfg["segmentation"]["cluster_range"]
 if model != "hdbscan" and st.button(f"Sweep k = {k_min}…{k_max}"):
@@ -131,11 +132,12 @@ if model != "hdbscan" and st.button(f"Sweep k = {k_min}…{k_max}"):
             sweep = sweep_clusters(
                 model, prepared_state["matrix"], k_min=k_min, k_max=k_max, random_state=int(seed)
             )
-        st.dataframe(sweep, use_container_width=True)
-        st.caption(
-            "Higher silhouette / Calinski-Harabasz and lower Davies-Bouldin are "
-            "better — but never choose on one metric alone (see page 06)."
-        )
+        with st.expander(f"k sweep {k_min}…{k_max}", expanded=False):
+            st.dataframe(sweep, use_container_width=True)
+            st.caption(
+                "Higher silhouette / Calinski-Harabasz and lower Davies-Bouldin are "
+                "better — but never choose on one metric alone (see page 06)."
+            )
     except (CustomerIntelligenceError, ValueError) as exc:
         st.error(str(exc))
 
@@ -184,28 +186,40 @@ metrics = run["metrics"]
 kpi_row(
     [
         ("Clusters", str(metrics["n_clusters"])),
-        ("Silhouette (higher better)", str(metrics["silhouette"])),
-        ("Davies-Bouldin (lower better)", str(metrics["davies_bouldin"])),
+        ("Silhouette ↑", str(metrics["silhouette"])),
         ("Noise", f"{metrics['noise_pct']}%"),
-        ("Min cluster size", str(metrics["min_cluster_size"])),
         ("Seed stability (ARI)", str(run["stability"]["mean_pairwise_ari"])),
     ]
 )
-if run["stability"].get("bootstrap") is not None:
-    st.caption(f"Bootstrap stability: {run['stability']['bootstrap']}")
+kpi_row(
+    [
+        ("Davies-Bouldin ↓", str(metrics["davies_bouldin"])),
+        ("Min cluster size", str(metrics["min_cluster_size"])),
+        ("Calinski-Harabasz ↑", str(metrics["calinski_harabasz"])),
+        (
+            "Bootstrap",
+            str((run["stability"].get("bootstrap") or {}).get("mean_ari", "n/a")),
+        ),
+    ]
+)
 
-st.plotly_chart(pca_scatter(prepared_state["matrix"], run["labels"]), use_container_width=True)
-try:
-    st.plotly_chart(umap_scatter(prepared_state["matrix"], run["labels"]), use_container_width=True)
-except ImportError as exc:
-    st.info(str(exc))
+emb_l, emb_r = st.columns([1, 1])
+with emb_l:
+    st.plotly_chart(pca_scatter(prepared_state["matrix"], run["labels"]), use_container_width=True)
+with emb_r:
+    try:
+        st.plotly_chart(
+            umap_scatter(prepared_state["matrix"], run["labels"]), use_container_width=True
+        )
+    except ImportError as exc:
+        st.info(str(exc))
 if run["model"] == "autoencoder":
     from deep_learning.latent_space_visualization import latent_scatter
 
     st.plotly_chart(
         latent_scatter(run["fitted"]["latent"], run["labels"]), use_container_width=True
     )
-    with st.expander("Training history"):
+    with st.expander("Training history", expanded=False):
         st.write({k: v[-5:] for k, v in run["fitted"]["history"].items()})
 
 st.subheader("4 · Profile & name clusters")
@@ -218,22 +232,27 @@ profile = build_cluster_profile(
 name_table = propose_names(profile)
 profile = profile.merge(name_table[["cluster_id", "business_name"]], on="cluster_id", how="left")
 profile["business_name"] = profile["business_name"].fillna("Noise")
-st.plotly_chart(cluster_size_bar(profile), use_container_width=True)
-st.plotly_chart(profile_heatmap(profile), use_container_width=True)
-st.dataframe(profile.drop(columns=["member_ids"], errors="ignore"), use_container_width=True)
+prof_l, prof_r = st.columns([1, 1])
+with prof_l:
+    st.plotly_chart(cluster_size_bar(profile), use_container_width=True)
+with prof_r:
+    st.plotly_chart(profile_heatmap(profile), use_container_width=True)
+with st.expander("Cluster profile table", expanded=False):
+    st.dataframe(profile.drop(columns=["member_ids"], errors="ignore"), use_container_width=True)
 
-st.markdown("Adjust business names if the profiles suggest better ones:")
-overrides: dict[int, str] = {}
-default_names = dict(zip(name_table["cluster_id"], name_table["business_name"], strict=True))
-for cluster_id in sorted(profile["cluster_id"].unique()):
-    if cluster_id == -1:
-        overrides[cluster_id] = "Noise"
-        continue
-    overrides[cluster_id] = st.text_input(
-        f"Cluster {cluster_id}",
-        value=str(default_names.get(cluster_id, f"Cluster {cluster_id}")),
-        key=f"segname_{cluster_id}",
-    )
+with st.expander("Name clusters", expanded=False):
+    st.markdown("Adjust business names if the profiles suggest better ones:")
+    overrides: dict[int, str] = {}
+    default_names = dict(zip(name_table["cluster_id"], name_table["business_name"], strict=True))
+    for cluster_id in sorted(profile["cluster_id"].unique()):
+        if cluster_id == -1:
+            overrides[cluster_id] = "Noise"
+            continue
+        overrides[cluster_id] = st.text_input(
+            f"Cluster {cluster_id}",
+            value=str(default_names.get(cluster_id, f"Cluster {cluster_id}")),
+            key=f"segname_{cluster_id}",
+        )
 
 if st.button("Save this run"):
     labeled = features[["customer_id"]].copy()

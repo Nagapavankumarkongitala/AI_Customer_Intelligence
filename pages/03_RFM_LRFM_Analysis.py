@@ -6,6 +6,7 @@ import pandas as pd
 import streamlit as st
 import yaml
 
+from components.filters import control_group
 from components.metric_cards import kpi_row
 from services import state_service
 from services.export_service import to_csv_bytes
@@ -24,9 +25,11 @@ from visualization.rfm_charts import (
     rfm_heatmap,
     segment_distribution_bar,
 )
+from visualization.theme import inject_terminal_css
 
 configure_logging()
 state_service.initialize(st.session_state)
+inject_terminal_css()
 
 st.title("03 · RFM / LRFM Analysis")
 st.markdown(
@@ -42,25 +45,22 @@ if clean_data is None:
 
 cfg = yaml.safe_load(Path("config.yaml").read_text(encoding="utf-8"))
 
-st.subheader("Configuration")
-c1, c2, c3 = st.columns(3)
-with c1:
-    quantiles = st.selectbox(
-        "Quantile levels",
-        [3, 4, 5],
-        index=[3, 4, 5].index(cfg["rfm"]["quantiles"]),
-        help="Higher levels give finer segments; 3 is safest for small datasets.",
-    )
-with c2:
-    max_txn = pd.to_datetime(clean_data["transaction_date"]).max().date()
-    snapshot = st.date_input(
-        "Snapshot date",
-        value=max_txn + pd.Timedelta(days=cfg["rfm"]["snapshot_offset_days"]),
-        min_value=max_txn,
-        help="Defaults to one day after the last transaction.",
-    )
-with c3:
-    recent_days = st.number_input("Recent window (days)", min_value=1, value=90, step=7)
+max_txn = pd.to_datetime(clean_data["transaction_date"]).max().date()
+with st.sidebar:
+    with control_group("Scoring Config"):
+        quantiles = st.selectbox(
+            "Quantile levels",
+            [3, 4, 5],
+            index=[3, 4, 5].index(cfg["rfm"]["quantiles"]),
+            help="Higher levels give finer segments; 3 is safest for small datasets.",
+        )
+        snapshot = st.date_input(
+            "Snapshot date",
+            value=max_txn + pd.Timedelta(days=cfg["rfm"]["snapshot_offset_days"]),
+            min_value=max_txn,
+            help="Defaults to one day after the last transaction.",
+        )
+        recent_days = st.number_input("Recent window (days)", min_value=1, value=90, step=7)
 
 if st.button("Build features & score", type="primary"):
     try:
@@ -110,7 +110,7 @@ kpi_row(
     ]
 )
 
-with st.expander("Customer feature preview"):
+with st.expander("Customer feature preview (top 20)", expanded=False):
     st.dataframe(features.head(20), use_container_width=True)
 
 tab_rfm, tab_lrfm = st.tabs(["RFM", "LRFM"])
@@ -121,36 +121,44 @@ for tab, key in ((tab_rfm, "rfm_results"), (tab_lrfm, "lrfm_results")):
     with tab:
         enriched = features.merge(scored, on="customer_id", suffixes=("", "_seg"))
         profile = segment_profile(enriched, monetary_col="monetary_value")
-        st.plotly_chart(
-            segment_distribution_bar(profile), use_container_width=True, key=f"{key}_seg_dist"
-        )
-        st.plotly_chart(
-            revenue_by_segment_bar(profile), use_container_width=True, key=f"{key}_revenue"
-        )
-        st.plotly_chart(
-            recency_frequency_scatter(enriched), use_container_width=True, key=f"{key}_rf"
-        )
-        st.plotly_chart(
-            frequency_monetary_scatter(enriched), use_container_width=True, key=f"{key}_fm"
-        )
+        left, right = st.columns([1, 1])
+        with left:
+            st.plotly_chart(
+                segment_distribution_bar(profile),
+                use_container_width=True,
+                key=f"{key}_seg_dist",
+            )
+        with right:
+            st.plotly_chart(
+                revenue_by_segment_bar(profile), use_container_width=True, key=f"{key}_revenue"
+            )
+        scatter_l, scatter_r = st.columns([1, 1])
+        with scatter_l:
+            st.plotly_chart(
+                recency_frequency_scatter(enriched), use_container_width=True, key=f"{key}_rf"
+            )
+        with scatter_r:
+            st.plotly_chart(
+                frequency_monetary_scatter(enriched), use_container_width=True, key=f"{key}_fm"
+            )
         st.plotly_chart(rfm_heatmap(scored), use_container_width=True, key=f"{key}_heatmap")
 
-        st.subheader("Segment profile")
-        st.dataframe(profile, use_container_width=True, key=f"{key}_profile")
+        with st.expander("Segment profile", expanded=False):
+            st.dataframe(profile, use_container_width=True, key=f"{key}_profile")
 
-        st.subheader("Customer drill-down")
-        choice = st.selectbox(
-            "Segment",
-            sorted(scored["segment"].unique()),
-            key=f"drill_{key}",
-            help="Customer identifiers appear only in this authorized detail view.",
-        )
-        drill = enriched[enriched["segment"] == choice].head(200)
-        st.dataframe(drill, use_container_width=True, key=f"{key}_drill")
-        st.caption(
-            f"Showing up to 200 of {(scored['segment'] == choice).sum()} customers "
-            f"in '{choice}'."
-        )
+        with st.expander("Customer drill-down", expanded=False):
+            choice = st.selectbox(
+                "Segment",
+                sorted(scored["segment"].unique()),
+                key=f"drill_{key}",
+                help="Customer identifiers appear only in this authorized detail view.",
+            )
+            drill = enriched[enriched["segment"] == choice].head(200)
+            st.dataframe(drill, use_container_width=True, key=f"{key}_drill")
+            st.caption(
+                f"Showing up to 200 of {(scored['segment'] == choice).sum()} customers "
+                f"in '{choice}'."
+            )
 
         st.download_button(
             f"Download {key} (CSV)",

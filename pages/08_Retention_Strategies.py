@@ -2,6 +2,7 @@
 
 import streamlit as st
 
+from components.filters import control_group, multiselect_filter
 from components.metric_cards import kpi_row
 from retention_engine.offer_recommender import describe_offer
 from services import state_service
@@ -20,9 +21,11 @@ from visualization.retention_charts import (
     strategy_distribution_bar,
     value_risk_matrix,
 )
+from visualization.theme import inject_terminal_css
 
 configure_logging()
 state_service.initialize(st.session_state)
+inject_terminal_css()
 
 st.title("08 · Retention Strategies")
 st.markdown(
@@ -37,18 +40,20 @@ if scores is None or features is None:
     st.stop()
 
 features = features.copy()
-segment_source = st.selectbox(
-    "Segment labels for filtering",
-    [
-        s
-        for s in ("RFM", "AI")
-        if s == "RFM"
-        and st.session_state.get("rfm_results") is not None
-        or s == "AI"
-        and st.session_state.get("segmented_customers") is not None
-    ]
-    or ["(none)"],
-)
+with st.sidebar:
+    with control_group("Segments"):
+        segment_source = st.selectbox(
+            "Segment labels for filtering",
+            [
+                s
+                for s in ("RFM", "AI")
+                if s == "RFM"
+                and st.session_state.get("rfm_results") is not None
+                or s == "AI"
+                and st.session_state.get("segmented_customers") is not None
+            ]
+            or ["(none)"],
+        )
 if segment_source == "RFM":
     seg = st.session_state["rfm_results"].set_index("customer_id")["segment"]
     features["segment"] = features["customer_id"].map(seg)
@@ -57,25 +62,23 @@ elif segment_source == "AI":
     features["segment"] = features["customer_id"].map(seg)
 
 value_options = [c for c in ("monetary_value", "average_order_value") if c in features.columns]
-c1, c2, c3 = st.columns(3)
-with c1:
-    value_basis = st.selectbox("Value basis (historical, not CLV)", value_options)
-with c2:
-    weight = st.number_input(
-        "Strategic weight",
-        min_value=0.0,
-        value=1.0,
-        step=0.25,
-        help="Multiplies every priority score; per-segment weights "
-        "stay 1.0 unless tuned in code.",
-    )
-with c3:
-    quantiles = st.selectbox(
-        "Value tiers",
-        [3],
-        format_func=lambda _: "Low/Med/High",
-        help="Tier count follows config value_quantiles.",
-    )
+with st.sidebar:
+    with control_group("Value Config"):
+        value_basis = st.selectbox("Value basis (historical, not CLV)", value_options)
+        weight = st.number_input(
+            "Strategic weight",
+            min_value=0.0,
+            value=1.0,
+            step=0.25,
+            help="Multiplies every priority score; per-segment weights "
+            "stay 1.0 unless tuned in code.",
+        )
+        quantiles = st.selectbox(
+            "Value tiers",
+            [3],
+            format_func=lambda _: "Low/Med/High",
+            help="Tier count follows config value_quantiles.",
+        )
 
 try:
     matrix, report = default_matrix_report()
@@ -117,48 +120,56 @@ kpi_row(
     ]
 )
 
-st.plotly_chart(value_risk_matrix(table), use_container_width=True)
-st.plotly_chart(revenue_at_risk_bar(table), use_container_width=True)
-st.plotly_chart(strategy_distribution_bar(table), use_container_width=True)
-st.plotly_chart(priority_histogram(table), use_container_width=True)
+ret_l, ret_r = st.columns([1, 1])
+with ret_l:
+    st.plotly_chart(value_risk_matrix(table), use_container_width=True)
+with ret_r:
+    st.plotly_chart(revenue_at_risk_bar(table), use_container_width=True)
+strat_l, strat_r = st.columns([1, 1])
+with strat_l:
+    st.plotly_chart(strategy_distribution_bar(table), use_container_width=True)
+with strat_r:
+    st.plotly_chart(priority_histogram(table), use_container_width=True)
 
-st.subheader("Ranked customers")
-f1, f2, f3 = st.columns(3)
-with f1:
-    regions = sorted(table["region"].dropna().unique()) if "region" in table.columns else []
-    region = st.multiselect("Region", regions, default=regions)
-with f2:
-    segs = sorted(table["segment"].dropna().unique()) if "segment" in table.columns else []
-    seg_pick = st.multiselect("Segment", segs, default=segs)
-with f3:
-    bands = sorted(table["risk_band"].unique())
-    band_pick = st.multiselect("Risk band", bands, default=bands)
+with st.sidebar:
+    with control_group("View Filters"):
+        regions = sorted(table["region"].dropna().unique()) if "region" in table.columns else []
+        region = multiselect_filter("Region", [str(r) for r in regions], key="ret_region")
+        segs = sorted(table["segment"].dropna().unique()) if "segment" in table.columns else []
+        seg_pick = multiselect_filter("Segment", [str(s) for s in segs], key="ret_seg")
+        bands = sorted(table["risk_band"].unique())
+        band_pick = multiselect_filter("Risk band", [str(b) for b in bands], key="ret_band")
 view = table.copy()
 if regions:
     view = view[view["region"].isin(region)]
 if segs:
     view = view[view["segment"].isin(seg_pick)]
 view = view[view["risk_band"].isin(band_pick)]
-st.dataframe(view.head(200), use_container_width=True)
-st.caption(
-    f"Showing up to 200 of {len(view)} filtered customers. Every row names its "
-    "strategy rule — click into action_reason for the full audit trail."
-)
+with st.expander("Ranked customers (top 200 of filter)", expanded=False):
+    st.dataframe(view.head(200), use_container_width=True)
+    st.caption(
+        f"Showing up to 200 of {len(view)} filtered customers. Every row names its "
+        "strategy rule — click into action_reason for the full audit trail."
+    )
 
-with st.expander("Offer catalog"):
+with st.expander("Offer catalog", expanded=False):
     for offer in sorted(view["suggested_offer_type"].unique()):
         st.markdown(f"**{offer}** — {describe_offer(offer)}")
 
-st.subheader("Campaign export")
-top_n = st.number_input(
-    "Campaign size (top priority)", min_value=10, max_value=5000, value=200, step=10
-)
-min_priority = st.number_input("Minimum priority score", min_value=0.0, value=0.0, step=0.05)
+with st.sidebar:
+    with control_group("Campaign"):
+        top_n = st.number_input(
+            "Campaign size (top priority)", min_value=10, max_value=5000, value=200, step=10
+        )
+        min_priority = st.number_input(
+            "Minimum priority score", min_value=0.0, value=0.0, step=0.05
+        )
 campaign, channel_summary = export_campaign(
     view, top_n=int(top_n), min_priority=float(min_priority)
 )
-st.dataframe(channel_summary, use_container_width=True)
-st.dataframe(campaign.head(100), use_container_width=True)
+with st.expander("Campaign export", expanded=False):
+    st.dataframe(channel_summary, use_container_width=True)
+    st.dataframe(campaign.head(100), use_container_width=True)
 st.download_button(
     "Download campaign (CSV)",
     data=to_csv_bytes(campaign),

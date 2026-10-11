@@ -1,18 +1,52 @@
 {
-  "$schema": "https://opencode.ai/config.json",
-  "plugin": [
-    "@opencode-ai/plugin-python-lsp"
-  ],
-  "permissions": [
-    {
-      "action": "shell",
-      "resource": "pytest *",
-      "effect": "allow"
+  "$schema": "https://opencode.ai/schemas/opencode.json",
+  "version": "1.0",
+  "theme": {
+    "active": "ayu-dark",
+    "alternatives": ["moonlight"]
+  },
+  "plugins": {
+    "superpower": {
+      "enabled": true
     },
-    {
-      "action": "shell",
-      "resource": "streamlit run app.py",
-      "effect": "allow"
+    "ponytail": {
+      "enabled": true
+    },
+    "composio": {
+      "enabled": true,
+      "description": "Connects OpenCode to external apps and tools through MCP, enabling seamless integration with other services and workflows[cite: 2]."
+    },
+    "context7": {
+      "enabled": true,
+      "description": "Provides up-to-date library documentation to prevent outdated API usage and improve coding accuracy[cite: 2]."
+    },
+    "opencode-mem": {
+      "enabled": true,
+      "description": "Adds persistent memory for long-running coding sessions, allowing the AI agent to retain context across tasks[cite: 2]."
+    },
+    "envsitter-guard": {
+      "enabled": true,
+      "description": "Protects .env files and sensitive secrets from unsafe reads or edits by OpenCode agents[cite: 2]."
+    },
+    "oh-my-opencode-slim": {
+      "enabled": true,
+      "description": "Offers lightweight agent orchestration, background tasks, LSP/AST tools, and MCP support for enhanced workflow management[cite: 2]."
+    },
+    "opencode-worktree": {
+      "enabled": true,
+      "description": "Simplifies running isolated coding sessions using Git worktrees, improving project organization and version control[cite: 2]."
+    },
+    "opencode-notify": {
+      "enabled": true,
+      "description": "Sends native OS notifications when tasks are completed, keeping developers informed without constant monitoring[cite: 2]."
+    },
+    "dynamic-context-pruning": {
+      "enabled": true,
+      "description": "Reduces token usage by pruning stale context during long sessions, optimizing performance[cite: 2]."
+    },
+    "daytona-sandbox": {
+      "enabled": true,
+      "description": "Runs OpenCode sessions in isolated sandboxes and syncs changes back through Git branches, enhancing safety and reproducibility[cite: 2]."
     }
-  ]
+  }
 }

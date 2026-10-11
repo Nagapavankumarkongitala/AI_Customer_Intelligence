@@ -5,7 +5,10 @@ from __future__ import annotations
 import pandas as pd
 import plotly.express as px
 
+from visualization.theme import RISK_GREEN, VOLT, VOLT_DISCRETE, styled
 
+
+@styled
 def revenue_trend_fig(table: pd.DataFrame) -> px.Figure:
     """Monthly revenue line."""
     return px.line(
@@ -13,11 +16,13 @@ def revenue_trend_fig(table: pd.DataFrame) -> px.Figure:
         x="month",
         y="revenue",
         markers=True,
+        color_discrete_sequence=[VOLT],
         title="Revenue trend",
         labels={"month": "Month", "revenue": "Revenue"},
     )
 
 
+@styled
 def activity_trend_fig(table: pd.DataFrame) -> px.Figure:
     """Monthly active customers line."""
     return px.line(
@@ -27,10 +32,11 @@ def activity_trend_fig(table: pd.DataFrame) -> px.Figure:
         markers=True,
         title="Customer activity trend",
         labels={"month": "Month", "active_customers": "Active customers"},
-        color_discrete_sequence=["#1F6FEB"],
+        color_discrete_sequence=[VOLT],
     )
 
 
+@styled
 def new_returning_fig(table: pd.DataFrame) -> px.Figure:
     """Monthly new vs returning stacked bars."""
     long = table.melt(
@@ -45,10 +51,11 @@ def new_returning_fig(table: pd.DataFrame) -> px.Figure:
         y="customers",
         color="cohort",
         title="New vs returning customers",
-        color_discrete_map={"new_customers": "green", "returning_customers": "#1F6FEB"},
+        color_discrete_map={"new_customers": RISK_GREEN, "returning_customers": VOLT},
     )
 
 
+@styled
 def portfolio_bar_fig(portfolio: pd.DataFrame, segment_col: str = "segment") -> px.Figure:
     """Customer vs revenue share per segment (grouped bars)."""
     col = segment_col if segment_col in portfolio.columns else portfolio.columns[0]
@@ -64,5 +71,6 @@ def portfolio_bar_fig(portfolio: pd.DataFrame, segment_col: str = "segment") -> 
         y="pct",
         color="share",
         barmode="group",
+        color_discrete_sequence=VOLT_DISCRETE,
         title="Customer vs revenue share by segment",
     )

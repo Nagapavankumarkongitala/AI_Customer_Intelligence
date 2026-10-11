@@ -13,13 +13,16 @@ from analytics.segmentation_comparison import (
     size_balance,
     value_separation,
 )
+from components.filters import control_group
 from services import state_service
 from services.export_service import to_csv_bytes, to_json_bytes
 from utils.logging_config import configure_logging
 from visualization.segmentation_charts import metric_comparison_bar, sankey_mapping
+from visualization.theme import inject_terminal_css
 
 configure_logging()
 state_service.initialize(st.session_state)
+inject_terminal_css()
 
 st.title("06 · Segmentation Comparison")
 st.markdown(
@@ -128,34 +131,45 @@ for label, scored in (("RFM", rfm), ("LRFM", lrfm)):
     )
 
 table = pd.DataFrame(rows)
-st.subheader("Model scorecard")
-st.dataframe(table.drop(columns=["checklist"]), use_container_width=True)
-st.caption(
-    "RFM/LRFM silhouette is blank by design: different feature space, not comparable. "
-    "Stability 1.0 for RFM/LRFM: deterministic rules on fixed features."
-)
+with st.expander("Model scorecard", expanded=False):
+    st.dataframe(table.drop(columns=["checklist"]), use_container_width=True)
+    st.caption(
+        "RFM/LRFM silhouette is blank by design: different feature space, not comparable. "
+        "Stability 1.0 for RFM/LRFM: deterministic rules on fixed features."
+    )
 
-for metric, title in (
+metrics = [
     ("silhouette", "Silhouette (AI runs, shared space)"),
     ("stability_ari", "Seed stability (ARI)"),
     ("value_eta2", "Revenue differentiation (monetary eta²)"),
     ("evenness", "Size balance (evenness)"),
-):
-    st.plotly_chart(
-        metric_comparison_bar(table, metric, title), use_container_width=True, key=f"cmp_{metric}"
-    )
+]
+for i in range(0, len(metrics), 2):
+    pair = metrics[i : i + 2]
+    cols = st.columns([1] * len(pair))
+    for col, (metric, title) in zip(cols, pair, strict=True):
+        with col:
+            st.plotly_chart(
+                metric_comparison_bar(table, metric, title),
+                use_container_width=True,
+                key=f"cmp_{metric}",
+            )
 
 # --- Pairwise agreement: traditional vs selected AI ---------------------------
-st.subheader("Agreement with traditional segments")
 ai_names = [r["model"] for r in rows if r["kind"] == "AI"]
 traditional = [r["model"] for r in rows if r["kind"] == "Traditional"]
-ref = st.selectbox("Traditional reference", traditional)
-target = st.selectbox("AI model", ai_names)
+with st.sidebar:
+    with control_group("Comparison Pair"):
+        ref = st.selectbox("Traditional reference", traditional)
+        target = st.selectbox("AI model", ai_names)
 ct = crosstab_counts(labelings[ref], labelings[target])
 ari = agreement_ari(labelings[ref], labelings[target])
-st.metric(f"Adjusted Rand Index ({ref} vs {target})", ari)
-st.plotly_chart(sankey_mapping(ct, ref, target), use_container_width=True)
-with st.expander("Cross-tabulation (counts)"):
+agree_l, agree_r = st.columns([1, 2])
+with agree_l:
+    st.metric(f"Adjusted Rand Index ({ref} vs {target})", ari)
+with agree_r:
+    st.plotly_chart(sankey_mapping(ct, ref, target), use_container_width=True)
+with st.expander("Cross-tabulation (counts)", expanded=False):
     st.dataframe(ct, use_container_width=True)
 
 # --- Per-model checklists ------------------------------------------------------
@@ -175,18 +189,19 @@ churn_table = churn_rate_by_segment(
 if churn_table is None:
     st.info("Churn-rate association unlocks in Phase 6 once churn labels exist.")
 else:
-    st.subheader(f"Churn rate by {target} segment")
-    st.dataframe(churn_table, use_container_width=True)
+    with st.expander(f"Churn rate by {target} segment", expanded=False):
+        st.dataframe(churn_table, use_container_width=True)
 
 # --- Recommendation ------------------------------------------------------------
-st.subheader("Recommendation")
 recommendation = recommend_model(table.rename(columns={"model": "name"}).to_dict(orient="records"))
 st.info(recommendation["rationale"])
-choice = st.selectbox(
-    "Operational model (your call — the evidence above is here so you can disagree)",
-    table["model"].tolist(),
-    index=table["model"].tolist().index(recommendation["operational_pick"]),
-)
+with st.sidebar:
+    with control_group("Operational Pick"):
+        choice = st.selectbox(
+            "Operational model (evidence above — disagree if it says otherwise)",
+            table["model"].tolist(),
+            index=table["model"].tolist().index(recommendation["operational_pick"]),
+        )
 st.session_state["comparison_report"] = {**recommendation, "human_pick": choice}
 st.success(
     f"Recorded operational pick: {choice} "

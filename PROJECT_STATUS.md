@@ -67,5 +67,6 @@ All 8 build phases done.
   see DEPLOYMENT.md for restart behavior.
 
 ## Next phase
-Done. All 8 build phases complete — maintenance mode (revalidate churn models
-on fresh outcome windows as behavior drifts).
+Done — plus UI overhaul (obsidian/volt terminal theme, sidebar slicers,
+3-tier layout on all pages). Maintenance mode; revalidate churn models on
+fresh outcome windows as behavior drifts.

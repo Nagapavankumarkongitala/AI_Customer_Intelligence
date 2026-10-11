@@ -14,6 +14,7 @@ from churn.evaluation import (
     lift_gain_table,
 )
 from churn.explainability import logreg_effects, shap_values
+from components.filters import control_group
 from components.metric_cards import kpi_row
 from services import state_service
 from services.churn_service import (
@@ -33,9 +34,11 @@ from visualization.churn_charts import (
     risk_band_bar,
     roc_curve_fig,
 )
+from visualization.theme import inject_terminal_css
 
 configure_logging()
 state_service.initialize(st.session_state)
+inject_terminal_css()
 
 st.title("07 · Churn Prediction")
 st.markdown(
@@ -53,28 +56,27 @@ cfg = yaml.safe_load(Path("config.yaml").read_text(encoding="utf-8"))
 txn_dates = pd.to_datetime(clean_data["transaction_date"])
 min_date, max_date = txn_dates.min().date(), txn_dates.max().date()
 
-st.subheader("1 · Time-aware dataset")
-d1, d2, d3, d4 = st.columns(4)
-with d1:
-    obs_start = st.date_input(
-        "Observation start", value=min_date, min_value=min_date, max_value=max_date
-    )
-with d2:
-    default_cutoff = max_date - pd.Timedelta(days=cfg["churn"]["default_outcome_horizon_days"])
-    cutoff = st.date_input(
-        "Cutoff date", value=max(default_cutoff, min_date), min_value=min_date, max_value=max_date
-    )
-with d3:
-    horizon = st.number_input(
-        "Outcome horizon (days)",
-        min_value=7,
-        max_value=365,
-        value=cfg["churn"]["default_outcome_horizon_days"],
-    )
-with d4:
-    min_history = st.number_input(
-        "Min. customer history (days)", min_value=0, max_value=365, value=30
-    )
+with st.sidebar:
+    with control_group("Dataset Window"):
+        obs_start = st.date_input(
+            "Observation start", value=min_date, min_value=min_date, max_value=max_date
+        )
+        default_cutoff = max_date - pd.Timedelta(days=cfg["churn"]["default_outcome_horizon_days"])
+        cutoff = st.date_input(
+            "Cutoff date",
+            value=max(default_cutoff, min_date),
+            min_value=min_date,
+            max_value=max_date,
+        )
+        horizon = st.number_input(
+            "Outcome horizon (days)",
+            min_value=7,
+            max_value=365,
+            value=cfg["churn"]["default_outcome_horizon_days"],
+        )
+        min_history = st.number_input(
+            "Min. customer history (days)", min_value=0, max_value=365, value=30
+        )
 
 if st.button("Build churn dataset", type="primary"):
     try:
@@ -124,23 +126,21 @@ if dataset is None:
     st.info("Configure the observation/cutoff/horizon and build the dataset.")
     st.stop()
 
-st.subheader("2 · Train & compare")
-availability = available_models()
-options = list(availability)
-train_choice = st.multiselect(
-    "Models to train",
-    options,
-    default=["logreg", "random_forest"],
-    help="LightGBM/XGBoost train only when installed.",
-)
+with st.sidebar:
+    with control_group("Training"):
+        availability = available_models()
+        options = list(availability)
+        train_choice = st.multiselect(
+            "Models to train",
+            options,
+            default=["logreg", "random_forest"],
+            help="LightGBM/XGBoost train only when installed.",
+        )
+        oversample = st.checkbox("Oversample minority (train only)", value=False)
+        calibrate = st.checkbox("Calibrate probabilities (sigmoid on validation)", value=True)
 for name in train_choice:
     if availability.get(name):
         st.warning(availability[name])
-t1, t2 = st.columns(2)
-with t1:
-    oversample = st.checkbox("Oversample minority (train only)", value=False)
-with t2:
-    calibrate = st.checkbox("Calibrate probabilities (sigmoid on validation)", value=True)
 
 if st.button("Train selected models"):
     bundles: dict = {}
@@ -170,45 +170,61 @@ if st.button("Train selected models"):
 
 bundles = st.session_state.get("churn_bundles")
 if bundles:
-    st.subheader("Test metrics (suggested validation-max-F1 threshold)")
-    st.dataframe(
-        pd.DataFrame(
-            [
-                {"model": name, **{k: v for k, v in b["test_metrics"].items() if k != "confusion"}}
-                for name, b in bundles.items()
-            ]
-        ),
-        use_container_width=True,
-    )
-    detail = st.selectbox("Model detail", list(bundles))
+    with st.expander("Test metrics (validation-max-F1 threshold)", expanded=False):
+        st.dataframe(
+            pd.DataFrame(
+                [
+                    {
+                        "model": name,
+                        **{k: v for k, v in b["test_metrics"].items() if k != "confusion"},
+                    }
+                    for name, b in bundles.items()
+                ]
+            ),
+            use_container_width=True,
+        )
+    with st.sidebar:
+        with control_group("Model Detail"):
+            detail = st.selectbox("Model detail", list(bundles))
+            threshold = st.slider(
+                "Decision threshold",
+                0.05,
+                0.95,
+                float(bundles[detail]["suggested_threshold"]),
+                0.05,
+                help="Lower catches more churners with more false alarms; higher is stricter.",
+            )
     bundle = bundles[detail]
-    st.plotly_chart(roc_curve_fig(bundle["test_y"], bundle["test_proba"]), use_container_width=True)
-    st.plotly_chart(
-        calibration_curve_fig(calibration_table(bundle["test_y"], bundle["test_proba"])),
-        use_container_width=True,
-    )
-    st.plotly_chart(confusion_fig(bundle["test_metrics"]["confusion"]), use_container_width=True)
-    st.plotly_chart(
-        gain_chart_fig(lift_gain_table(bundle["test_y"], bundle["test_proba"])),
-        use_container_width=True,
-    )
-
-    st.subheader("Threshold")
-    threshold = st.slider(
-        "Decision threshold",
-        0.05,
-        0.95,
-        float(bundle["suggested_threshold"]),
-        0.05,
-        help=f"Suggested (max F1 on validation): {bundle['suggested_threshold']}. "
-        "Lower catches more churners with more false alarms; higher is stricter.",
-    )
-    st.write(classification_metrics(bundle["test_y"], bundle["test_proba"], threshold=threshold))
+    eval_l, eval_r = st.columns([1, 1])
+    with eval_l:
+        st.plotly_chart(
+            roc_curve_fig(bundle["test_y"], bundle["test_proba"]), use_container_width=True
+        )
+    with eval_r:
+        st.plotly_chart(
+            calibration_curve_fig(calibration_table(bundle["test_y"], bundle["test_proba"])),
+            use_container_width=True,
+        )
+    perf_l, perf_r = st.columns([1, 1])
+    with perf_l:
+        st.plotly_chart(
+            confusion_fig(bundle["test_metrics"]["confusion"]), use_container_width=True
+        )
+    with perf_r:
+        st.plotly_chart(
+            gain_chart_fig(lift_gain_table(bundle["test_y"], bundle["test_proba"])),
+            use_container_width=True,
+        )
+    with st.expander("Threshold metrics", expanded=False):
+        st.write(
+            classification_metrics(bundle["test_y"], bundle["test_proba"], threshold=threshold)
+        )
 
     st.subheader("3 · Explainability")
     st.plotly_chart(importance_bar_fig(bundle["importance"]), use_container_width=True)
     if detail == "logreg":
-        st.dataframe(logreg_effects(bundle["pipeline"]), use_container_width=True)
+        with st.expander("Coefficients & odds ratios", expanded=False):
+            st.dataframe(logreg_effects(bundle["pipeline"]), use_container_width=True)
     try:
         shap_frame = shap_values(bundle["pipeline"], dataset.frame[bundle["feature_cols"]])
         st.markdown("Mean |SHAP| (global, sample):")
@@ -243,8 +259,12 @@ if bundles:
 
 scores = st.session_state.get("churn_scores")
 if scores is not None:
-    st.plotly_chart(risk_band_bar(scores), use_container_width=True)
-    st.dataframe(scores.head(200), use_container_width=True)
+    risk_l, risk_r = st.columns([1, 2])
+    with risk_l:
+        st.plotly_chart(risk_band_bar(scores), use_container_width=True)
+    with risk_r:
+        with st.expander("Scored customers (top 200)", expanded=False):
+            st.dataframe(scores.head(200), use_container_width=True)
     st.download_button(
         "Download churn scores (CSV)",
         data=to_csv_bytes(scores),

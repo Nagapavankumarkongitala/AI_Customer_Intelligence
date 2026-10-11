@@ -1,6 +1,13 @@
 # CHANGELOG
 
-## 2026-10-11 — Phase 8: Executive Dashboard and Production Readiness
+## 2026-10-11 — UI: Obsidian terminal transformation
+- Added: `visualization/theme.py` (obsidian/volt tokens, terminal CSS, `@styled`
+  Plotly decorator); shared sidebar-filter groups in `components/filters.py`.
+- Changed: `.streamlit/config.toml` to the dark terminal theme; all chart
+  factories render dark-mode volt-styled figures (risk hues stay semantic).
+- Changed: all 9 pages — filters moved to grouped sidebar sections, Tier-1 KPI
+  rows, side-by-side Tier-2 charts, Tier-3 tables collapsed in expanders.
+- Added: `tests/test_theme.py`. Full suite green (120 passed).
 - Added: `services/dashboard_service.py` (master table, global filters, KPIs,
   trends, portfolio, masked high-risk list), `visualization/executive_dashboard.py`,
   `components/filters.py`, `components/export_buttons.py`,

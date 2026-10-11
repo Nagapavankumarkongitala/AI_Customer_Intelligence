@@ -6,6 +6,7 @@ from services import state_service
 from utils.config import load_config
 from utils.exceptions import ConfigurationError
 from utils.logging_config import configure_logging
+from visualization.theme import inject_terminal_css
 
 configure_logging()
 
@@ -18,6 +19,7 @@ except ConfigurationError as exc:
 state_service.initialize(st.session_state)
 
 st.set_page_config(page_title="AI Customer Intelligence", layout="wide")
+inject_terminal_css()
 st.title("AI Customer Intelligence Platform")
 
 st.markdown("""

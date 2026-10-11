@@ -5,9 +5,10 @@ from __future__ import annotations
 import pandas as pd
 import plotly.express as px
 
-COLOR_SCALE = "Blues"
+from visualization.theme import VOLT_DISCRETE, VOLT_SCALE, styled
 
 
+@styled
 def segment_distribution_bar(profile: pd.DataFrame) -> px.Figure:
     """Customer counts per segment, largest first."""
     return px.bar(
@@ -15,12 +16,13 @@ def segment_distribution_bar(profile: pd.DataFrame) -> px.Figure:
         x="segment",
         y="customers",
         color="customers",
-        color_continuous_scale=COLOR_SCALE,
+        color_continuous_scale=VOLT_SCALE,
         title="Customers per segment",
         labels={"segment": "Segment", "customers": "Customers"},
     )
 
 
+@styled
 def revenue_by_segment_bar(profile: pd.DataFrame) -> px.Figure:
     """Revenue contribution per segment."""
     return px.bar(
@@ -28,12 +30,13 @@ def revenue_by_segment_bar(profile: pd.DataFrame) -> px.Figure:
         x="segment",
         y="revenue",
         color="revenue",
-        color_continuous_scale="Greens",
+        color_continuous_scale=VOLT_SCALE,
         title="Revenue per segment",
         labels={"segment": "Segment", "revenue": "Revenue"},
     )
 
 
+@styled
 def recency_frequency_scatter(features: pd.DataFrame, color_col: str = "segment") -> px.Figure:
     """Recency vs frequency, colored by segment when available."""
     data = features.copy()
@@ -43,12 +46,14 @@ def recency_frequency_scatter(features: pd.DataFrame, color_col: str = "segment"
         x="recency_days",
         y="frequency",
         color=color,
+        color_discrete_sequence=VOLT_DISCRETE,
         hover_data=["customer_id", "monetary_value"],
         title="Recency vs frequency",
         labels={"recency_days": "Recency (days)", "frequency": "Frequency"},
     )
 
 
+@styled
 def frequency_monetary_scatter(features: pd.DataFrame, color_col: str = "segment") -> px.Figure:
     """Frequency vs monetary value, colored by segment when available."""
     data = features.copy()
@@ -58,19 +63,21 @@ def frequency_monetary_scatter(features: pd.DataFrame, color_col: str = "segment
         x="frequency",
         y="monetary_value",
         color=color,
+        color_discrete_sequence=VOLT_DISCRETE,
         hover_data=["customer_id", "recency_days"],
         title="Frequency vs monetary value",
         labels={"frequency": "Frequency", "monetary_value": "Monetary value"},
     )
 
 
+@styled
 def rfm_heatmap(scored: pd.DataFrame) -> px.Figure:
     """Customer counts across R (rows) × F (columns)."""
     matrix = pd.crosstab(scored["R"], scored["F"])
     return px.imshow(
         matrix,
         text_auto=True,
-        color_continuous_scale=COLOR_SCALE,
+        color_continuous_scale=VOLT_SCALE,
         title="Customer counts by R × F score",
         labels={"x": "F score", "y": "R score", "color": "Customers"},
     )

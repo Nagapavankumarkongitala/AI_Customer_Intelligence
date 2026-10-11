@@ -7,7 +7,10 @@ import pandas as pd
 import plotly.express as px
 from sklearn.decomposition import PCA
 
+from visualization.theme import VOLT_DISCRETE, styled
 
+
+@styled
 def latent_scatter(
     codes: np.ndarray, labels: np.ndarray, names: dict[int, str] | None = None
 ) -> px.Figure:
@@ -20,5 +23,6 @@ def latent_scatter(
         x="dim_1",
         y="dim_2",
         color="cluster",
+        color_discrete_sequence=VOLT_DISCRETE,
         title="Latent space (PCA of autoencoder codes)",
     )

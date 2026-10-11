@@ -1,10 +1,11 @@
 [theme]
-# Restrained professional theme: blue = neutral info, green = positive,
-# amber = warning, red = high risk. Never rely on color alone (labels + icons too).
-primaryColor = "#1F6FEB"
-backgroundColor = "#FFFFFF"
-secondaryBackgroundColor = "#F1F4F9"
-textColor = "#1A2332"
+# Obsidian terminal: black canvas, volt-lime accents. Risk states keep
+# red/green/amber hues; meaning always rides on labels, never color alone.
+base = "dark"
+primaryColor = "#CCFF00"
+backgroundColor = "#050505"
+secondaryBackgroundColor = "#141414"
+textColor = "#E8E8E8"
 font = "sans serif"
 
 [server]

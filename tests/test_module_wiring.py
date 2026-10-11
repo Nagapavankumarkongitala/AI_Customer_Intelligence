@@ -52,5 +52,4 @@ def test_page_imports_resolve(path: Path) -> None:
             try:
                 importlib.import_module(f"{module_name}.{name}")
             except ImportError:
-                raise AssertionError(
-                    f"{path.name}: {module_name} has no {name!r}") from None
+                raise AssertionError(f"{path.name}: {module_name} has no {name!r}") from None

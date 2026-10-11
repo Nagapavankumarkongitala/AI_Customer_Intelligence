@@ -5,7 +5,7 @@ import streamlit as st
 
 from analytics.demographics import GEO_LEVELS
 from components.export_buttons import csv_download_button
-from components.filters import date_range_filter, multiselect_filter
+from components.filters import control_group, date_range_filter, multiselect_filter
 from components.metric_cards import kpi_row
 from services import state_service
 from services.dashboard_service import (
@@ -28,9 +28,11 @@ from visualization.executive_dashboard import (
     revenue_trend_fig,
 )
 from visualization.retention_charts import revenue_at_risk_bar, strategy_distribution_bar
+from visualization.theme import inject_terminal_css
 
 configure_logging()
 state_service.initialize(st.session_state)
+inject_terminal_css()
 
 
 def _fallback_features(txns: pd.DataFrame) -> pd.DataFrame:
@@ -77,28 +79,31 @@ master = build_master(
     retention=_retention_frame(),
 )
 
-st.sidebar.header("Global filters")
-date_start, date_end = date_range_filter(txns["_txn_date"])
+with st.sidebar:
+    with control_group("Global Slicers"):
+        date_start, date_end = date_range_filter(txns["_txn_date"])
 filters: dict = {"date_start": date_start, "date_end": date_end}
-for level in ("country", "region", "state", "city", "gender"):
-    opts = (
-        sorted(txns[level].dropna().unique())
-        if level in txns.columns
-        else sorted(master[level].dropna().unique()) if level in master.columns else []
-    )
-    filters[level] = multiselect_filter(
-        level.capitalize(), [str(o) for o in opts], key=f"f_{level}"
-    )
-for key, column in (
-    ("rfm_segment", "rfm_segment"),
-    ("ai_segment", "ai_segment"),
-    ("risk_band", "risk_band"),
-    ("value_tier", "customer_value_tier"),
-):
-    opts = sorted(master[column].dropna().unique()) if column in master.columns else []
-    filters[key] = multiselect_filter(
-        key.replace("_", " ").title(), [str(o) for o in opts], key=f"f_{key}"
-    )
+with st.sidebar:
+    with control_group("Attribute Slicers"):
+        for level in ("country", "region", "state", "city", "gender"):
+            opts = (
+                sorted(txns[level].dropna().unique())
+                if level in txns.columns
+                else sorted(master[level].dropna().unique()) if level in master.columns else []
+            )
+            filters[level] = multiselect_filter(
+                level.capitalize(), [str(o) for o in opts], key=f"f_{level}"
+            )
+        for key, column in (
+            ("rfm_segment", "rfm_segment"),
+            ("ai_segment", "ai_segment"),
+            ("risk_band", "risk_band"),
+            ("value_tier", "customer_value_tier"),
+        ):
+            opts = sorted(master[column].dropna().unique()) if column in master.columns else []
+            filters[key] = multiselect_filter(
+                key.replace("_", " ").title(), [str(o) for o in opts], key=f"f_{key}"
+            )
 
 txns_f, master_f = apply_filters(txns, master, filters)
 if master_f.empty:
@@ -146,30 +151,39 @@ with t1:
     st.plotly_chart(revenue_trend_fig(trends["revenue"]), use_container_width=True)
 with t2:
     st.plotly_chart(activity_trend_fig(trends["activity"]), use_container_width=True)
-st.plotly_chart(new_returning_fig(trends["cohort"]), use_container_width=True)
+trend_l, trend_r = st.columns([3, 2])
+with trend_l:
+    st.plotly_chart(new_returning_fig(trends["cohort"]), use_container_width=True)
+with trend_r:
+    if "rfm_segment" in master_f.columns:
+        portfolio = segment_portfolio(master_f, "rfm_segment")
+        st.plotly_chart(portfolio_bar_fig(portfolio, "rfm_segment"), use_container_width=True)
+    else:
+        st.info("RFM segments appear here after page 03 scoring.")
 
-st.subheader("Segment portfolio")
-if "rfm_segment" in master_f.columns:
-    portfolio = segment_portfolio(master_f, "rfm_segment")
-    st.plotly_chart(portfolio_bar_fig(portfolio, "rfm_segment"), use_container_width=True)
-    st.dataframe(portfolio, use_container_width=True)
-else:
-    st.info("RFM segments appear here after page 03 scoring.")
+with st.expander("Segment portfolio table", expanded=False):
+    if "rfm_segment" in master_f.columns:
+        st.dataframe(segment_portfolio(master_f, "rfm_segment"), use_container_width=True)
 
 st.subheader("Risk")
 if "risk_band" in master_f.columns:
-    st.plotly_chart(risk_band_bar(master_f), use_container_width=True)
-    hvhr = high_value_high_risk(master_f)
-    if not hvhr.empty:
-        st.markdown("High-value, high-risk customers (IDs masked):")
-        st.dataframe(hvhr, use_container_width=True)
+    risk_l, risk_r = st.columns([1, 1])
+    with risk_l:
+        st.plotly_chart(risk_band_bar(master_f), use_container_width=True)
+    with risk_r:
+        hvhr = high_value_high_risk(master_f)
+        if not hvhr.empty:
+            with st.expander("High-value, high-risk (IDs masked)", expanded=False):
+                st.dataframe(hvhr, use_container_width=True)
 else:
     st.info("Churn risk appears here after page 07 scoring.")
 
 st.subheader("Demographics & geography")
 geo_levels = [lvl for lvl in GEO_LEVELS if lvl in txns_f.columns]
 if geo_levels:
-    level = st.selectbox("Geography level", geo_levels)
+    with st.sidebar:
+        with control_group("Geography View"):
+            level = st.selectbox("Geography level", geo_levels)
     geo = (
         txns_f[level]
         .fillna("Unknown")
@@ -177,8 +191,11 @@ if geo_levels:
         .rename_axis(level)
         .reset_index(name="customers")
     )
-    st.plotly_chart(top_geo_bar(geo, level), use_container_width=True)
-    st.plotly_chart(geo_treemap(geo.head(30), level), use_container_width=True)
+    geo_l, geo_r = st.columns([3, 2])
+    with geo_l:
+        st.plotly_chart(top_geo_bar(geo, level), use_container_width=True)
+    with geo_r:
+        st.plotly_chart(geo_treemap(geo.head(30), level), use_container_width=True)
 if "age_band" in master_f.columns:
     bands = (
         master_f["age_band"].value_counts().rename_axis("age_band").reset_index(name="customers")
@@ -189,8 +206,11 @@ st.subheader("Retention")
 retention = _retention_frame()
 if retention is not None and not retention.empty:
     ret_f = retention[retention["customer_id"].isin(set(master_f["customer_id"]))]
-    st.plotly_chart(strategy_distribution_bar(ret_f), use_container_width=True)
-    st.plotly_chart(revenue_at_risk_bar(ret_f), use_container_width=True)
+    ret_l, ret_r = st.columns([1, 1])
+    with ret_l:
+        st.plotly_chart(strategy_distribution_bar(ret_f), use_container_width=True)
+    with ret_r:
+        st.plotly_chart(revenue_at_risk_bar(ret_f), use_container_width=True)
     st.metric("Campaign-ready customers", f"{len(ret_f):,}")
     csv_download_button(
         ret_f,
@@ -209,11 +229,13 @@ st.warning(
 if st.checkbox("I am authorized to view raw customer identifiers"):
     detail = master_f.copy()
     detail["customer_id"] = detail["customer_id"].astype(str)
-    st.dataframe(detail.head(200), use_container_width=True)
+    with st.expander("Customer detail (top 200)", expanded=False):
+        st.dataframe(detail.head(200), use_container_width=True)
     csv_download_button(
         detail, "executive_customer_detail.csv", "Download detail (CSV)", key="dl_exec_detail"
     )
 else:
     masked = master_f.copy()
     masked["customer_id"] = masked["customer_id"].map(mask_customer_id)
-    st.dataframe(masked.head(200), use_container_width=True)
+    with st.expander("Customer overview, IDs masked (top 200)", expanded=False):
+        st.dataframe(masked.head(200), use_container_width=True)
