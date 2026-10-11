@@ -1,0 +1,55 @@
+# Retention strategy matrix — decision support, NOT causal claims.
+# Rules are evaluated top-down; the first rule whose value_tiers AND risk_bands
+# both contain the customer wins. Every rule must cover its value×band cells;
+# validate with retention_engine.strategy_mapper.validate_matrix().
+# Reasons state risk/value facts only: never promise retention outcomes.
+rules:
+  - name: vip_intervention
+    value_tiers: [High]
+    risk_bands: [high, critical]
+    action: Personal outreach (VIP intervention)
+    channel: Phone + personal email
+    offer_type: Loyalty recovery
+    reason: "High historical value ({value}) with {band} churn risk (p={probability}). Personal contact to understand concerns before they lapse."
+
+  - name: recognition_growth
+    value_tiers: [High]
+    risk_bands: [low, medium]
+    action: Recognition and referral invitation
+    channel: Email
+    offer_type: Early access
+    reason: "High historical value ({value}) with {band} churn risk (p={probability}). Reinforce loyalty and invite referrals."
+
+  - name: reactivation
+    value_tiers: [Medium]
+    risk_bands: [high, critical]
+    action: Personalized reactivation
+    channel: Email + SMS
+    offer_type: Limited incentive
+    reason: "Medium historical value ({value}) with {band} churn risk (p={probability}). Targeted incentive to prompt another purchase."
+
+  - name: nurture_upsell
+    value_tiers: [Medium]
+    risk_bands: [low, medium]
+    action: Cross-sell and early access
+    channel: Email
+    offer_type: Cross-sell
+    reason: "Medium historical value ({value}) with {band} churn risk (p={probability}). Grow share of wallet while risk is contained."
+
+  - name: lowcost_reengagement
+    value_tiers: [Low]
+    risk_bands: [medium, high, critical]
+    action: Automated low-cost re-engagement
+    channel: SMS
+    offer_type: Win-back
+    reason: "Low historical value ({value}) with {band} churn risk (p={probability}). Low-cost automated touch only."
+
+  - name: routine_nurture
+    value_tiers: [Low]
+    risk_bands: [low]
+    action: Routine nurture and monitoring
+    channel: Newsletter
+    offer_type: None
+    reason: "Low historical value ({value}) with {band} churn risk (p={probability}). No action beyond routine nurture."
+
+disclaimer: Actions are decision support based on historical value and modeled churn risk. They do not claim causal retention impact without experiment data.

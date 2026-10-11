@@ -1,6 +1,11 @@
 # CHANGELOG
 
-## 2026-10-11 — Phase 6: Leakage-Safe Churn Prediction
+## 2026-10-11 — Phase 7: Retention Intelligence
+- Added: `retention_engine/` value tiers, priority scoring, strategy matrix
+  loader/validator, next-best-action, offer catalog, campaign export;
+  `retention_strategies.yaml`; `services/retention_service.py`;
+  `visualization/retention_charts.py`; page `08_Retention_Strategies.py`;
+  `tests/test_retention.py` (94 passed total).
 - Added: `churn/` labeling, dataset builder, baselines, RF/XGB/LightGBM trainers,
   evaluation, Platt calibration, explainability, risk scoring;
   `services/churn_service.py`, `visualization/churn_charts.py`,

@@ -1,7 +1,7 @@
 # PROJECT_STATUS
 
 ## Current phase
-Phase 6 — Leakage-Safe Churn Prediction (complete, gates green)
+Phase 7 — Retention Intelligence (complete, gates green)
 
 ## Completed features
 - Phase 0: (as before — tooling, utils, config, landing page, sample data).
@@ -47,17 +47,17 @@ Phase 6 — Leakage-Safe Churn Prediction (complete, gates green)
 
 ## Current test results
 - `python -m compileall` clean; `ruff check .` clean; `black --check .` clean;
-  `pytest -q` 86 passed (incl. separable-behavior churn training);
+  `pytest -q` 94 passed;
   `streamlit run app.py` health 200.
   Run on 2026-10-11, Python 3.12, Streamlit 1.63.
 
 ## Known issues
 - `ponytail/`, `servers/`, `awesome-ai-agents/` are unrelated nested checkouts;
   excluded from tooling, not deleted (user decision).
-- Churn, retention analytics and pages 07–09 are still stubs; implemented in
-  Phases 6–8. HDBSCAN and UMAP are not installed: pages show install guidance
+- Only page 09 (executive dashboard) and production hardening remain (Phase 8).
+  LightGBM, SHAP, HDBSCAN, UMAP are not installed: pages show install guidance
   and degrade gracefully (verified by tests).
 
 ## Next phase
-Phase 6 — Leakage-Safe Churn Prediction (time-aware dataset, 5 models, eval +
-calibration, explainability, page 07).
+Phase 8 — Executive Dashboard + Production Readiness (filter-consistent KPIs,
+privacy masking, model cards, Dockerfile, CI, coverage, deployment guide).
