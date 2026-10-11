@@ -176,7 +176,8 @@ else:
 
 # --- Recommendation ------------------------------------------------------------
 st.subheader("Recommendation")
-recommendation = recommend_model(table.to_dict(orient="records"))
+recommendation = recommend_model(
+    table.rename(columns={"model": "name"}).to_dict(orient="records"))
 st.info(recommendation["rationale"])
 choice = st.selectbox(
     "Operational model (your call — the evidence above is here so you can disagree)",
