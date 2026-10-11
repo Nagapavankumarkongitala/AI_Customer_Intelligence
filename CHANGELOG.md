@@ -1,6 +1,14 @@
 # CHANGELOG
 
-## 2026-10-11 — Phase 5: Segmentation Comparison
+## 2026-10-11 — Phase 6: Leakage-Safe Churn Prediction
+- Added: `churn/` labeling, dataset builder, baselines, RF/XGB/LightGBM trainers,
+  evaluation, Platt calibration, explainability, risk scoring;
+  `services/churn_service.py`, `visualization/churn_charts.py`,
+  page `07_Churn_Prediction.py`, tests `test_churn_labeling.py`,
+  `test_churn_models.py` (86 passed total).
+- Fixed: cohort (first-txn) chronological splits — last-txn ordering segregates
+  classes by construction; `CalibratedClassifierCV(cv='prefit')` unsupported on
+  sklearn 1.9, replaced with direct Platt scaling.
 - Added: `analytics/segmentation_comparison.py`, Sankey + metric bars,
   page `06_Segmentation_Comparison.py`, `tests/test_comparison.py` (72 passed total).
 - Changed: page 05 saved runs persist labels + customer IDs for comparison.

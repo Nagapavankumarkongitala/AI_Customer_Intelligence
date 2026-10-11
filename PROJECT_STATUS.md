@@ -1,7 +1,7 @@
 # PROJECT_STATUS
 
 ## Current phase
-Phase 5 — Segmentation Comparison (complete, gates green)
+Phase 6 — Leakage-Safe Churn Prediction (complete, gates green)
 
 ## Completed features
 - Phase 0: (as before — tooling, utils, config, landing page, sample data).
@@ -36,10 +36,18 @@ Phase 5 — Segmentation Comparison (complete, gates green)
   page `06_Segmentation_Comparison` (scorecard, agreement + Sankey + crosstab,
   checklists, recommendation with human override, downloads). Saved runs now
   persist labels for comparison.
+- Phase 6: `churn/` labeling (cutoff/horizon/min-history, window validation),
+  dataset builder (predictors ≤ cutoff, leakage proof), baselines
+  (logreg/HGB) + RF/XGBoost/LightGBM trainers, evaluation (AUCs, calibration,
+  lift/gain, F1 threshold), Platt calibration, explainability (permutation,
+  logreg odds, SHAP-optional, per-customer drivers), risk scoring to the output
+  schema; `services/churn_service.py` (cohort time splits, train/calibrate/
+  persist); `visualization/churn_charts.py`; page `07_Churn_Prediction`
+  (dataset → train/compare → threshold → explain → score + downloads).
 
 ## Current test results
 - `python -m compileall` clean; `ruff check .` clean; `black --check .` clean;
-  `pytest -q` 72 passed;
+  `pytest -q` 86 passed (incl. separable-behavior churn training);
   `streamlit run app.py` health 200.
   Run on 2026-10-11, Python 3.12, Streamlit 1.63.
 

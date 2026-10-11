@@ -42,8 +42,11 @@ if not ai_runs:
 money = features.set_index("customer_id")["monetary_value"]
 churn_scores = st.session_state.get("churn_scores")
 churn = None
-if isinstance(churn_scores, pd.DataFrame) and "churn" in churn_scores.columns:
-    churn = churn_scores.set_index("customer_id")["churn"]
+if isinstance(churn_scores, pd.DataFrame):
+    if "predicted_class" in churn_scores.columns:
+        churn = churn_scores.set_index("customer_id")["predicted_class"]
+    elif "churn_probability" in churn_scores.columns:
+        churn = churn_scores.set_index("customer_id")["churn_probability"] >= 0.5
 
 # --- Candidate rows: AI runs + traditional labelings -------------------------
 rows: list[dict] = []

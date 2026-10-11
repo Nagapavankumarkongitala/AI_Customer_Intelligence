@@ -15,7 +15,7 @@ Live build tracker: `PROJECT_STATUS.md`.
 - [x] Phase 3 — Demographic and geographic profiling
 - [x] Phase 4 — Advanced segmentation
 - [x] Phase 5 — Segmentation comparison
-- [ ] Phase 6 — Leakage-safe churn prediction
+- [x] Phase 6 — Leakage-safe churn prediction
 - [ ] Phase 7 — Retention intelligence
 - [ ] Phase 8 — Executive dashboard and production readiness
 
