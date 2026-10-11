@@ -97,11 +97,14 @@ geo_tab = st.tabs([lvl.capitalize() for lvl in geo_levels]) if geo_levels else [
 for tab, level in zip(geo_tab, geo_levels, strict=True):
     with tab:
         table = profile.tables[f"geo_{level}"]
-        st.plotly_chart(top_geo_bar(table, level), use_container_width=True)
+        st.plotly_chart(top_geo_bar(table, level), use_container_width=True,
+                        key=f"geo_top_{level}")
         if "revenue" in table.columns:
-            st.plotly_chart(revenue_geo_bar(table, level), use_container_width=True)
-        st.plotly_chart(geo_treemap(table.head(30), level), use_container_width=True)
-        st.dataframe(table.head(50), use_container_width=True)
+            st.plotly_chart(revenue_geo_bar(table, level), use_container_width=True,
+                            key=f"geo_rev_{level}")
+        st.plotly_chart(geo_treemap(table.head(30), level), use_container_width=True,
+                        key=f"geo_tree_{level}")
+        st.dataframe(table.head(50), use_container_width=True, key=f"geo_table_{level}")
 
 if "concentration" in profile.tables:
     st.subheader("Geographic concentration")

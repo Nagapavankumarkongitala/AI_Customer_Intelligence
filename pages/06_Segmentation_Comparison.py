@@ -141,7 +141,8 @@ for metric, title in (
     ("value_eta2", "Revenue differentiation (monetary eta²)"),
     ("evenness", "Size balance (evenness)"),
 ):
-    st.plotly_chart(metric_comparison_bar(table, metric, title), use_container_width=True)
+    st.plotly_chart(metric_comparison_bar(table, metric, title), use_container_width=True,
+                        key=f"cmp_{metric}")
 
 # --- Pairwise agreement: traditional vs selected AI ---------------------------
 st.subheader("Agreement with traditional segments")
@@ -160,7 +161,8 @@ with st.expander("Cross-tabulation (counts)"):
 with st.expander("Interpretability checklists"):
     for row in rows:
         st.markdown(f"**{row['model']}** — {row['interpretability_passes']} checks pass")
-        st.dataframe(pd.DataFrame(row["checklist"]), use_container_width=True)
+        st.dataframe(pd.DataFrame(row["checklist"]), use_container_width=True,
+                     key=f"checklist_{row['model']}")
 
 # --- Churn association (Phase 6 unlocks real data) ------------------------------
 churn_table = churn_rate_by_segment(
