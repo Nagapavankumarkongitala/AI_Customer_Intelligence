@@ -246,6 +246,8 @@ if st.button("Save this run"):
         "stability": run["stability"],
         "names": {int(k): v for k, v in overrides.items()},
         "feature_names": run["feature_names"],
+        "customer_ids": labeled["customer_id"].tolist(),
+        "labels": [int(v) for v in run["labels"]],
     }
     runs = st.session_state.get("segmentation_runs") or []
     runs.append(record)

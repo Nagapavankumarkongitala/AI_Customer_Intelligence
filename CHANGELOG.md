@@ -1,6 +1,9 @@
 # CHANGELOG
 
-## 2026-10-11 — Phase 4: Advanced Segmentation
+## 2026-10-11 — Phase 5: Segmentation Comparison
+- Added: `analytics/segmentation_comparison.py`, Sankey + metric bars,
+  page `06_Segmentation_Comparison.py`, `tests/test_comparison.py` (72 passed total).
+- Changed: page 05 saved runs persist labels + customer IDs for comparison.
 - Added: `feature_engineering/preprocessing.py`, `scaling.py`; `segmentation/`
   `common/evaluation/stability/segment_profiling/segment_naming` + six model
   modules (incl. new `autoencoder_model.py`); `deep_learning/` autoencoder,

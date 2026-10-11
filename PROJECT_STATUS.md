@@ -1,7 +1,7 @@
 # PROJECT_STATUS
 
 ## Current phase
-Phase 4 — Advanced Segmentation (complete, gates green)
+Phase 5 — Segmentation Comparison (complete, gates green)
 
 ## Completed features
 - Phase 0: (as before — tooling, utils, config, landing page, sample data).
@@ -29,20 +29,27 @@ Phase 4 — Advanced Segmentation (complete, gates green)
   persistence); `visualization/segmentation_charts.py`; page
   `05_Advanced_Segmentation` (prepare → sweep → run → profile → override names
   → save run + model files).
+- Phase 5: `analytics/segmentation_comparison.py` (ARI agreement, size balance,
+  revenue concentration, monetary eta² separation, churn-rates-when-available,
+  interpretability checklist, gated recommendation that never blindly follows
+  silhouette); Sankey + metric bars in `visualization/segmentation_charts.py`;
+  page `06_Segmentation_Comparison` (scorecard, agreement + Sankey + crosstab,
+  checklists, recommendation with human override, downloads). Saved runs now
+  persist labels for comparison.
 
 ## Current test results
 - `python -m compileall` clean; `ruff check .` clean; `black --check .` clean;
-  `pytest -q` 64 passed (incl. tiny TensorFlow autoencoder run);
+  `pytest -q` 72 passed;
   `streamlit run app.py` health 200.
   Run on 2026-10-11, Python 3.12, Streamlit 1.63.
 
 ## Known issues
 - `ponytail/`, `servers/`, `awesome-ai-agents/` are unrelated nested checkouts;
   excluded from tooling, not deleted (user decision).
-- Churn, retention analytics and pages 06–09 are still stubs; implemented in
-  Phases 5–8. HDBSCAN and UMAP are not installed: pages show install guidance
+- Churn, retention analytics and pages 07–09 are still stubs; implemented in
+  Phases 6–8. HDBSCAN and UMAP are not installed: pages show install guidance
   and degrade gracefully (verified by tests).
 
 ## Next phase
-Phase 5 — Segmentation Comparison (RFM vs AI models, metric/stability/revenue/
-interpretability comparison, recommendation record, page 06).
+Phase 6 — Leakage-Safe Churn Prediction (time-aware dataset, 5 models, eval +
+calibration, explainability, page 07).

@@ -5,6 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 from sklearn.decomposition import PCA
 
 
@@ -73,4 +74,38 @@ def profile_heatmap(profile: pd.DataFrame) -> px.Figure:
         color_continuous_midpoint=0,
         title="Cluster profile (median, z-scored per feature)",
         labels={"x": "Feature", "y": "Cluster", "color": "z"},
+    )
+
+
+def sankey_mapping(contingency: pd.DataFrame, source_name: str, target_name: str) -> go.Figure:
+    """Flow of customers from source segments (left) to target segments (right)."""
+    sources = [f"{source_name}: {idx}" for idx in contingency.index]
+    targets = [f"{target_name}: {col}" for col in contingency.columns]
+    labels = sources + targets
+    link_source, link_target, values = [], [], []
+    for i in range(len(contingency.index)):
+        for j in range(len(contingency.columns)):
+            value = float(contingency.iloc[i, j])
+            if value > 0:
+                link_source.append(i)
+                link_target.append(len(sources) + j)
+                values.append(value)
+    return go.Figure(
+        go.Sankey(
+            node={"label": labels, "pad": 12, "thickness": 16},
+            link={"source": link_source, "target": link_target, "value": values},
+        )
+    )
+
+
+def metric_comparison_bar(table: pd.DataFrame, metric: str, title: str) -> px.Figure:
+    """One metric across candidate models (NaN metrics are dropped from view)."""
+    data = table.dropna(subset=[metric])
+    return px.bar(
+        data,
+        x="model",
+        y=metric,
+        color="model",
+        title=title,
+        labels={"model": "Model", metric: metric},
     )
