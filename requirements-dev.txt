@@ -1,0 +1,7 @@
+# Development-only dependencies (lint, format, test).
+# Install with: pip install -r requirements-dev.txt
+-r requirements.txt
+pytest
+pytest-cov
+ruff
+black

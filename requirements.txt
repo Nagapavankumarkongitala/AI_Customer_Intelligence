@@ -1,0 +1,18 @@
+# Runtime dependencies (spec §3 core stack).
+streamlit
+pandas
+numpy
+plotly
+scikit-learn
+scipy
+openpyxl
+pyarrow
+joblib
+pyyaml
+pydantic
+
+# Phase-gated: required only where used; import optionally with install guidance.
+xgboost
+lightgbm
+shap
+tensorflow

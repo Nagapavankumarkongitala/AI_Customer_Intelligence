@@ -1,0 +1,45 @@
+[project]
+name = "ai-customer-intelligence"
+version = "0.1.0"
+description = "AI Customer Intelligence Platform (Streamlit)"
+requires-python = ">=3.11"
+
+[tool.black]
+line-length = 100
+target-version = ["py311", "py312"]
+# Foreign nested checkouts are NOT part of this project.
+exclude = '''(
+  /(
+    ponytail
+    | servers
+    | awesome-ai-agents
+    | \.agents
+    | \.git
+    | \.venv
+    | venv
+    | __pycache__
+  )/
+)'''
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+exclude = [
+  "ponytail",
+  "servers",
+  "awesome-ai-agents",
+  ".agents",
+  ".git",
+  ".venv",
+  "venv",
+  "__pycache__",
+]
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+ignore = ["E501"]
+
+[tool.pytest.ini_options]
+# Only project tests. Foreign nested checkouts are never collected.
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "-q"

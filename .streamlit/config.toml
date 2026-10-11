@@ -1,0 +1,11 @@
+[theme]
+# Restrained professional theme: blue = neutral info, green = positive,
+# amber = warning, red = high risk. Never rely on color alone (labels + icons too).
+primaryColor = "#1F6FEB"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F1F4F9"
+textColor = "#1A2332"
+font = "sans serif"
+
+[server]
+headless = true

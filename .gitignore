@@ -1,0 +1,53 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+
+# Foreign / unrelated nested checkouts (NOT part of this project — do not build, test, or lint)
+ponytail/
+servers/
+awesome-ai-agents/
+.agents/
+
+# Streamlit secrets / env
+.env
+.streamlit/secrets.toml
+
+# Runtime data & artifacts (regenerated; sample data generator output is the exception)
+data/raw/*
+data/processed/*
+data/features/*
+data/model_input/*
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+!data/features/.gitkeep
+!data/model_input/.gitkeep
+models/churn/*
+models/segmentation/*
+models/autoencoder/*
+models/metadata/*
+!models/churn/.gitkeep
+!models/segmentation/.gitkeep
+!models/autoencoder/.gitkeep
+!models/metadata/.gitkeep
+logs/*
+!logs/.gitkeep
+reports/excel_exports/*
+reports/pdf_reports/*
+reports/ppt_exports/*
+!reports/excel_exports/.gitkeep
+!reports/pdf_reports/.gitkeep
+!reports/ppt_exports/.gitkeep
+*.log
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
