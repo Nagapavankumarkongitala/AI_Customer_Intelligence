@@ -1,11 +1,11 @@
 [theme]
-# Obsidian terminal: black canvas, volt-lime accents. Risk states keep
+# Deep navy terminal: navy canvas, cyan accents. Risk states keep
 # red/green/amber hues; meaning always rides on labels, never color alone.
 base = "dark"
-primaryColor = "#CCFF00"
-backgroundColor = "#050505"
-secondaryBackgroundColor = "#141414"
-textColor = "#E8E8E8"
+primaryColor = "#22D3EE"
+backgroundColor = "#070B14"
+secondaryBackgroundColor = "#0D1930"
+textColor = "#E8EEF6"
 font = "sans serif"
 
 [server]

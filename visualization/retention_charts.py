@@ -5,7 +5,7 @@ from __future__ import annotations
 import pandas as pd
 import plotly.express as px
 
-from visualization.theme import VOLT, VOLT_DISCRETE, styled
+from visualization.theme import PRIMARY, PRIMARY_DISCRETE, styled
 
 
 @styled
@@ -18,7 +18,7 @@ def value_risk_matrix(table: pd.DataFrame) -> px.Figure:
         y="expected_value_proxy_historical",
         size="revenue_at_risk",
         color="recommended_action",
-        color_discrete_sequence=VOLT_DISCRETE,
+        color_discrete_sequence=PRIMARY_DISCRETE,
         hover_data=hover or None,
         title="Value–risk matrix (size = revenue at risk)",
         labels={
@@ -37,7 +37,7 @@ def revenue_at_risk_bar(table: pd.DataFrame) -> px.Figure:
         x="recommended_action",
         y="revenue_at_risk",
         color="recommended_action",
-        color_discrete_sequence=VOLT_DISCRETE,
+        color_discrete_sequence=PRIMARY_DISCRETE,
         title="Revenue at risk per action",
     )
 
@@ -52,7 +52,7 @@ def strategy_distribution_bar(table: pd.DataFrame) -> px.Figure:
         x="action",
         y="customers",
         color="action",
-        color_discrete_sequence=VOLT_DISCRETE,
+        color_discrete_sequence=PRIMARY_DISCRETE,
         title="Customers per recommended action",
     )
 
@@ -65,5 +65,5 @@ def priority_histogram(table: pd.DataFrame) -> px.Figure:
         nbins=20,
         title="Priority score distribution",
         labels={"value": "Priority score", "count": "Customers"},
-        color_discrete_sequence=[VOLT],
+        color_discrete_sequence=[PRIMARY],
     )

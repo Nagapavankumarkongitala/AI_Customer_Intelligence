@@ -5,7 +5,7 @@ from __future__ import annotations
 import pandas as pd
 import plotly.express as px
 
-from visualization.theme import VOLT, VOLT_DISCRETE, VOLT_SCALE, styled
+from visualization.theme import PRIMARY, PRIMARY_DISCRETE, PRIMARY_SCALE, styled
 
 
 @styled
@@ -16,7 +16,7 @@ def age_histogram(ages: pd.Series) -> px.Figure:
         nbins=20,
         title="Age distribution",
         labels={"value": "Age", "count": "Customers"},
-        color_discrete_sequence=[VOLT],
+        color_discrete_sequence=[PRIMARY],
     )
 
 
@@ -28,7 +28,7 @@ def age_band_bar(age_bands: pd.DataFrame) -> px.Figure:
         x="age_band",
         y="customers",
         color="customers",
-        color_continuous_scale=VOLT_SCALE,
+        color_continuous_scale=PRIMARY_SCALE,
         title="Customers per age band",
     )
 
@@ -41,7 +41,7 @@ def gender_bar(gender: pd.DataFrame) -> px.Figure:
         x="gender",
         y="customers",
         color="gender",
-        color_discrete_sequence=VOLT_DISCRETE,
+        color_discrete_sequence=PRIMARY_DISCRETE,
         title="Customers by gender",
         labels={"gender": "Gender", "customers": "Customers"},
     )
@@ -55,7 +55,7 @@ def top_geo_bar(geo: pd.DataFrame, level: str, top_n: int = 10) -> px.Figure:
         x=level,
         y="customers",
         color="customers",
-        color_continuous_scale=VOLT_SCALE,
+        color_continuous_scale=PRIMARY_SCALE,
         title=f"Top {level}s by customers",
     )
 
@@ -68,7 +68,7 @@ def revenue_geo_bar(geo: pd.DataFrame, level: str, top_n: int = 10) -> px.Figure
         x=level,
         y="revenue",
         color="revenue",
-        color_continuous_scale=VOLT_SCALE,
+        color_continuous_scale=PRIMARY_SCALE,
         title=f"Top {level}s by revenue",
     )
 
@@ -81,7 +81,7 @@ def geo_treemap(geo: pd.DataFrame, level: str) -> px.Figure:
         path=[level],
         values="customers",
         color="customers",
-        color_continuous_scale=VOLT_SCALE,
+        color_continuous_scale=PRIMARY_SCALE,
         title=f"Customer share by {level}",
     )
 
@@ -95,7 +95,7 @@ def stacked_composition_bar(composition: pd.DataFrame, column: str) -> px.Figure
         x="segment",
         y="pct",
         color=column,
-        color_discrete_sequence=VOLT_DISCRETE,
+        color_discrete_sequence=PRIMARY_DISCRETE,
         title=f"{column} mix by segment",
         labels={"pct": "Share (%)", "segment": "Segment"},
     )

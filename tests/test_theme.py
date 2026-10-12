@@ -1,18 +1,21 @@
 """Terminal theme tests: styling wrapper, decorator, glass tokens, contrast."""
 
+from pathlib import Path
+
 import pandas as pd
 import plotly.express as px
 
 from visualization.theme import (
+    CANVAS,
     CARD,
     GLASS_BG,
+    GLASS_BLUR,
     GLASS_BORDER,
     GLASS_RADIUS,
     GLASS_SHADOW,
     MUTED,
-    OBSIDIAN,
+    PRIMARY,
     TERMINAL_CSS,
-    VOLT,
     inject_terminal_css,
     style_plotly_fig,
     styled,
@@ -59,11 +62,11 @@ def test_styled_decorator_preserves_behavior() -> None:
 
 
 def test_css_contract() -> None:
-    """CSS compresses padding, defines cards, caps tables, highlights KPIs in volt."""
+    """CSS compresses padding, defines glass cards, caps tables, highlights KPIs."""
     assert ".block-container" in TERMINAL_CSS
     assert ".dashboard-card" in TERMINAL_CSS and CARD in TERMINAL_CSS
     assert "max-height: 420px" in TERMINAL_CSS
-    assert VOLT in TERMINAL_CSS and OBSIDIAN in TERMINAL_CSS
+    assert PRIMARY in TERMINAL_CSS and CANVAS in TERMINAL_CSS
     assert callable(inject_terminal_css)
 
 
@@ -75,9 +78,26 @@ def test_glass_tokens_present_in_css() -> None:
     assert '[data-testid="stMetric"]' in TERMINAL_CSS
     assert "color-scheme: dark" in TERMINAL_CSS
     assert "tabular-nums" in TERMINAL_CSS
+    assert GLASS_BLUR == "blur(12px)"
 
 
-def test_text_contrast_on_obsidian() -> None:
-    """Volt primary ≥ 7:1, muted secondary ≥ 4.5:1 on obsidian (computed, not eyeballed)."""
-    assert _contrast(VOLT, OBSIDIAN) >= 7.0
-    assert _contrast(MUTED, OBSIDIAN) >= 4.5
+def test_text_contrast_on_canvas() -> None:
+    """Primary ≥ 7:1, muted secondary ≥ 4.5:1 on canvas (computed, not eyeballed)."""
+    assert _contrast(PRIMARY, CANVAS) >= 7.0
+    assert _contrast(MUTED, CANVAS) >= 4.5
+
+
+def test_no_legacy_volt_hex() -> None:
+    """The volt palette is fully retired from factories, pages, and latent viz."""
+    offenders = []
+    targets = [
+        *Path("visualization").glob("*.py"),
+        *Path("pages").glob("*.py"),
+        Path("deep_learning/latent_space_visualization.py"),
+        Path(".streamlit/config.toml"),
+    ]
+    for path in targets:
+        for i, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            if "#CCFF00" in line or "#9DB800" in line or "VOLT" in line:
+                offenders.append(f"{path}:{i}")
+    assert offenders == []

@@ -8,7 +8,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from sklearn.decomposition import PCA
 
-from visualization.theme import VOLT_DISCRETE, VOLT_SCALE, styled
+from visualization.theme import PRIMARY_DISCRETE, PRIMARY_SCALE, styled
 
 
 @styled
@@ -24,7 +24,7 @@ def pca_scatter(
         x="pc_1",
         y="pc_2",
         color="cluster",
-        color_discrete_sequence=VOLT_DISCRETE,
+        color_discrete_sequence=PRIMARY_DISCRETE,
         title="Clusters (PCA 2D)",
     )
 
@@ -49,7 +49,7 @@ def umap_scatter(
         x="umap_1",
         y="umap_2",
         color="cluster",
-        color_discrete_sequence=VOLT_DISCRETE,
+        color_discrete_sequence=PRIMARY_DISCRETE,
         title="Clusters (UMAP 2D)",
     )
 
@@ -64,7 +64,7 @@ def cluster_size_bar(profile: pd.DataFrame) -> px.Figure:
         x="label",
         y="customers",
         color="customers",
-        color_continuous_scale=VOLT_SCALE,
+        color_continuous_scale=PRIMARY_SCALE,
         title="Customers per cluster",
     )
 
@@ -107,7 +107,7 @@ def sankey_mapping(contingency: pd.DataFrame, source_name: str, target_name: str
                 values.append(value)
     return go.Figure(
         go.Sankey(
-            node={"label": labels, "pad": 12, "thickness": 16, "color": "#9DB800"},
+            node={"label": labels, "pad": 12, "thickness": 16, "color": "#0E7490"},
             link={
                 "source": link_source,
                 "target": link_target,
@@ -127,7 +127,7 @@ def metric_comparison_bar(table: pd.DataFrame, metric: str, title: str) -> px.Fi
         x="model",
         y=metric,
         color="model",
-        color_discrete_sequence=VOLT_DISCRETE,
+        color_discrete_sequence=PRIMARY_DISCRETE,
         title=title,
         labels={"model": "Model", metric: metric},
     )

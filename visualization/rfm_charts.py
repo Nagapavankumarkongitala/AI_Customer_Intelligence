@@ -5,7 +5,7 @@ from __future__ import annotations
 import pandas as pd
 import plotly.express as px
 
-from visualization.theme import VOLT_DISCRETE, VOLT_SCALE, styled
+from visualization.theme import PRIMARY_DISCRETE, PRIMARY_SCALE, styled
 
 
 @styled
@@ -16,7 +16,7 @@ def segment_distribution_bar(profile: pd.DataFrame) -> px.Figure:
         x="segment",
         y="customers",
         color="customers",
-        color_continuous_scale=VOLT_SCALE,
+        color_continuous_scale=PRIMARY_SCALE,
         title="Customers per segment",
         labels={"segment": "Segment", "customers": "Customers"},
     )
@@ -30,7 +30,7 @@ def revenue_by_segment_bar(profile: pd.DataFrame) -> px.Figure:
         x="segment",
         y="revenue",
         color="revenue",
-        color_continuous_scale=VOLT_SCALE,
+        color_continuous_scale=PRIMARY_SCALE,
         title="Revenue per segment",
         labels={"segment": "Segment", "revenue": "Revenue"},
     )
@@ -46,7 +46,7 @@ def recency_frequency_scatter(features: pd.DataFrame, color_col: str = "segment"
         x="recency_days",
         y="frequency",
         color=color,
-        color_discrete_sequence=VOLT_DISCRETE,
+        color_discrete_sequence=PRIMARY_DISCRETE,
         hover_data=["customer_id", "monetary_value"],
         title="Recency vs frequency",
         labels={"recency_days": "Recency (days)", "frequency": "Frequency"},
@@ -63,7 +63,7 @@ def frequency_monetary_scatter(features: pd.DataFrame, color_col: str = "segment
         x="frequency",
         y="monetary_value",
         color=color,
-        color_discrete_sequence=VOLT_DISCRETE,
+        color_discrete_sequence=PRIMARY_DISCRETE,
         hover_data=["customer_id", "recency_days"],
         title="Frequency vs monetary value",
         labels={"frequency": "Frequency", "monetary_value": "Monetary value"},
@@ -77,7 +77,7 @@ def rfm_heatmap(scored: pd.DataFrame) -> px.Figure:
     return px.imshow(
         matrix,
         text_auto=True,
-        color_continuous_scale=VOLT_SCALE,
+        color_continuous_scale=PRIMARY_SCALE,
         title="Customer counts by R × F score",
         labels={"x": "F score", "y": "R score", "color": "Customers"},
     )

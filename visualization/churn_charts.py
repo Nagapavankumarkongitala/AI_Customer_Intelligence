@@ -10,11 +10,11 @@ from sklearn.metrics import auc, roc_curve
 
 from visualization.theme import (
     MUTED,
+    PRIMARY,
+    PRIMARY_SCALE,
     RISK_AMBER,
     RISK_GREEN,
     RISK_RED,
-    VOLT,
-    VOLT_SCALE,
     styled,
 )
 
@@ -26,7 +26,7 @@ def roc_curve_fig(y_true: np.ndarray, proba: np.ndarray) -> go.Figure:
     fig = go.Figure()
     fig.add_trace(
         go.Scatter(
-            x=fpr, y=tpr, mode="lines", line={"color": VOLT}, name=f"AUC {auc(fpr, tpr):.3f}"
+            x=fpr, y=tpr, mode="lines", line={"color": PRIMARY}, name=f"AUC {auc(fpr, tpr):.3f}"
         )
     )
     fig.add_trace(
@@ -46,7 +46,7 @@ def calibration_curve_fig(table: pd.DataFrame) -> go.Figure:
         x="mean_predicted",
         y="observed_rate",
         size="count",
-        color_discrete_sequence=[VOLT],
+        color_discrete_sequence=[PRIMARY],
         title="Calibration curve",
     )
     fig.add_trace(
@@ -64,7 +64,7 @@ def confusion_fig(confusion: dict) -> go.Figure:
     return px.imshow(
         matrix,
         text_auto=True,
-        color_continuous_scale=VOLT_SCALE,
+        color_continuous_scale=PRIMARY_SCALE,
         x=["Pred 0", "Pred 1"],
         y=["True 0", "True 1"],
         title="Confusion matrix",
@@ -80,7 +80,7 @@ def gain_chart_fig(table: pd.DataFrame) -> go.Figure:
             x=table["decile"],
             y=table["cum_gain"],
             mode="lines+markers",
-            line={"color": VOLT},
+            line={"color": PRIMARY},
             name="model",
         )
     )
@@ -108,7 +108,7 @@ def importance_bar_fig(importance: pd.DataFrame, top_n: int = 15) -> px.Figure:
         y="feature",
         orientation="h",
         color="importance",
-        color_continuous_scale=VOLT_SCALE,
+        color_continuous_scale=PRIMARY_SCALE,
         title="Global feature importance",
     )
 

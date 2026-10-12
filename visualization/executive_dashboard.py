@@ -5,7 +5,7 @@ from __future__ import annotations
 import pandas as pd
 import plotly.express as px
 
-from visualization.theme import RISK_GREEN, VOLT, VOLT_DISCRETE, styled
+from visualization.theme import PRIMARY, PRIMARY_DISCRETE, RISK_GREEN, styled
 
 
 @styled
@@ -16,7 +16,7 @@ def revenue_trend_fig(table: pd.DataFrame) -> px.Figure:
         x="month",
         y="revenue",
         markers=True,
-        color_discrete_sequence=[VOLT],
+        color_discrete_sequence=[PRIMARY],
         title="Revenue trend",
         labels={"month": "Month", "revenue": "Revenue"},
     )
@@ -32,7 +32,7 @@ def activity_trend_fig(table: pd.DataFrame) -> px.Figure:
         markers=True,
         title="Customer activity trend",
         labels={"month": "Month", "active_customers": "Active customers"},
-        color_discrete_sequence=[VOLT],
+        color_discrete_sequence=[PRIMARY],
     )
 
 
@@ -51,7 +51,7 @@ def new_returning_fig(table: pd.DataFrame) -> px.Figure:
         y="customers",
         color="cohort",
         title="New vs returning customers",
-        color_discrete_map={"new_customers": RISK_GREEN, "returning_customers": VOLT},
+        color_discrete_map={"new_customers": RISK_GREEN, "returning_customers": PRIMARY},
     )
 
 
@@ -71,6 +71,6 @@ def portfolio_bar_fig(portfolio: pd.DataFrame, segment_col: str = "segment") -> 
         y="pct",
         color="share",
         barmode="group",
-        color_discrete_sequence=VOLT_DISCRETE,
+        color_discrete_sequence=PRIMARY_DISCRETE,
         title="Customer vs revenue share by segment",
     )
