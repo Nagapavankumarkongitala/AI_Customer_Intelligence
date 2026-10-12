@@ -5,8 +5,14 @@ import streamlit as st
 
 from analytics.demographics import GEO_LEVELS
 from components.export_buttons import csv_download_button
-from components.filters import control_group, date_range_filter, multiselect_filter
+from components.filters import (
+    control_group,
+    controls_expander,
+    date_range_filter,
+    multiselect_filter,
+)
 from components.metric_cards import kpi_row
+from components.nav_tabs import render_nav_tabs
 from services import state_service
 from services.dashboard_service import (
     apply_filters,
@@ -33,6 +39,7 @@ from visualization.theme import inject_terminal_css
 configure_logging()
 state_service.initialize(st.session_state)
 inject_terminal_css()
+render_nav_tabs("pages/09_Executive_Dashboard.py")
 
 
 def _fallback_features(txns: pd.DataFrame) -> pd.DataFrame:
@@ -79,12 +86,10 @@ master = build_master(
     retention=_retention_frame(),
 )
 
-with st.sidebar:
-    with control_group("Global Slicers"):
+with controls_expander("Global Slicers"):
+    with control_group("Date & Geography"):
         date_start, date_end = date_range_filter(txns["_txn_date"])
-filters: dict = {"date_start": date_start, "date_end": date_end}
-with st.sidebar:
-    with control_group("Attribute Slicers"):
+        filters: dict = {"date_start": date_start, "date_end": date_end}
         for level in ("country", "region", "state", "city", "gender"):
             opts = (
                 sorted(txns[level].dropna().unique())
@@ -190,9 +195,8 @@ else:
 st.subheader("Demographics & geography")
 geo_levels = [lvl for lvl in GEO_LEVELS if lvl in txns_f.columns]
 if geo_levels:
-    with st.sidebar:
-        with control_group("Geography View"):
-            level = st.selectbox("Geography level", geo_levels)
+    with controls_expander("Geography View"):
+        level = st.selectbox("Geography level", geo_levels)
     geo = (
         txns_f[level]
         .fillna("Unknown")

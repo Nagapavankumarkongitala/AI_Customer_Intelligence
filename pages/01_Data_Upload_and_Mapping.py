@@ -3,7 +3,8 @@
 import pandas as pd
 import streamlit as st
 
-from components.filters import control_group
+from components.filters import control_group, controls_expander
+from components.nav_tabs import render_nav_tabs
 from services import state_service
 from services.column_detection import validate_mapping
 from services.data_service import load_upload_bytes
@@ -16,6 +17,7 @@ from visualization.theme import inject_terminal_css
 configure_logging()
 state_service.initialize(st.session_state)
 inject_terminal_css()
+render_nav_tabs("pages/01_Data_Upload_and_Mapping.py")
 
 st.title("01 · Data Upload & Mapping")
 st.markdown(
@@ -24,12 +26,30 @@ st.markdown(
     "Required fields: `customer_id`, `transaction_date`, `amount_spent`."
 )
 
-with st.sidebar:
+with controls_expander():
     with control_group("Data Source"):
         uploaded = st.file_uploader(
             "Transaction file", type=[s.lstrip(".") for s in SUPPORTED_UPLOAD_SUFFIXES]
         )
         use_demo = st.button("Load synthetic demo data")
+    with control_group("Column Mapping (auto-detected, correct as needed)"):
+        raw_preview = st.session_state.get("raw_data")
+        if raw_preview is not None:
+            sources = list(raw_preview.columns)
+            saved = dict(st.session_state.get("column_mapping") or {})
+            mapping = {}
+            for canonical in CANONICAL_FIELDS:
+                options = ["(not mapped)", *sources]
+                default = saved.get(canonical, "(not mapped)")
+                choice = st.selectbox(
+                    f"{canonical}{' *' if canonical in REQUIRED_FIELDS else ''}",
+                    options,
+                    index=options.index(default) if default in options else 0,
+                    key=f"map_{canonical}",
+                )
+                if choice != "(not mapped)":
+                    mapping[canonical] = choice
+            st.session_state["_mapping_draft"] = mapping
 
 if use_demo:
     try:
@@ -62,35 +82,10 @@ st.success(
 with st.expander("Inspect file preview (top 10)", expanded=False):
     st.dataframe(raw.head(10), use_container_width=True)
 
+mapping = st.session_state.get("_mapping_draft") or dict(
+    st.session_state.get("column_mapping") or {}
+)
 sources = list(raw.columns)
-saved = dict(st.session_state.get("column_mapping") or {})
-mapping: dict[str, str] = {}
-with st.sidebar:
-    with control_group("Required Mapping"):
-        for canonical in REQUIRED_FIELDS:
-            options = ["(not mapped)", *sources]
-            default = saved.get(canonical, "(not mapped)")
-            choice = st.selectbox(
-                f"{canonical} *",
-                options,
-                index=options.index(default) if default in options else 0,
-                key=f"map_{canonical}",
-            )
-            if choice != "(not mapped)":
-                mapping[canonical] = choice
-    with control_group("Optional Mapping"):
-        for canonical in [c for c in CANONICAL_FIELDS if c not in REQUIRED_FIELDS]:
-            options = ["(not mapped)", *sources]
-            default = saved.get(canonical, "(not mapped)")
-            choice = st.selectbox(
-                canonical,
-                options,
-                index=options.index(default) if default in options else 0,
-                key=f"map_{canonical}",
-            )
-            if choice != "(not mapped)":
-                mapping[canonical] = choice
-
 missing_required = [f for f in REQUIRED_FIELDS if f not in mapping]
 if missing_required:
     st.warning("Still unmapped (required): " + ", ".join(missing_required))

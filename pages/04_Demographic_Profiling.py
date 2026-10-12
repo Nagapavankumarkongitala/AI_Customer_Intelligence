@@ -9,8 +9,9 @@ from analytics.demographics import (
     segment_composition,
 )
 from analytics.statistical_tests import run_segment_tests
-from components.filters import control_group
+from components.filters import control_group, controls_expander
 from components.metric_cards import kpi_row
+from components.nav_tabs import render_nav_tabs
 from services import state_service
 from services.export_service import to_csv_bytes
 from utils.exceptions import CustomerIntelligenceError
@@ -29,6 +30,7 @@ from visualization.theme import inject_terminal_css
 configure_logging()
 state_service.initialize(st.session_state)
 inject_terminal_css()
+render_nav_tabs("pages/04_Demographic_Profiling.py")
 
 st.title("04 · Demographic & Geographic Profiling")
 st.markdown(
@@ -43,7 +45,7 @@ if features is None:
     st.stop()
 
 rfm = st.session_state.get("rfm_results")
-with st.sidebar:
+with controls_expander("Profiling Controls"):
     with control_group("Profiling Slicers"):
         segment_source = st.selectbox(
             "Segment labels for per-segment views",

@@ -2,6 +2,7 @@
 
 import streamlit as st
 
+from components.nav_tabs import render_nav_tabs
 from services import state_service
 from utils.config import load_config
 from utils.exceptions import ConfigurationError
@@ -20,6 +21,7 @@ state_service.initialize(st.session_state)
 
 st.set_page_config(page_title="AI Customer Intelligence", layout="wide")
 inject_terminal_css()
+render_nav_tabs("app.py")
 st.title("AI Customer Intelligence Platform")
 
 st.markdown("""

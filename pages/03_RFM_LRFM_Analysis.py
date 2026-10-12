@@ -6,8 +6,9 @@ import pandas as pd
 import streamlit as st
 import yaml
 
-from components.filters import control_group
+from components.filters import control_group, controls_expander
 from components.metric_cards import kpi_row
+from components.nav_tabs import render_nav_tabs
 from services import state_service
 from services.export_service import to_csv_bytes
 from services.feature_service import (
@@ -30,6 +31,7 @@ from visualization.theme import inject_terminal_css
 configure_logging()
 state_service.initialize(st.session_state)
 inject_terminal_css()
+render_nav_tabs("pages/03_RFM_LRFM_Analysis.py")
 
 st.title("03 · RFM / LRFM Analysis")
 st.markdown(
@@ -46,7 +48,7 @@ if clean_data is None:
 cfg = yaml.safe_load(Path("config.yaml").read_text(encoding="utf-8"))
 
 max_txn = pd.to_datetime(clean_data["transaction_date"]).max().date()
-with st.sidebar:
+with controls_expander():
     with control_group("Scoring Config"):
         quantiles = st.selectbox(
             "Quantile levels",

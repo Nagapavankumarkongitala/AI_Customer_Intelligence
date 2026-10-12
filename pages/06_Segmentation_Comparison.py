@@ -13,7 +13,8 @@ from analytics.segmentation_comparison import (
     size_balance,
     value_separation,
 )
-from components.filters import control_group
+from components.filters import control_group, controls_expander
+from components.nav_tabs import render_nav_tabs
 from services import state_service
 from services.export_service import to_csv_bytes, to_json_bytes
 from utils.logging_config import configure_logging
@@ -23,6 +24,7 @@ from visualization.theme import inject_terminal_css
 configure_logging()
 state_service.initialize(st.session_state)
 inject_terminal_css()
+render_nav_tabs("pages/06_Segmentation_Comparison.py")
 
 st.title("06 · Segmentation Comparison")
 st.markdown(
@@ -158,7 +160,7 @@ for i in range(0, len(metrics), 2):
 # --- Pairwise agreement: traditional vs selected AI ---------------------------
 ai_names = [r["model"] for r in rows if r["kind"] == "AI"]
 traditional = [r["model"] for r in rows if r["kind"] == "Traditional"]
-with st.sidebar:
+with controls_expander("Comparison Controls"):
     with control_group("Comparison Pair"):
         ref = st.selectbox("Traditional reference", traditional)
         target = st.selectbox("AI model", ai_names)
@@ -195,13 +197,12 @@ else:
 # --- Recommendation ------------------------------------------------------------
 recommendation = recommend_model(table.rename(columns={"model": "name"}).to_dict(orient="records"))
 st.info(recommendation["rationale"])
-with st.sidebar:
-    with control_group("Operational Pick"):
-        choice = st.selectbox(
-            "Operational model (evidence above — disagree if it says otherwise)",
-            table["model"].tolist(),
-            index=table["model"].tolist().index(recommendation["operational_pick"]),
-        )
+with controls_expander("Operational Pick"):
+    choice = st.selectbox(
+        "Operational model (evidence above — disagree if it says otherwise)",
+        table["model"].tolist(),
+        index=table["model"].tolist().index(recommendation["operational_pick"]),
+    )
 st.session_state["comparison_report"] = {**recommendation, "human_pick": choice}
 st.success(
     f"Recorded operational pick: {choice} "

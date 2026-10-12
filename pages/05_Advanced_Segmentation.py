@@ -5,8 +5,9 @@ from pathlib import Path
 import streamlit as st
 import yaml
 
-from components.filters import control_group
+from components.filters import control_group, controls_expander
 from components.metric_cards import kpi_row
+from components.nav_tabs import render_nav_tabs
 from segmentation.common import labels_to_series
 from segmentation.evaluation import evaluate_clustering
 from segmentation.segment_naming import propose_names
@@ -34,6 +35,7 @@ from visualization.theme import inject_terminal_css
 configure_logging()
 state_service.initialize(st.session_state)
 inject_terminal_css()
+render_nav_tabs("pages/05_Advanced_Segmentation.py")
 
 st.title("05 · Advanced Segmentation")
 st.markdown(
@@ -51,7 +53,7 @@ cfg = yaml.safe_load(Path("config.yaml").read_text(encoding="utf-8"))
 numeric_cols = features.select_dtypes(include="number").columns.tolist()
 defaults = [f for f in cfg["segmentation"]["default_features"] if f in numeric_cols]
 
-with st.sidebar:
+with controls_expander("Feature Controls"):
     with control_group("Feature Set"):
         selected = st.multiselect(
             "Clustering features", numeric_cols, default=defaults or numeric_cols
@@ -110,7 +112,7 @@ with st.expander("Pipeline review", expanded=False):
         st.warning("Highly correlated pairs (review before trusting splits):")
         st.write(report["high_correlations"])
 
-with st.sidebar:
+with controls_expander("Model Controls"):
     with control_group("Model Setup"):
         availability = model_availability()
         model_names = ["kmeans", "gmm", "hierarchical", "hdbscan", "autoencoder", "ensemble"]

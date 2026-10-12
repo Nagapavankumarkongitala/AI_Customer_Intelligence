@@ -40,6 +40,23 @@ html, body { touch-action: manipulation; }
     padding-bottom: 2rem;
     padding-left: 2rem;
     padding-right: 2rem;
+    max-width: 110rem;
+}
+/* Sidebar removed: navigation is the top tab bar, filters live in expanders */
+[data-testid="stSidebar"], [data-testid="stSidebarNav"] {
+    display: none;
+}
+/* Top tab bar */
+.nav-tab {
+    text-align: center;
+    padding: 0.45rem 0.2rem;
+    font-size: 0.82rem;
+    color: #E8E8E8;
+}
+.nav-active {
+    color: #CCFF00;
+    border-bottom: 2px solid #CCFF00;
+    font-weight: 600;
 }
 /* Frosted-glass cards (blur only over the gradient canvas, never on controls) */
 .dashboard-card {

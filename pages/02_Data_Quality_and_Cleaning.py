@@ -6,7 +6,8 @@ import pandas as pd
 import streamlit as st
 import yaml
 
-from components.filters import control_group
+from components.filters import control_group, controls_expander
+from components.nav_tabs import render_nav_tabs
 from services import state_service
 from services.cleaning_service import CleaningConfig, clean
 from services.data_dictionary_service import build_dictionary
@@ -19,6 +20,8 @@ from visualization.theme import inject_terminal_css
 configure_logging()
 state_service.initialize(st.session_state)
 inject_terminal_css()
+render_nav_tabs("pages/02_Data_Quality_and_Cleaning.py")
+render_nav_tabs("pages/02_Data_Quality_and_Cleaning.py")
 
 st.title("02 · Data Quality & Cleaning")
 st.markdown(
@@ -58,7 +61,7 @@ with st.expander("Issue breakdown & warnings", expanded=False):
     st.markdown("**Warnings** (treatable, do not lower the validity score):")
     st.write(quality.warnings)
 
-with st.sidebar:
+with controls_expander():
     with control_group("Row Treatments"):
         duplicates = st.selectbox("Duplicate rows", ["drop", "retain"], index=0)
         missing_ids = st.selectbox("Missing customer IDs", ["drop", "retain"], index=0)

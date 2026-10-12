@@ -14,8 +14,9 @@ from churn.evaluation import (
     lift_gain_table,
 )
 from churn.explainability import logreg_effects, shap_values
-from components.filters import control_group
+from components.filters import control_group, controls_expander
 from components.metric_cards import kpi_row
+from components.nav_tabs import render_nav_tabs
 from services import state_service
 from services.churn_service import (
     available_models,
@@ -39,6 +40,7 @@ from visualization.theme import inject_terminal_css
 configure_logging()
 state_service.initialize(st.session_state)
 inject_terminal_css()
+render_nav_tabs("pages/07_Churn_Prediction.py")
 
 st.title("07 · Churn Prediction")
 st.markdown(
@@ -56,7 +58,7 @@ cfg = yaml.safe_load(Path("config.yaml").read_text(encoding="utf-8"))
 txn_dates = pd.to_datetime(clean_data["transaction_date"])
 min_date, max_date = txn_dates.min().date(), txn_dates.max().date()
 
-with st.sidebar:
+with controls_expander("Dataset Controls"):
     with control_group("Dataset Window"):
         obs_start = st.date_input(
             "Observation start", value=min_date, min_value=min_date, max_value=max_date
@@ -126,7 +128,7 @@ if dataset is None:
     st.info("Configure the observation/cutoff/horizon and build the dataset.")
     st.stop()
 
-with st.sidebar:
+with controls_expander("Training Controls"):
     with control_group("Training"):
         availability = available_models()
         options = list(availability)
@@ -183,17 +185,16 @@ if bundles:
             ),
             use_container_width=True,
         )
-    with st.sidebar:
-        with control_group("Model Detail"):
-            detail = st.selectbox("Model detail", list(bundles))
-            threshold = st.slider(
-                "Decision threshold",
-                0.05,
-                0.95,
-                float(bundles[detail]["suggested_threshold"]),
-                0.05,
-                help="Lower catches more churners with more false alarms; higher is stricter.",
-            )
+    with controls_expander("Model Detail"):
+        detail = st.selectbox("Model detail", list(bundles))
+        threshold = st.slider(
+            "Decision threshold",
+            0.05,
+            0.95,
+            float(bundles[detail]["suggested_threshold"]),
+            0.05,
+            help="Lower catches more churners with more false alarms; higher is stricter.",
+        )
     bundle = bundles[detail]
     eval_l, eval_r = st.columns([1, 1])
     with eval_l:
