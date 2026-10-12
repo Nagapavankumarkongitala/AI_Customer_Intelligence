@@ -17,10 +17,10 @@ RISK_AMBER = "#E8A838"
 
 # Glassmorphism tokens (fallback defaults; skill design-system query wins on conflict).
 GLASS_BG = "rgba(20,20,20,0.55)"
-GLASS_BORDER = "rgba(204,255,0,0.14)"
-GLASS_BLUR = "blur(14px)"
+GLASS_BORDER = "rgba(255,255,255,0.12)"
+GLASS_BLUR = "blur(12px)"
 GLASS_RADIUS = "16px"
-GLASS_SHADOW = "0 8px 32px rgba(0,0,0,0.45)"
+GLASS_SHADOW = "0 8px 32px rgba(0,0,0,0.45), 0 0 24px rgba(204,255,0,0.06)"
 CANVAS_GLOW_TOP = "radial-gradient(1200px 600px at 15% -5%, rgba(204,255,0,0.06), transparent)"
 CANVAS_GLOW_BOTTOM = "radial-gradient(1000px 700px at 90% 110%, rgba(61,220,132,0.05), transparent)"
 
@@ -44,13 +44,23 @@ html, body { touch-action: manipulation; }
 /* Frosted-glass cards (blur only over the gradient canvas, never on controls) */
 .dashboard-card {
     background-color: rgba(20,20,20,0.55);
-    backdrop-filter: blur(14px);
-    -webkit-backdrop-filter: blur(14px);
-    border: 1px solid rgba(204,255,0,0.14);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255,255,255,0.12);
     border-radius: 16px;
     padding: 1.25rem;
     margin-bottom: 1rem;
-    box-shadow: 0 8px 32px rgba(0,0,0,0.45);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.45), 0 0 24px rgba(204,255,0,0.06);
+}
+/* KPI metrics double as glass cards */
+[data-testid="stMetric"] {
+    background-color: rgba(20,20,20,0.55);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 16px;
+    padding: 1rem 1.25rem;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.45), 0 0 24px rgba(204,255,0,0.06);
 }
 [data-testid="stSidebar"] {
     background-color: #050505;

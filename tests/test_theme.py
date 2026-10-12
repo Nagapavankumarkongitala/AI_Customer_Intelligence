@@ -71,7 +71,8 @@ def test_glass_tokens_present_in_css() -> None:
     """Frosted-card tokens (translucency, blur, hairline border, glow canvas) ship."""
     for token in (GLASS_BG, GLASS_BORDER, GLASS_RADIUS, GLASS_SHADOW):
         assert token in TERMINAL_CSS
-    assert "backdrop-filter: blur(14px)" in TERMINAL_CSS
+    assert "backdrop-filter: blur(12px)" in TERMINAL_CSS
+    assert '[data-testid="stMetric"]' in TERMINAL_CSS
     assert "color-scheme: dark" in TERMINAL_CSS
     assert "tabular-nums" in TERMINAL_CSS
 

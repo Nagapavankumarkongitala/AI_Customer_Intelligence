@@ -8,6 +8,8 @@
   tabs; 3-column grids for peer-visual trios (p03 segment trio, p09 trends trio).
 - Compliance pass per web-interface-guidelines (ellipsis in spinners,
   tabular-nums, color-scheme, touch-action); skills-driven, no emojis.
+- Follow-up: canonical glass recipe (white 0.12 edge-light borders, volt glow
+  shadows, 12px blur) with KPI metrics doubling as glass cards.
 - Note: ui-ux-pro-max search backend not installed locally; fallback tokens used.
 - Added: `visualization/theme.py` (obsidian/volt tokens, terminal CSS, `@styled`
   Plotly decorator); shared sidebar-filter groups in `components/filters.py`.
