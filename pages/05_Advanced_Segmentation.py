@@ -21,6 +21,7 @@ from services.segmentation_service import (
     run_model,
     save_segmentation_run,
     sweep_clusters,
+    train_all_models,
 )
 from utils.exceptions import CustomerIntelligenceError
 from utils.logging_config import configure_logging
@@ -144,7 +145,55 @@ if model != "hdbscan" and st.button(f"Sweep k = {k_min}…{k_max}"):
         st.error(str(exc))
 
 labels = None
-if st.button("Run segmentation", type="primary"):
+run_col, batch_col = st.columns(2)
+with run_col:
+    run_clicked = st.button("Run segmentation", type="primary")
+with batch_col:
+    batch_clicked = st.button(
+        "Train all models",
+        help="Trains every model with the sidebar settings; failures record as "
+        "skipped. The autoencoder makes this take minutes.",
+    )
+if batch_clicked:
+    progress = st.progress(0.0, text="Training all models…")
+    with st.spinner("Training every model (autoencoder trains a neural net)…"):
+        batch = train_all_models(
+            prepared_state["matrix"],
+            features["customer_id"].tolist(),
+            prepared_state["feature_names"],
+            original_features=features,
+            n_clusters=int(n_clusters),
+            random_state=int(seed),
+            min_cluster_size=int(min_cluster_size),
+            latent_dim=int(latent_dim),
+            epochs=int(epochs),
+        )
+    progress.progress(1.0)
+    ok_runs = [r for r in batch if r.get("status") == "ok"]
+    skipped = [r for r in batch if r.get("status") != "ok"]
+    runs = st.session_state.get("segmentation_runs") or []
+    runs.extend(ok_runs)
+    st.session_state["segmentation_runs"] = runs
+    st.success(f"Trained {len(ok_runs)} model(s); {len(skipped)} skipped.")
+    with st.expander("Batch summary", expanded=False):
+        st.dataframe(
+            [
+                {
+                    "model": r["model"],
+                    "status": r.get("status"),
+                    "silhouette": (r.get("metrics") or {}).get("silhouette"),
+                    "noise_pct": (r.get("metrics") or {}).get("noise_pct"),
+                    "stability": (r.get("stability") or {}).get("mean_pairwise_ari"),
+                    "reason": r.get("reason", ""),
+                }
+                for r in batch
+            ],
+            use_container_width=True,
+        )
+    if skipped:
+        for r in skipped:
+            st.info(f"{r['model']} skipped: {r.get('reason', 'unavailable')}")
+if run_clicked:
     try:
         with st.spinner(f"Fitting {model}… (autoencoder trains a neural net)"):
             extra = {}

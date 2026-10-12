@@ -36,7 +36,5 @@ def test_every_view_renders_nav_tabs() -> None:
 
 def test_no_sidebar_usage() -> None:
     """Sidebar is hidden by CSS; no view may render into it."""
-    offenders = [
-        str(p) for p in TARGETS if "st.sidebar" in p.read_text(encoding="utf-8")
-    ]
+    offenders = [str(p) for p in TARGETS if "st.sidebar" in p.read_text(encoding="utf-8")]
     assert offenders == []

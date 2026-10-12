@@ -67,6 +67,6 @@ All 8 build phases done.
   see DEPLOYMENT.md for restart behavior.
 
 ## Next phase
-Done — plus UI overhauls (obsidian/volt terminal, then glassmorphism + zoned
-3-tier layout with 3-col grids). Maintenance mode; revalidate churn models on
+Done — plus UI overhauls (terminal → glassmorphism → navy/cyan tab-bar UI with
+control expanders and train-all). Maintenance mode; revalidate churn models on
 fresh outcome windows as behavior drifts.

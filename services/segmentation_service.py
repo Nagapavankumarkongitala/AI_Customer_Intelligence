@@ -16,7 +16,10 @@ from segmentation import (
 )
 from segmentation.common import require_optional
 from segmentation.evaluation import evaluate_clustering
+from segmentation.segment_naming import propose_names
+from segmentation.segment_profiling import build_cluster_profile
 from segmentation.stability import bootstrap_stability, seed_stability
+from utils.exceptions import CustomerIntelligenceError
 from utils.model_utils import save_model
 from utils.validators import require_min_rows
 
@@ -120,6 +123,69 @@ def assess_stability(model_name: str, X: np.ndarray, random_state: int = 42, **k
     else:
         result["bootstrap"] = None  # no .predict (hierarchical/HDBSCAN/ensemble/AE bundle)
     return result
+
+
+def train_all_models(
+    X: np.ndarray,
+    customer_ids: list,
+    feature_names: list[str],
+    original_features: pd.DataFrame | None = None,
+    n_clusters: int = 5,
+    random_state: int = 42,
+    min_cluster_size: int = 15,
+    latent_dim: int = 8,
+    epochs: int = 100,
+) -> list[dict]:
+    """Train every registry model; failures record as skipped, never abort the batch.
+
+    Returned run dicts match the page-06 record shape (model, params, metrics,
+    stability, names, feature_names, customer_ids, labels). Seed-only stability
+    (no bootstrap) keeps batch time bounded.
+    """
+    runs: list[dict] = []
+    for name, module in MODEL_MODULES.items():
+        extra: dict = {}
+        if name == "hdbscan":
+            extra["min_cluster_size"] = min_cluster_size
+        if name == "autoencoder":
+            extra.update({"latent_dim": latent_dim, "epochs": epochs})
+        params = {"n_clusters": n_clusters, "seed": random_state, **extra}
+        try:
+            labels, _ = run_model(
+                name, X, n_clusters=n_clusters, random_state=random_state, **extra
+            )
+        except (CustomerIntelligenceError, ValueError, ImportError) as exc:
+            runs.append({"model": name, "status": "skipped", "reason": str(exc), "params": params})
+            continue
+        metrics = evaluate_clustering(X, labels)
+        stability = dict(seed_stability(module.fit_predict, X, **extra))
+        names: dict[int, str] = {}
+        if original_features is not None:
+            try:
+                profile = build_cluster_profile(original_features, labels, feature_names)
+                name_table = propose_names(profile)
+                names = {
+                    int(k): str(v)
+                    for k, v in zip(
+                        name_table["cluster_id"], name_table["business_name"], strict=True
+                    )
+                }
+            except (KeyError, ValueError, AttributeError):
+                names = {}  # naming needs monetary/recency/frequency medians; run stays valid
+        runs.append(
+            {
+                "model": name,
+                "status": "ok",
+                "params": params,
+                "metrics": metrics,
+                "stability": stability,
+                "names": names,
+                "feature_names": list(feature_names),
+                "customer_ids": list(customer_ids),
+                "labels": [int(v) for v in labels],
+            }
+        )
+    return runs
 
 
 def save_segmentation_run(

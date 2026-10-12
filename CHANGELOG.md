@@ -1,6 +1,15 @@
 # CHANGELOG
 
-## 2026-10-12 — UI: glassmorphism restyle + layout segregation
+## 2026-10-12 — Nav tabs, navy/cyan recolor, train-all
+- Phase 1: top tab-bar navigation (`components/nav_tabs.py`, `st.switch_page`,
+  active highlight); sidebar hidden via CSS; all page filters moved to collapsed
+  "Controls" expanders; `tests/test_nav.py` guards nav order, tab rendering, and
+  zero `st.sidebar` usage.
+- Phase 2: deep-navy/cyan palette with semantic tokens (`CANVAS`, `PRIMARY`, …);
+  volt fully retired (scan-enforced in `tests/test_theme.py`); computed contrast
+  guards kept (primary ≥ 7:1, muted ≥ 4.5:1); `.streamlit/config.toml` re-tinted.
+- Phase 3: `train_all_models()` batch training on page 05 (per-model isolation,
+  missing-optionals record as skipped, page-06-compatible records); blob-tested.
 - Added glass tokens + frosted-card CSS (gradient canvas, backdrop blur, volt
   hairline borders) in `visualization/theme.py`; muted text raised to `#7A7A7A`
   for ≥ 4.5:1 contrast (computed assertion in `tests/test_theme.py`).

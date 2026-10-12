@@ -19,7 +19,7 @@ from segmentation.evaluation import evaluate_clustering
 from segmentation.segment_naming import propose_names
 from segmentation.segment_profiling import build_cluster_profile
 from segmentation.stability import bootstrap_stability, seed_stability
-from services.segmentation_service import run_model, sweep_clusters
+from services.segmentation_service import run_model, sweep_clusters, train_all_models
 from utils.exceptions import CustomerIntelligenceError
 from utils.model_utils import load_model, save_model
 
@@ -168,3 +168,48 @@ def test_autoencoder_trains_when_available() -> None:
     assert codes.shape == (220, 3)
     table = latent_table(codes, pd.RangeIndex(220))
     assert list(table.columns) == ["latent_0", "latent_1", "latent_2"]
+
+
+def test_train_all_models_records_and_skips() -> None:
+    """Batch trains every available model; missing optionals record as skipped."""
+    X, _ = _blobs()
+    ids = [f"C{i}" for i in range(len(X))]
+    original = pd.DataFrame(X, columns=["f0", "f1"])
+    original["customer_id"] = ids
+    original["monetary_value"] = np.abs(X[:, 0]) * 100 + 50
+    runs = train_all_models(
+        X,
+        ids,
+        ["f0", "f1"],
+        original_features=original,
+        n_clusters=3,
+        epochs=2,
+    )
+    assert {r["model"] for r in runs} == {
+        "kmeans",
+        "gmm",
+        "hierarchical",
+        "hdbscan",
+        "autoencoder",
+        "ensemble",
+    }
+    ok_runs = [r for r in runs if r.get("status") == "ok"]
+    assert len(ok_runs) >= 4  # classical models + ensemble (+ autoencoder when TF present)
+    for run in ok_runs:
+        assert len(run["labels"]) == len(X)
+        assert run["metrics"]["n_clusters"] >= 2
+        assert set(run) >= {
+            "model",
+            "params",
+            "metrics",
+            "stability",
+            "names",
+            "feature_names",
+            "customer_ids",
+            "labels",
+        }
+    try:
+        import hdbscan  # noqa: F401
+    except ImportError:
+        skipped = [r for r in runs if r.get("status") == "skipped"]
+        assert any(r["model"] == "hdbscan" and "reason" in r for r in skipped)
