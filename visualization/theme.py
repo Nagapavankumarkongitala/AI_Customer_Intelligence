@@ -38,14 +38,17 @@ html, body { touch-action: manipulation; }
         #070B14;
 }
 .block-container {
-    padding-top: 1.5rem;
+    padding-top: 3.25rem;
     padding-bottom: 2rem;
     padding-left: 2rem;
     padding-right: 2rem;
     max-width: 110rem;
 }
-/* Sidebar removed: navigation is the top tab bar, filters live in expanders */
-[data-testid="stSidebar"], [data-testid="stSidebarNav"] {
+/* Sidebar removed: navigation is the top tab bar, filters live in expanders.
+   display:none alone still lets Streamlit mount the sidebar on navigation;
+   client.showSidebarNavigation=false (config.toml) stops the nav from loading. */
+[data-testid="stSidebar"], [data-testid="stSidebarNav"],
+[data-testid="collapsedControl"] {
     display: none;
 }
 /* Top tab bar */
