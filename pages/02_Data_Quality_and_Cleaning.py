@@ -21,7 +21,6 @@ configure_logging()
 state_service.initialize(st.session_state)
 inject_terminal_css()
 render_nav_tabs("pages/02_Data_Quality_and_Cleaning.py")
-render_nav_tabs("pages/02_Data_Quality_and_Cleaning.py")
 
 st.title("02 · Data Quality & Cleaning")
 st.markdown(

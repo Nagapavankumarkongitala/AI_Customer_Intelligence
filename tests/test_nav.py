@@ -34,6 +34,25 @@ def test_every_view_renders_nav_tabs() -> None:
     assert missing == []
 
 
+def test_nav_tabs_called_exactly_once() -> None:
+    """A second call duplicates button keys and crashes the page at runtime."""
+    doubled = []
+    for path in TARGETS:
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        count = sum(
+            1
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call)
+            and (
+                getattr(node.func, "attr", "") == "render_nav_tabs"
+                or getattr(node.func, "id", "") == "render_nav_tabs"
+            )
+        )
+        if count != 1:
+            doubled.append(f"{path}:{count}")
+    assert doubled == []
+
+
 def test_no_sidebar_usage() -> None:
     """Sidebar is hidden by CSS; no view may render into it."""
     offenders = [str(p) for p in TARGETS if "st.sidebar" in p.read_text(encoding="utf-8")]
