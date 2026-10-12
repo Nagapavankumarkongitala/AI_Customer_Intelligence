@@ -64,7 +64,7 @@ with st.sidebar:
 
 if st.button("Build features & score", type="primary"):
     try:
-        with st.spinner("Building customer features..."):
+        with st.spinner("Building customer features…"):
             result = compute_customer_features(
                 clean_data,
                 snapshot_date=pd.Timestamp(snapshot),
@@ -121,17 +121,19 @@ for tab, key in ((tab_rfm, "rfm_results"), (tab_lrfm, "lrfm_results")):
     with tab:
         enriched = features.merge(scored, on="customer_id", suffixes=("", "_seg"))
         profile = segment_profile(enriched, monetary_col="monetary_value")
-        left, right = st.columns([1, 1])
-        with left:
+        trio_l, trio_m, trio_r = st.columns([1, 1, 1])
+        with trio_l:
             st.plotly_chart(
                 segment_distribution_bar(profile),
                 use_container_width=True,
                 key=f"{key}_seg_dist",
             )
-        with right:
+        with trio_m:
             st.plotly_chart(
                 revenue_by_segment_bar(profile), use_container_width=True, key=f"{key}_revenue"
             )
+        with trio_r:
+            st.plotly_chart(rfm_heatmap(scored), use_container_width=True, key=f"{key}_heatmap")
         scatter_l, scatter_r = st.columns([1, 1])
         with scatter_l:
             st.plotly_chart(
@@ -141,7 +143,6 @@ for tab, key in ((tab_rfm, "rfm_results"), (tab_lrfm, "lrfm_results")):
             st.plotly_chart(
                 frequency_monetary_scatter(enriched), use_container_width=True, key=f"{key}_fm"
             )
-        st.plotly_chart(rfm_heatmap(scored), use_container_width=True, key=f"{key}_heatmap")
 
         with st.expander("Segment profile", expanded=False):
             st.dataframe(profile, use_container_width=True, key=f"{key}_profile")

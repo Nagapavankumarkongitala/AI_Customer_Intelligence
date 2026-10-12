@@ -180,7 +180,7 @@ if segments is not None and "segment_profiles" in profile.tables:
         .merge(segments, on="customer_id", how="left")["segment"]
         .fillna("Unsegmented")
     )
-    with st.spinner("Running statistical tests..."):
+    with st.spinner("Running statistical tests…"):
         test_results = run_segment_tests(features, seg_series, continuous, categorical)
     with st.expander("Segment significance tests", expanded=False):
         st.dataframe(test_results, use_container_width=True)

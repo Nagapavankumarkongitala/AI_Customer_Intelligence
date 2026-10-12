@@ -1,6 +1,14 @@
 # CHANGELOG
 
-## 2026-10-11 — UI: Obsidian terminal transformation
+## 2026-10-12 — UI: glassmorphism restyle + layout segregation
+- Added glass tokens + frosted-card CSS (gradient canvas, backdrop blur, volt
+  hairline borders) in `visualization/theme.py`; muted text raised to `#7A7A7A`
+  for ≥ 4.5:1 contrast (computed assertion in `tests/test_theme.py`).
+- Layout: strict KPI-top / graphs-middle / collapsed-tables-bottom zones on all
+  tabs; 3-column grids for peer-visual trios (p03 segment trio, p09 trends trio).
+- Compliance pass per web-interface-guidelines (ellipsis in spinners,
+  tabular-nums, color-scheme, touch-action); skills-driven, no emojis.
+- Note: ui-ux-pro-max search backend not installed locally; fallback tokens used.
 - Added: `visualization/theme.py` (obsidian/volt tokens, terminal CSS, `@styled`
   Plotly decorator); shared sidebar-filter groups in `components/filters.py`.
 - Changed: `.streamlit/config.toml` to the dark terminal theme; all chart

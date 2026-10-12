@@ -67,6 +67,6 @@ All 8 build phases done.
   see DEPLOYMENT.md for restart behavior.
 
 ## Next phase
-Done — plus UI overhaul (obsidian/volt terminal theme, sidebar slicers,
-3-tier layout on all pages). Maintenance mode; revalidate churn models on
+Done — plus UI overhauls (obsidian/volt terminal, then glassmorphism + zoned
+3-tier layout with 3-col grids). Maintenance mode; revalidate churn models on
 fresh outcome windows as behavior drifts.

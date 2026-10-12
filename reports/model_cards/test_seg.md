@@ -1,6 +1,6 @@
 # Model Card — kmeans_v1
 
-Date: 2026-10-11
+Date: 2026-10-12
 
 ## Purpose
 Unsupervised customer segmentation with kmeans.

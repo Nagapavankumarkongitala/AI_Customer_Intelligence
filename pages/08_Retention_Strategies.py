@@ -90,7 +90,7 @@ if report["uncovered"]:
     st.stop()
 
 try:
-    with st.spinner("Scoring retention priorities..."):
+    with st.spinner("Scoring retention priorities…"):
         table = build_retention_table(
             scores,
             features,

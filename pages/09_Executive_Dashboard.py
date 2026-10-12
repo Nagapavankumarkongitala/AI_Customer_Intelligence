@@ -146,20 +146,29 @@ kpi_row(second)
 
 st.subheader("Trends")
 trends = trend_tables(txns_f, master_f)
-t1, t2 = st.columns(2)
-with t1:
+trend_a, trend_b, trend_c = st.columns([1, 1, 1])
+with trend_a:
     st.plotly_chart(revenue_trend_fig(trends["revenue"]), use_container_width=True)
-with t2:
+with trend_b:
     st.plotly_chart(activity_trend_fig(trends["activity"]), use_container_width=True)
-trend_l, trend_r = st.columns([3, 2])
-with trend_l:
+with trend_c:
     st.plotly_chart(new_returning_fig(trends["cohort"]), use_container_width=True)
-with trend_r:
+port_l, port_r = st.columns([3, 2])
+with port_l:
     if "rfm_segment" in master_f.columns:
         portfolio = segment_portfolio(master_f, "rfm_segment")
         st.plotly_chart(portfolio_bar_fig(portfolio, "rfm_segment"), use_container_width=True)
     else:
         st.info("RFM segments appear here after page 03 scoring.")
+with port_r:
+    if "age_band" in master_f.columns:
+        bands = (
+            master_f["age_band"]
+            .value_counts()
+            .rename_axis("age_band")
+            .reset_index(name="customers")
+        )
+        st.plotly_chart(age_band_bar(bands), use_container_width=True)
 
 with st.expander("Segment portfolio table", expanded=False):
     if "rfm_segment" in master_f.columns:
@@ -196,11 +205,6 @@ if geo_levels:
         st.plotly_chart(top_geo_bar(geo, level), use_container_width=True)
     with geo_r:
         st.plotly_chart(geo_treemap(geo.head(30), level), use_container_width=True)
-if "age_band" in master_f.columns:
-    bands = (
-        master_f["age_band"].value_counts().rename_axis("age_band").reset_index(name="customers")
-    )
-    st.plotly_chart(age_band_bar(bands), use_container_width=True)
 
 st.subheader("Retention")
 retention = _retention_frame()

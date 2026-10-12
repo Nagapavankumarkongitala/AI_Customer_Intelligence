@@ -80,7 +80,7 @@ with st.sidebar:
 
 if st.button("Build churn dataset", type="primary"):
     try:
-        with st.spinner("Labeling from post-cutoff activity..."):
+        with st.spinner("Labeling from post-cutoff activity…"):
             dataset = build_churn_dataset(
                 clean_data,
                 pd.Timestamp(cutoff),
@@ -147,7 +147,7 @@ if st.button("Train selected models"):
     progress = st.progress(0.0)
     for i, name in enumerate(train_choice):
         try:
-            with st.spinner(f"Training {name}..."):
+            with st.spinner(f"Training {name}…"):
                 bundles[name] = train_churn_model(
                     dataset, name, oversample=oversample, calibrate=calibrate
                 )
@@ -238,7 +238,7 @@ if bundles:
         "trained pipeline. Bands follow `config.yaml` risk bands."
     )
     if st.button("Score customers", type="primary"):
-        with st.spinner("Scoring..."):
+        with st.spinner("Scoring…"):
             latest = txn_dates.max() + pd.Timedelta(days=1)
             scoring_features = build_customer_features(clean_data, snapshot_date=latest).features
             scores = score_all_customers(

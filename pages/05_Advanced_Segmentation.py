@@ -128,7 +128,7 @@ if availability.get(model):
 k_min, k_max = cfg["segmentation"]["cluster_range"]
 if model != "hdbscan" and st.button(f"Sweep k = {k_min}…{k_max}"):
     try:
-        with st.spinner("Sweeping cluster counts..."):
+        with st.spinner("Sweeping cluster counts…"):
             sweep = sweep_clusters(
                 model, prepared_state["matrix"], k_min=k_min, k_max=k_max, random_state=int(seed)
             )
@@ -144,7 +144,7 @@ if model != "hdbscan" and st.button(f"Sweep k = {k_min}…{k_max}"):
 labels = None
 if st.button("Run segmentation", type="primary"):
     try:
-        with st.spinner(f"Fitting {model}... (autoencoder trains a neural net)"):
+        with st.spinner(f"Fitting {model}… (autoencoder trains a neural net)"):
             extra = {}
             if model == "hdbscan":
                 extra["min_cluster_size"] = int(min_cluster_size)
