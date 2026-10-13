@@ -8,7 +8,7 @@ from components.nav_tabs import NAV_PAGES
 PAGES = sorted(Path("pages").glob("*.py"))
 TARGETS = [Path("app.py"), *PAGES]
 
-_NAV_CALLS = ("render_nav_tabs", "render_sidebar")
+_NAV_CALLS = ("render_sidebar",)
 
 
 def _nav_call_count(path: Path) -> int:

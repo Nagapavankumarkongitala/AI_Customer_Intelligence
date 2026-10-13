@@ -8,8 +8,8 @@ import yaml
 from components.empty_state import chart_section, empty_state
 from components.filters import control_group, controls_expander
 from components.metric_card import Metric, metric_row
-from components.nav_tabs import render_nav_tabs
 from components.page_header import page_header, section_header
+from components.sidebar import render_sidebar
 from segmentation.common import labels_to_series
 from segmentation.evaluation import evaluate_clustering
 from segmentation.segment_naming import propose_names
@@ -38,7 +38,7 @@ from visualization.theme import inject_terminal_css
 configure_logging()
 state_service.initialize(st.session_state)
 inject_terminal_css()
-render_nav_tabs("pages/05_Advanced_Segmentation.py")
+render_sidebar("pages/05_Advanced_Segmentation.py")
 
 page_header(
     "Advanced Segmentation",

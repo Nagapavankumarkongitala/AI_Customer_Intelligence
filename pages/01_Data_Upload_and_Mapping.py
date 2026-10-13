@@ -5,8 +5,8 @@ import streamlit as st
 
 from components.empty_state import empty_state
 from components.filters import control_group, controls_expander
-from components.nav_tabs import render_nav_tabs
 from components.page_header import page_header
+from components.sidebar import render_sidebar
 from services import state_service
 from services.column_detection import validate_mapping
 from services.data_service import load_upload_bytes
@@ -19,7 +19,7 @@ from visualization.theme import inject_terminal_css
 configure_logging()
 state_service.initialize(st.session_state)
 inject_terminal_css()
-render_nav_tabs("pages/01_Data_Upload_and_Mapping.py")
+render_sidebar("pages/01_Data_Upload_and_Mapping.py")
 
 page_header(
     "Data Upload & Mapping",

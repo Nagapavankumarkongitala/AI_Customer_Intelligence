@@ -14,9 +14,9 @@ from components.filters import (
 )
 from components.insight_box import insight_box
 from components.metric_card import Metric, metric_row
-from components.nav_tabs import render_nav_tabs
 from components.page_header import page_header, section_header
 from components.panels import download_panel
+from components.sidebar import render_sidebar
 from components.table import render_table
 from services import state_service
 from services.dashboard_service import (
@@ -49,7 +49,7 @@ from visualization.theme import inject_terminal_css
 configure_logging()
 state_service.initialize(st.session_state)
 inject_terminal_css()
-render_nav_tabs("pages/09_Executive_Dashboard.py")
+render_sidebar("pages/09_Executive_Dashboard.py")
 
 
 def _fallback_features(txns: pd.DataFrame) -> pd.DataFrame:

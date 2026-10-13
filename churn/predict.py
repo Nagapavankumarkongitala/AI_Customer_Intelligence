@@ -53,11 +53,14 @@ def score_customers(
     except ImportError:
         shap_frame = None
         use_shap = False
+    # shap_values caps rows for interactive latency; rows beyond the cap fall
+    # back to the median-based drivers instead of indexing out of bounds.
+    n_shap = len(shap_frame) if use_shap and shap_frame is not None else 0
     version = f"{model_name}_v{date.today().isoformat()}"
     stamped = datetime.now(UTC).isoformat()
     rows: list[dict] = []
     for i, cid in enumerate(customer_ids.tolist()):
-        if use_shap and shap_frame is not None:
+        if i < n_shap:
             row_shap = shap_frame.iloc[i]
             top = row_shap.abs().sort_values(ascending=False).head(2)
             drivers = [f"{feat} (SHAP {row_shap[feat]:+.3f})" for feat in top.index]

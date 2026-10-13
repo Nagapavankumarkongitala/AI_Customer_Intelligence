@@ -50,10 +50,26 @@ def logreg_effects(pipeline) -> pd.DataFrame:
     return table.sort_values("coefficient", ascending=False).reset_index(drop=True)
 
 
+def _shap_explainer(model, background):
+    """TreeExplainer for tree ensembles, LinearExplainer for linear models.
+
+    Newer shap releases no longer accept linear estimators in TreeExplainer, so
+    linear churn baselines (logreg et al.) route to LinearExplainer instead.
+    Linearity is duck-typed on ``coef_`` (stable across sklearn versions);
+    anything else keeps TreeExplainer and its own informative error.
+    """
+    import shap
+
+    if hasattr(model, "coef_"):
+        dense = background.toarray() if hasattr(background, "toarray") else background
+        return shap.LinearExplainer(model, dense), dense
+    return shap.TreeExplainer(model), background
+
+
 def shap_values(pipeline, X: pd.DataFrame, max_rows: int = 500) -> pd.DataFrame:
     """Per-row SHAP values (binary positive class). Raises guidance when absent."""
     try:
-        import shap
+        import shap  # noqa: F401
     except ImportError as exc:
         raise ImportError(
             "Customer-level SHAP explanations need the optional 'shap' package. "
@@ -61,10 +77,15 @@ def shap_values(pipeline, X: pd.DataFrame, max_rows: int = 500) -> pd.DataFrame:
         ) from exc
     sample = X.head(max_rows)
     transformed = pipeline.named_steps["preprocess"].transform(sample)
-    explainer = shap.TreeExplainer(pipeline.named_steps["model"])
-    values = explainer.shap_values(transformed)
+    explainer, background = _shap_explainer(pipeline.named_steps["model"], transformed)
+    values = explainer.shap_values(background)
     if isinstance(values, list):
         values = values[1] if len(values) > 1 else values[0]
+    else:
+        values = np.asarray(values)
+        if values.ndim == 3:
+            # Newer shap returns (rows, features, classes) instead of a per-class list.
+            values = values[:, :, 1] if values.shape[2] > 1 else values[:, :, 0]
     names = feature_names_of(pipeline)
     return pd.DataFrame(
         np.asarray(values), index=sample.index, columns=names[: np.asarray(values).shape[1]]

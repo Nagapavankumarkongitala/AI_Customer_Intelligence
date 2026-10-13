@@ -12,8 +12,8 @@ from analytics.statistical_tests import run_segment_tests
 from components.empty_state import chart_section, empty_state
 from components.filters import control_group, controls_expander
 from components.metric_card import Metric, metric_row
-from components.nav_tabs import render_nav_tabs
 from components.page_header import page_header, section_header
+from components.sidebar import render_sidebar
 from services import state_service
 from services.export_service import to_csv_bytes
 from utils import formatting
@@ -33,7 +33,7 @@ from visualization.theme import inject_terminal_css
 configure_logging()
 state_service.initialize(st.session_state)
 inject_terminal_css()
-render_nav_tabs("pages/04_Demographic_Profiling.py")
+render_sidebar("pages/04_Demographic_Profiling.py")
 
 page_header(
     "Demographic Profiling",

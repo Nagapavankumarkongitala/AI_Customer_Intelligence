@@ -12,7 +12,7 @@ from churn.evaluation import (
     lift_gain_table,
     suggest_threshold,
 )
-from churn.explainability import customer_risk_drivers, shap_values
+from churn.explainability import customer_risk_drivers, feature_names_of, shap_values
 from churn.predict import assign_band, score_customers
 from services.churn_service import available_models, time_split, train_churn_model
 from utils.exceptions import CustomerIntelligenceError, InsufficientDataError
@@ -133,6 +133,45 @@ def test_shap_absence_guides() -> None:
     except ImportError:
         with pytest.raises(ImportError, match="pip install shap"):
             shap_values(None, pd.DataFrame({"a": [1]}))
+
+
+def test_shap_routes_linear_models_to_linear_explainer() -> None:
+    """Logreg SHAP values come from LinearExplainer over the encoded frame."""
+    dataset = _dataset()
+    bundle = train_churn_model(dataset, "logreg", calibrate=False)
+    frame = shap_values(bundle["pipeline"], dataset.frame[bundle["feature_cols"]])
+    assert list(frame.columns) == feature_names_of(bundle["pipeline"])
+    assert len(frame) == len(dataset.frame)
+    assert np.isfinite(frame.to_numpy(dtype=float)).all()
+
+
+def test_shap_keeps_tree_explainer_for_forests() -> None:
+    """Tree ensembles keep the TreeExplainer path with matching frame shape."""
+    dataset = _dataset()
+    bundle = train_churn_model(dataset, "random_forest", calibrate=False)
+    frame = shap_values(bundle["pipeline"], dataset.frame[bundle["feature_cols"]])
+    assert list(frame.columns) == feature_names_of(bundle["pipeline"])
+    assert len(frame) == len(dataset.frame)
+
+
+def test_scoring_falls_back_beyond_shap_cap() -> None:
+    """Rows past the SHAP sample cap get median drivers, not an IndexError."""
+    dataset = _dataset()
+    bundle = train_churn_model(dataset, "logreg", calibrate=False)
+    frame = pd.concat([dataset.frame] * 4, ignore_index=True)  # 800 rows > 500 cap
+    scores = score_customers(
+        bundle["pipeline"],
+        frame[bundle["feature_cols"]],
+        frame["customer_id"],
+        bundle["importance"],
+        "logreg",
+        threshold=0.5,
+    )
+    assert list(scores.columns) == EXPECTED_SCORE_COLS
+    assert len(scores) == len(frame)
+    assert scores["primary_risk_drivers"].str.len().gt(0).all()
+    assert "SHAP" in scores["primary_risk_drivers"].iloc[0]
+    assert "SHAP" not in scores["primary_risk_drivers"].iloc[600]
 
 
 def test_metrics_tables_sane() -> None:

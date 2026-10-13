@@ -17,8 +17,8 @@ from churn.explainability import logreg_effects, shap_values
 from components.empty_state import chart_section, empty_state
 from components.filters import control_group, controls_expander
 from components.metric_card import Metric, metric_row
-from components.nav_tabs import render_nav_tabs
 from components.page_header import page_header, section_header
+from components.sidebar import render_sidebar
 from components.table import render_table
 from services import state_service
 from services.churn_service import (
@@ -43,7 +43,7 @@ from visualization.theme import inject_terminal_css
 configure_logging()
 state_service.initialize(st.session_state)
 inject_terminal_css()
-render_nav_tabs("pages/07_Churn_Prediction.py")
+render_sidebar("pages/07_Churn_Prediction.py")
 
 page_header(
     "Churn Prediction",
