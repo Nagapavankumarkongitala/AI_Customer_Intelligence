@@ -4,6 +4,7 @@ import pandas as pd
 import streamlit as st
 
 from analytics.demographics import GEO_LEVELS
+from components.empty_state import chart_section, empty_state
 from components.export_buttons import csv_download_button
 from components.filters import (
     control_group,
@@ -11,8 +12,12 @@ from components.filters import (
     date_range_filter,
     multiselect_filter,
 )
-from components.metric_cards import kpi_row
+from components.insight_box import insight_box
+from components.metric_card import Metric, metric_row
 from components.nav_tabs import render_nav_tabs
+from components.page_header import page_header, section_header
+from components.panels import download_panel
+from components.table import render_table
 from services import state_service
 from services.dashboard_service import (
     apply_filters,
@@ -24,6 +29,7 @@ from services.dashboard_service import (
     segment_portfolio,
     trend_tables,
 )
+from utils import formatting
 from utils.logging_config import configure_logging
 from visualization.churn_charts import risk_band_bar
 from visualization.demographic_charts import age_band_bar, geo_treemap, top_geo_bar
@@ -33,7 +39,11 @@ from visualization.executive_dashboard import (
     portfolio_bar_fig,
     revenue_trend_fig,
 )
-from visualization.retention_charts import revenue_at_risk_bar, strategy_distribution_bar
+from visualization.retention_charts import (
+    revenue_at_risk_bar,
+    strategy_distribution_bar,
+    value_risk_matrix,
+)
 from visualization.theme import inject_terminal_css
 
 configure_logging()
@@ -65,14 +75,22 @@ def _retention_frame() -> pd.DataFrame | None:
     return pd.DataFrame(rows) if rows else None
 
 
+page_header(
+    "Executive Dashboard",
+    "Filter-consistent performance, risk, and retention at a glance.",
+    badge="Step 9 of 9",
+)
 st.markdown(
-    "Every card below derives from the same sidebar filters. "
+    "Every card below derives from the same Global Slicers. "
     "Customer IDs are masked except in the gated drill-down."
 )
 
 clean_data = st.session_state.get("clean_data")
 if clean_data is None:
-    st.info("Complete Data Quality & Cleaning first — the dashboard needs clean data.")
+    empty_state(
+        "No clean data yet",
+        "Complete Data Quality & Cleaning first — the dashboard needs clean data.",
+    )
     st.stop()
 
 features = st.session_state.get("customer_features")
@@ -111,87 +129,154 @@ with controls_expander("Global Slicers"):
 
 txns_f, master_f = apply_filters(txns, master, filters)
 if master_f.empty:
-    st.warning("No customers match the current filters. Widen a filter to continue.")
+    empty_state(
+        "No customers match the current filters",
+        "Widen a filter to continue.",
+    )
     st.stop()
 kpis = compute_kpis(txns_f, master_f)
 
-st.subheader("Key performance indicators")
-kpi_row(
+retention = _retention_frame()
+ret_f = (
+    retention[retention["customer_id"].isin(set(master_f["customer_id"]))]
+    if retention is not None and not retention.empty
+    else None
+)
+
+section_header(
+    "Key performance indicators",
+    "Business health first, risk second — all from the same filters.",
+)
+metric_row(
     [
-        ("Customers", f"{kpis['total_customers']:,}"),
-        ("Revenue", f"₹{kpis['total_revenue']:,.0f}"),
-        ("Avg order value", f"₹{kpis['average_order_value']:,.0f}"),
-        ("Active rate", f"{kpis['active_customer_rate']:.1%}"),
+        Metric("Customers", formatting.fmt_int(kpis["total_customers"])),
+        Metric("Revenue", formatting.fmt_money(kpis["total_revenue"])),
+        Metric("Avg order value", formatting.fmt_money(kpis["average_order_value"])),
+        Metric("Active rate", formatting.fmt_pct(kpis["active_customer_rate"])),
+        Metric(
+            "Predicted churn",
+            (
+                formatting.fmt_pct(kpis["predicted_churn_rate"])
+                if kpis["predicted_churn_rate"] is not None
+                else "Needs page 07"
+            ),
+            tone="negative" if kpis["predicted_churn_rate"] is not None else "neutral",
+        ),
     ]
 )
-second = [
-    (
-        "Predicted churn",
-        (
-            f"{kpis['predicted_churn_rate']:.1%}"
-            if kpis["predicted_churn_rate"] is not None
-            else "needs p07"
+metric_row(
+    [
+        Metric(
+            "Revenue at risk",
+            (
+                formatting.fmt_money(kpis["revenue_at_risk"])
+                if kpis["revenue_at_risk"] is not None
+                else "Needs page 08"
+            ),
+            tone="negative" if kpis["revenue_at_risk"] is not None else "neutral",
         ),
-    ),
-    (
-        "Revenue at risk",
-        f"₹{kpis['revenue_at_risk']:,.0f}" if kpis["revenue_at_risk"] is not None else "needs p08",
-    ),
-    (
-        "Priority opportunities",
-        (
-            str(kpis["priority_opportunities"])
-            if kpis["priority_opportunities"] is not None
-            else "needs p08"
+        Metric(
+            "Priority opportunities",
+            (
+                formatting.fmt_int(kpis["priority_opportunities"])
+                if kpis["priority_opportunities"] is not None
+                else "Needs page 08"
+            ),
         ),
-    ),
-]
-kpi_row(second)
+    ]
+)
 
-st.subheader("Trends")
+section_header("Trends", "Monthly revenue, activity, and cohort mix.")
 trends = trend_tables(txns_f, master_f)
-trend_a, trend_b, trend_c = st.columns([1, 1, 1])
-with trend_a:
-    st.plotly_chart(revenue_trend_fig(trends["revenue"]), use_container_width=True)
-with trend_b:
-    st.plotly_chart(activity_trend_fig(trends["activity"]), use_container_width=True)
-with trend_c:
-    st.plotly_chart(new_returning_fig(trends["cohort"]), use_container_width=True)
-port_l, port_r = st.columns([3, 2])
-with port_l:
-    if "rfm_segment" in master_f.columns:
-        portfolio = segment_portfolio(master_f, "rfm_segment")
-        st.plotly_chart(portfolio_bar_fig(portfolio, "rfm_segment"), use_container_width=True)
-    else:
-        st.info("RFM segments appear here after page 03 scoring.")
-with port_r:
-    if "age_band" in master_f.columns:
-        bands = (
-            master_f["age_band"]
-            .value_counts()
-            .rename_axis("age_band")
-            .reset_index(name="customers")
-        )
-        st.plotly_chart(age_band_bar(bands), use_container_width=True)
+trend_left, trend_right = st.columns(2)
+with trend_left:
+    with chart_section("Revenue trend"):
+        st.plotly_chart(revenue_trend_fig(trends["revenue"]), use_container_width=True)
+with trend_right:
+    with chart_section("Customer activity trend"):
+        st.plotly_chart(activity_trend_fig(trends["activity"]), use_container_width=True)
+mix_left, mix_right = st.columns(2)
+with mix_left:
+    with chart_section("New vs returning customers"):
+        st.plotly_chart(new_returning_fig(trends["cohort"]), use_container_width=True)
+portfolio = (
+    segment_portfolio(master_f, "rfm_segment") if "rfm_segment" in master_f.columns else None
+)
+with mix_right:
+    with chart_section("Customer vs revenue share by segment"):
+        if portfolio is not None:
+            st.plotly_chart(portfolio_bar_fig(portfolio, "rfm_segment"), use_container_width=True)
+        else:
+            empty_state(
+                "No RFM segments yet",
+                "RFM segments appear here after page 03 scoring.",
+            )
 
-with st.expander("Segment portfolio table", expanded=False):
-    if "rfm_segment" in master_f.columns:
-        st.dataframe(segment_portfolio(master_f, "rfm_segment"), use_container_width=True)
+if portfolio is not None and not portfolio.empty:
+    top = portfolio.loc[portfolio["revenue_share"].idxmax()]
+    insight_box(
+        f"Revenue concentration: {top['rfm_segment']} holds "
+        f"{top['revenue_share']:.1f}% of filtered revenue "
+        f"across {top['customers']:,} customers.",
+        "Compare against its customer share in the portfolio table before acting.",
+        tone="warning" if top["revenue_share"] > 50 else "info",
+    )
+    with st.expander("Segment portfolio table", expanded=False):
+        render_table(portfolio, money_cols=("revenue",))
 
-st.subheader("Risk")
-if "risk_band" in master_f.columns:
-    risk_l, risk_r = st.columns([1, 1])
-    with risk_l:
-        st.plotly_chart(risk_band_bar(master_f), use_container_width=True)
-    with risk_r:
-        hvhr = high_value_high_risk(master_f)
-        if not hvhr.empty:
-            with st.expander("High-value, high-risk (IDs masked)", expanded=False):
-                st.dataframe(hvhr, use_container_width=True)
+section_header(
+    "Value versus risk",
+    "Historical value against churn probability; bubble size is revenue at risk.",
+)
+matrix_cols = {
+    "churn_probability",
+    "expected_value_proxy_historical",
+    "revenue_at_risk",
+    "recommended_action",
+}
+if ret_f is not None and not ret_f.empty and matrix_cols.issubset(ret_f.columns):
+    with chart_section("Value–risk matrix"):
+        st.plotly_chart(value_risk_matrix(ret_f), use_container_width=True)
+    insight_box(
+        f"{len(ret_f):,} of {len(master_f):,} filtered customers carry a "
+        "recommended retention action.",
+        "Uncovered customers are invisible to the campaign export below.",
+        tone="info",
+    )
 else:
-    st.info("Churn risk appears here after page 07 scoring.")
+    empty_state(
+        "No retention actions yet",
+        "The value–risk matrix appears here after page 08.",
+    )
 
-st.subheader("Demographics & geography")
+section_header("Risk", "Where predicted churn concentrates.")
+if "risk_band" in master_f.columns:
+    risk_left, risk_right = st.columns(2)
+    with risk_left:
+        with chart_section("Customers per risk band"):
+            st.plotly_chart(risk_band_bar(master_f), use_container_width=True)
+    with risk_right:
+        with chart_section("High-value, high-risk (IDs masked)"):
+            hvhr = high_value_high_risk(master_f)
+            if not hvhr.empty:
+                render_table(hvhr, risk_cols=("risk_band",), money_cols=("revenue_at_risk",))
+                insight_box(
+                    f"{len(hvhr)} high-value customers sit in high or critical bands.",
+                    "These rows top the campaign export by revenue at risk.",
+                    tone="critical",
+                )
+            else:
+                empty_state(
+                    "No high-value customers in risky bands",
+                    "Nothing in the current filters needs VIP intervention.",
+                )
+else:
+    empty_state(
+        "No churn risk yet",
+        "Churn risk appears here after page 07 scoring.",
+    )
+
+section_header("Demographics & geography", "Who and where the filtered base is.")
 geo_levels = [lvl for lvl in GEO_LEVELS if lvl in txns_f.columns]
 if geo_levels:
     with controls_expander("Geography View"):
@@ -203,32 +288,46 @@ if geo_levels:
         .rename_axis(level)
         .reset_index(name="customers")
     )
-    geo_l, geo_r = st.columns([3, 2])
-    with geo_l:
-        st.plotly_chart(top_geo_bar(geo, level), use_container_width=True)
-    with geo_r:
+    demo_left, demo_right = st.columns(2)
+    with demo_left:
+        with chart_section("Customers per age band"):
+            if "age_band" in master_f.columns:
+                bands = (
+                    master_f["age_band"]
+                    .value_counts()
+                    .rename_axis("age_band")
+                    .reset_index(name="customers")
+                )
+                st.plotly_chart(age_band_bar(bands), use_container_width=True)
+            else:
+                empty_state(
+                    "No age bands yet",
+                    "Age bands appear here after page 04 profiling.",
+                )
+    with demo_right:
+        with chart_section(f"Top {level}s by customers"):
+            st.plotly_chart(top_geo_bar(geo, level), use_container_width=True)
+    with chart_section(f"Customer footprint ({level})"):
         st.plotly_chart(geo_treemap(geo.head(30), level), use_container_width=True)
 
-st.subheader("Retention")
-retention = _retention_frame()
-if retention is not None and not retention.empty:
-    ret_f = retention[retention["customer_id"].isin(set(master_f["customer_id"]))]
-    ret_l, ret_r = st.columns([1, 1])
-    with ret_l:
-        st.plotly_chart(strategy_distribution_bar(ret_f), use_container_width=True)
-    with ret_r:
-        st.plotly_chart(revenue_at_risk_bar(ret_f), use_container_width=True)
-    st.metric("Campaign-ready customers", f"{len(ret_f):,}")
-    csv_download_button(
-        ret_f,
-        "executive_retention_export.csv",
-        "Download retention export (CSV)",
-        key="dl_exec_ret",
-    )
+section_header("Retention", "Actions for the filtered customers.")
+if ret_f is not None and not ret_f.empty:
+    ret_left, ret_right = st.columns(2)
+    with ret_left:
+        with chart_section("Customers per recommended action"):
+            st.plotly_chart(strategy_distribution_bar(ret_f), use_container_width=True)
+    with ret_right:
+        with chart_section("Revenue at risk per action"):
+            st.plotly_chart(revenue_at_risk_bar(ret_f), use_container_width=True)
+    metric_row([Metric("Campaign-ready customers", formatting.fmt_int(len(ret_f)))])
+    download_panel(ret_f, "executive_retention_export", "dl_exec_ret")
 else:
-    st.info("Retention actions appear here after page 08.")
+    empty_state(
+        "No retention actions yet",
+        "Retention actions appear here after page 08.",
+    )
 
-st.subheader("Authorized drill-down")
+section_header("Authorized drill-down")
 st.warning(
     "Full customer identifiers are sensitive. Reveal them only for an authorized "
     "purpose (e.g. loading a campaign audience)."
