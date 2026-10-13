@@ -144,3 +144,180 @@ def test_churn_retention_executive_charts_render() -> None:
         {"mean_predicted": [0.2, 0.8], "observed_rate": [0.25, 0.75], "count": [2, 2]}
     )
     assert len(churn_charts.calibration_curve_fig(cal).data) > 0
+
+
+def _trace_colors(fig) -> dict:
+    """Trace name → marker color for per-category figures."""
+    return {trace.name: trace.marker.color for trace in fig.data}
+
+
+def test_segment_charts_use_stable_hues() -> None:
+    """Known segments render in their vocabulary hues on every chart."""
+    from visualization import tokens
+
+    profile = pd.DataFrame(
+        {
+            "segment": ["Champions", "Lost Customers"],
+            "customers": [3, 1],
+            "revenue": [900.0, 100.0],
+        }
+    )
+    assert _trace_colors(rfm_charts.segment_distribution_bar(profile)) == {
+        "Champions": tokens.SEGMENT_COLORS["Champions"],
+        "Lost Customers": tokens.SEGMENT_COLORS["Lost Customers"],
+    }
+    assert _trace_colors(rfm_charts.revenue_by_segment_bar(profile)) == {
+        "Champions": tokens.SEGMENT_COLORS["Champions"],
+        "Lost Customers": tokens.SEGMENT_COLORS["Lost Customers"],
+    }
+
+    frame = pd.DataFrame(
+        {
+            "customer_id": ["C1", "C2"],
+            "segment": ["Champions", "Lost Customers"],
+            "recency_days": [5, 60],
+            "frequency": [10, 1],
+            "monetary_value": [100.0, 300.0],
+        }
+    )
+    assert _trace_colors(rfm_charts.recency_frequency_scatter(frame)) == {
+        "Champions": tokens.SEGMENT_COLORS["Champions"],
+        "Lost Customers": tokens.SEGMENT_COLORS["Lost Customers"],
+    }
+
+    sizes = pd.DataFrame(
+        {
+            "cluster_id": [0, 1],
+            "business_name": ["Premium Active", "Light Dormant"],
+            "customers": [30, 10],
+        }
+    )
+    assert _trace_colors(segmentation_charts.cluster_size_bar(sizes)) == {
+        "Premium Active": tokens.SEGMENT_COLORS["Premium Active"],
+        "Light Dormant": tokens.SEGMENT_COLORS["Light Dormant"],
+    }
+
+    pca_colors = _trace_colors(
+        segmentation_charts.pca_scatter(
+            np.array([[0.0, 1.0], [2.0, 3.0]]),
+            np.array([0, 1]),
+            names={0: "Premium Active", 1: "Core Steady"},
+        )
+    )
+    assert pca_colors == {
+        "Premium Active": tokens.SEGMENT_COLORS["Premium Active"],
+        "Core Steady": tokens.SEGMENT_COLORS["Core Steady"],
+    }
+
+
+def test_unknown_categories_fall_back_to_neutral_sequence() -> None:
+    """Unmapped labels never collapse to grey; they take the neutral sequence."""
+    from visualization.theme import PRIMARY_DISCRETE
+
+    profile = pd.DataFrame({"segment": ["A", "B"], "customers": [2, 2], "revenue": [1.0, 2.0]})
+    colors = _trace_colors(rfm_charts.segment_distribution_bar(profile))
+    assert set(colors.values()) == set(PRIMARY_DISCRETE[:2])
+
+
+def test_action_charts_use_stable_hues() -> None:
+    """Known retention actions render in their matrix hues."""
+    from visualization import tokens
+
+    table = pd.DataFrame(
+        {
+            "customer_id": ["C1", "C2"],
+            "churn_probability": [0.9, 0.2],
+            "expected_value_proxy_historical": [5000.0, 300.0],
+            "revenue_at_risk": [4500.0, 60.0],
+            "recommended_action": [
+                "Personal outreach (VIP intervention)",
+                "Routine nurture and monitoring",
+            ],
+        }
+    )
+    expected = {
+        "Personal outreach (VIP intervention)": tokens.action_color(
+            "Personal outreach (VIP intervention)"
+        ),
+        "Routine nurture and monitoring": tokens.action_color("Routine nurture and monitoring"),
+    }
+    assert _trace_colors(retention_charts.value_risk_matrix(table)) == expected
+    assert _trace_colors(retention_charts.revenue_at_risk_bar(table)) == expected
+    assert _trace_colors(retention_charts.strategy_distribution_bar(table)) == expected
+
+
+def test_empty_inputs_return_titled_placeholders() -> None:
+    """Empty inputs render a titled empty state instead of crashing or blanking."""
+    from visualization.theme import empty_figure
+
+    cases = [
+        (rfm_charts.segment_distribution_bar(pd.DataFrame()), "Customers per segment"),
+        (rfm_charts.revenue_by_segment_bar(pd.DataFrame()), "Revenue per segment"),
+        (rfm_charts.recency_frequency_scatter(pd.DataFrame()), "Recency vs frequency"),
+        (
+            rfm_charts.frequency_monetary_scatter(pd.DataFrame()),
+            "Frequency vs monetary value",
+        ),
+        (rfm_charts.rfm_heatmap(pd.DataFrame()), "Customer counts by R × F score"),
+        (churn_charts.roc_curve_fig(np.array([]), np.array([])), "ROC curve"),
+        (churn_charts.calibration_curve_fig(pd.DataFrame()), "Calibration curve"),
+        (churn_charts.confusion_fig({}), "Confusion matrix"),
+        (churn_charts.gain_chart_fig(pd.DataFrame()), "Cumulative gain"),
+        (churn_charts.importance_bar_fig(pd.DataFrame()), "Global feature importance"),
+        (churn_charts.risk_band_bar(pd.DataFrame()), "Customers per risk band"),
+        (
+            retention_charts.value_risk_matrix(pd.DataFrame()),
+            "Value–risk matrix (size = revenue at risk)",
+        ),
+        (retention_charts.revenue_at_risk_bar(pd.DataFrame()), "Revenue at risk per action"),
+        (
+            retention_charts.strategy_distribution_bar(pd.DataFrame()),
+            "Customers per recommended action",
+        ),
+        (retention_charts.priority_histogram(pd.DataFrame()), "Priority score distribution"),
+        (executive_dashboard.revenue_trend_fig(pd.DataFrame()), "Revenue trend"),
+        (executive_dashboard.activity_trend_fig(pd.DataFrame()), "Customer activity trend"),
+        (executive_dashboard.new_returning_fig(pd.DataFrame()), "New vs returning customers"),
+        (
+            executive_dashboard.portfolio_bar_fig(pd.DataFrame()),
+            "Customer vs revenue share by segment",
+        ),
+        (demographic_charts.age_histogram(pd.Series([], dtype=float)), "Age distribution"),
+        (demographic_charts.age_band_bar(pd.DataFrame()), "Customers per age band"),
+        (demographic_charts.gender_bar(pd.DataFrame()), "Customers by gender"),
+        (demographic_charts.top_geo_bar(pd.DataFrame(), "city"), "Top citys by customers"),
+        (demographic_charts.revenue_geo_bar(pd.DataFrame(), "city"), "Top citys by revenue"),
+        (demographic_charts.geo_treemap(pd.DataFrame(), "city"), "Customer share by city"),
+        (
+            demographic_charts.stacked_composition_bar(pd.DataFrame(), "gender"),
+            "gender mix by segment",
+        ),
+        (
+            segmentation_charts.pca_scatter(np.empty((0, 3)), np.array([])),
+            "Clusters (PCA 2D)",
+        ),
+        (segmentation_charts.cluster_size_bar(pd.DataFrame()), "Customers per cluster"),
+        (
+            segmentation_charts.profile_heatmap(pd.DataFrame()),
+            "Cluster profile (median, z-scored per feature)",
+        ),
+        (
+            segmentation_charts.sankey_mapping(pd.DataFrame(), "A", "B"),
+            "A → B flow",
+        ),
+        (
+            segmentation_charts.metric_comparison_bar(
+                pd.DataFrame({"silhouette": []}), "silhouette", "Silhouette"
+            ),
+            "Silhouette",
+        ),
+    ]
+    assert len(cases) == 31
+    for fig, title in cases:
+        assert len(fig.data) == 0, title
+        assert fig.layout.title.text == title, title
+        assert fig.layout.annotations, title
+
+    direct = empty_figure("Direct", "Custom message.")
+    assert direct.layout.title.text == "Direct"
+    assert direct.layout.annotations[0].text == "Custom message."

@@ -13,6 +13,7 @@ from visualization.theme import (
     MUTED,
     PRIMARY,
     PRIMARY_SCALE,
+    empty_figure,
     styled,
 )
 
@@ -23,6 +24,8 @@ RISK_BAND_ORDER = ("low", "medium", "high", "critical")
 @styled
 def roc_curve_fig(y_true: np.ndarray, proba: np.ndarray) -> go.Figure:
     """ROC curve with chance diagonal."""
+    if len(np.asarray(y_true)) == 0:
+        return empty_figure("ROC curve")
     fpr, tpr, _ = roc_curve(y_true, proba)
     fig = go.Figure()
     fig.add_trace(
@@ -42,6 +45,8 @@ def roc_curve_fig(y_true: np.ndarray, proba: np.ndarray) -> go.Figure:
 @styled
 def calibration_curve_fig(table: pd.DataFrame) -> go.Figure:
     """Observed rate vs mean predicted per bin, sized by bin count."""
+    if table.empty:
+        return empty_figure("Calibration curve")
     fig = px.scatter(
         table,
         x="mean_predicted",
@@ -61,6 +66,8 @@ def calibration_curve_fig(table: pd.DataFrame) -> go.Figure:
 @styled
 def confusion_fig(confusion: dict) -> go.Figure:
     """2×2 confusion matrix heatmap."""
+    if not confusion:
+        return empty_figure("Confusion matrix")
     matrix = [[confusion["tn"], confusion["fp"]], [confusion["fn"], confusion["tp"]]]
     return px.imshow(
         matrix,
@@ -75,6 +82,8 @@ def confusion_fig(confusion: dict) -> go.Figure:
 @styled
 def gain_chart_fig(table: pd.DataFrame) -> go.Figure:
     """Cumulative gain by decile with random-targeting baseline."""
+    if table.empty:
+        return empty_figure("Cumulative gain")
     fig = go.Figure()
     fig.add_trace(
         go.Scatter(
@@ -103,6 +112,8 @@ def gain_chart_fig(table: pd.DataFrame) -> go.Figure:
 @styled
 def importance_bar_fig(importance: pd.DataFrame, top_n: int = 15) -> px.Figure:
     """Top permutation importances."""
+    if importance.empty:
+        return empty_figure("Global feature importance")
     return px.bar(
         importance.head(top_n),
         x="importance",
@@ -117,6 +128,8 @@ def importance_bar_fig(importance: pd.DataFrame, top_n: int = 15) -> px.Figure:
 @styled
 def risk_band_bar(scores: pd.DataFrame) -> px.Figure:
     """Customer counts per risk band in band order (semantic risk hues)."""
+    if scores.empty or "risk_band" not in scores.columns:
+        return empty_figure("Customers per risk band")
     counts = scores["risk_band"].value_counts().reindex(RISK_BAND_ORDER, fill_value=0)
     return px.bar(
         x=counts.index.tolist(),

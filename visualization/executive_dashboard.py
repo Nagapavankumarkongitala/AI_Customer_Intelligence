@@ -5,12 +5,14 @@ from __future__ import annotations
 import pandas as pd
 import plotly.express as px
 
-from visualization.theme import PRIMARY, PRIMARY_DISCRETE, RISK_GREEN, styled
+from visualization.theme import PRIMARY, PRIMARY_DISCRETE, RISK_GREEN, empty_figure, styled
 
 
 @styled
 def revenue_trend_fig(table: pd.DataFrame) -> px.Figure:
     """Monthly revenue line."""
+    if table.empty:
+        return empty_figure("Revenue trend")
     return px.line(
         table,
         x="month",
@@ -25,6 +27,8 @@ def revenue_trend_fig(table: pd.DataFrame) -> px.Figure:
 @styled
 def activity_trend_fig(table: pd.DataFrame) -> px.Figure:
     """Monthly active customers line."""
+    if table.empty:
+        return empty_figure("Customer activity trend")
     return px.line(
         table,
         x="month",
@@ -39,6 +43,8 @@ def activity_trend_fig(table: pd.DataFrame) -> px.Figure:
 @styled
 def new_returning_fig(table: pd.DataFrame) -> px.Figure:
     """Monthly new vs returning stacked bars."""
+    if table.empty:
+        return empty_figure("New vs returning customers")
     long = table.melt(
         id_vars="month",
         value_vars=["new_customers", "returning_customers"],
@@ -58,6 +64,8 @@ def new_returning_fig(table: pd.DataFrame) -> px.Figure:
 @styled
 def portfolio_bar_fig(portfolio: pd.DataFrame, segment_col: str = "segment") -> px.Figure:
     """Customer vs revenue share per segment (grouped bars)."""
+    if portfolio.empty:
+        return empty_figure("Customer vs revenue share by segment")
     col = segment_col if segment_col in portfolio.columns else portfolio.columns[0]
     long = portfolio.melt(
         id_vars=col,

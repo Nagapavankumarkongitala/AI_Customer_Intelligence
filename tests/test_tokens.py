@@ -127,6 +127,24 @@ def test_segment_color_handles_collision_suffix_and_unknown() -> None:
     assert tokens.segment_color("Not A Real Segment") == tokens.LIGHT["muted_soft"]
 
 
+def test_segment_and_action_maps_are_all_or_nothing() -> None:
+    """Maps resolve fully or refuse — partial maps would leak a third palette."""
+    assert tokens.segment_map(["Champions", "Lost Customers"]) == {
+        "Champions": tokens.SEGMENT_COLORS["Champions"],
+        "Lost Customers": tokens.SEGMENT_COLORS["Lost Customers"],
+    }
+    assert tokens.segment_map(["Premium Active B"]) == {
+        "Premium Active B": tokens.SEGMENT_COLORS["Premium Active"]
+    }
+    assert tokens.segment_map(["Champions", "Mystery"]) is None
+    assert tokens.segment_map([]) is None
+    assert tokens.segment_map(None) is None
+
+    assert tokens.action_map(["Monitor"]) == {"Monitor": tokens.color("muted_soft")}
+    assert tokens.action_map(["Monitor", "Nope"]) is None
+    assert tokens.action_map([]) is None
+
+
 def test_risk_colors_cover_configured_bands() -> None:
     """Every band in config.yaml resolves to a hue and a badge pair in both modes."""
     bands = set(

@@ -147,6 +147,15 @@ def test_normalize_to_mode_is_reversible() -> None:
     assert back.data[0].marker.color.upper() == fig.data[0].marker.color.upper()
 
 
+def test_empty_figure_is_a_titled_placeholder() -> None:
+    """Empty inputs keep the card footprint with a titled message, not a blank."""
+    fig = theme.empty_figure("Revenue trend")
+    assert fig.layout.title.text == "Revenue trend"
+    assert fig.layout.height == theme.CHART_HEIGHT
+    assert fig.layout.annotations[0].text == "No data for the current selection."
+    assert theme.empty_figure("T", "Custom.").layout.annotations[0].text == "Custom."
+
+
 def test_adopt_colorway_removes_leaked_defaults() -> None:
     """A factory that passes no colour still renders in the design system.
 

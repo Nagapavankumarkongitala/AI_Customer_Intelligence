@@ -77,3 +77,5 @@ fresh outcome windows as behavior drifts.
 - Phase 3 (this change): persistent left sidebar (components/sidebar.py: NAV_PAGES nav, appearance toggle, data status), components/theme.py preference outside the 19-key state contract, ender_nav_tabs kept as a delegating shim (zero page edits), 	est_no_sidebar_usage replaced with sidebar guards. Next: executive-dashboard rebuild, visualization refactor, remaining pages, hardening.\
 \
 - Phase 4 (this change): pages/09_Executive_Dashboard.py rebuilt on the component library (page/section headers, 5+2 metric rows, 2-per-row chart sections, value-risk matrix centerpiece, factual insight boxes, conditional tables, empty states, retained gated drill-down). No service/model changes; filter logic and IDs-masking untouched.\
+\
+- Phase 5 (this change): visualization refactor — 	okens.segment_map/action_map (all-or-nothing stable hues), segment/action maps wired into RFM/segmentation/retention factories (positional/magnitude coloring fixed), 	heme.empty_figure titled placeholders on all bar/scatter/line factories, missing axis labels filled. No signature changes; module names kept.\

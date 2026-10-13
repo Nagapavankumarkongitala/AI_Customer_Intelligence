@@ -360,6 +360,51 @@ def action_color(action: str, mode: str | None = None) -> str:
     return color(key, mode) if key else color("muted_soft", mode)
 
 
+def segment_map(values: object) -> dict[str, str] | None:
+    """Discrete colour map when every value is known segment vocabulary.
+
+    Returns ``None`` unless the whole set resolves (collision suffixes
+    included) — a partial map would let Plotly assign the leftovers from a
+    third palette, which is exactly the drift this module exists to prevent.
+    Callers fall back to the neutral categorical sequence on ``None``.
+    """
+    unique = {str(value).strip() for value in _as_values(values)}
+    if not unique:
+        return None
+    mapped: dict[str, str] = {}
+    for label in unique:
+        if label in SEGMENT_COLORS:
+            mapped[label] = SEGMENT_COLORS[label]
+            continue
+        stripped = _COLLISION_SUFFIX.sub("", label)
+        if stripped in SEGMENT_COLORS:
+            mapped[label] = SEGMENT_COLORS[stripped]
+            continue
+        return None
+    return mapped
+
+
+def action_map(values: object, mode: str | None = None) -> dict[str, str] | None:
+    """Discrete colour map when every value is a known retention action."""
+    unique = {str(value).strip() for value in _as_values(values)}
+    if not unique:
+        return None
+    if any(label not in ACTION_COLOR_KEYS for label in unique):
+        return None
+    return {label: color(ACTION_COLOR_KEYS[label], mode) for label in unique}
+
+
+def _as_values(values: object) -> list[str]:
+    if values is None:
+        return []
+    if isinstance(values, str):
+        return [values]
+    try:
+        return list(values)  # type: ignore[arg-type]
+    except TypeError:
+        return [values]
+
+
 def colorway(mode: str | None = None) -> list[str]:
     """Default Plotly colourway for the mode."""
     return [color(key, mode) for key in PLOTLY_COLORWAY_KEYS]

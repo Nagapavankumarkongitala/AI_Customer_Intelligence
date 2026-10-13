@@ -5,12 +5,23 @@ from __future__ import annotations
 import pandas as pd
 import plotly.express as px
 
-from visualization.theme import PRIMARY, PRIMARY_DISCRETE, styled
+from visualization import tokens
+from visualization.theme import PRIMARY, PRIMARY_DISCRETE, empty_figure, styled
+
+
+def _action_map_or_sequence(values: object) -> dict:
+    """Keyword args painting an action column with stable hues (pure helper)."""
+    mapped = tokens.action_map(values)
+    if mapped:
+        return {"color_discrete_map": mapped}
+    return {"color_discrete_sequence": PRIMARY_DISCRETE}
 
 
 @styled
 def value_risk_matrix(table: pd.DataFrame) -> px.Figure:
     """Historical value vs churn probability, sized by revenue at risk, colored by action."""
+    if table.empty:
+        return empty_figure("Value–risk matrix (size = revenue at risk)")
     hover = [c for c in ("customer_id", "customer_value_tier", "risk_band") if c in table.columns]
     return px.scatter(
         table,
@@ -18,7 +29,7 @@ def value_risk_matrix(table: pd.DataFrame) -> px.Figure:
         y="expected_value_proxy_historical",
         size="revenue_at_risk",
         color="recommended_action",
-        color_discrete_sequence=PRIMARY_DISCRETE,
+        **_action_map_or_sequence(table["recommended_action"]),
         hover_data=hover or None,
         title="Value–risk matrix (size = revenue at risk)",
         labels={
@@ -31,13 +42,15 @@ def value_risk_matrix(table: pd.DataFrame) -> px.Figure:
 @styled
 def revenue_at_risk_bar(table: pd.DataFrame) -> px.Figure:
     """Revenue at risk per recommended action."""
+    if table.empty:
+        return empty_figure("Revenue at risk per action")
     grouped = table.groupby("recommended_action")["revenue_at_risk"].sum().reset_index()
     return px.bar(
         grouped,
         x="recommended_action",
         y="revenue_at_risk",
         color="recommended_action",
-        color_discrete_sequence=PRIMARY_DISCRETE,
+        **_action_map_or_sequence(grouped["recommended_action"]),
         title="Revenue at risk per action",
     )
 
@@ -45,6 +58,8 @@ def revenue_at_risk_bar(table: pd.DataFrame) -> px.Figure:
 @styled
 def strategy_distribution_bar(table: pd.DataFrame) -> px.Figure:
     """Customer counts per recommended action."""
+    if table.empty:
+        return empty_figure("Customers per recommended action")
     counts = table["recommended_action"].value_counts().reset_index()
     counts.columns = ["action", "customers"]
     return px.bar(
@@ -52,7 +67,7 @@ def strategy_distribution_bar(table: pd.DataFrame) -> px.Figure:
         x="action",
         y="customers",
         color="action",
-        color_discrete_sequence=PRIMARY_DISCRETE,
+        **_action_map_or_sequence(counts["action"]),
         title="Customers per recommended action",
     )
 
@@ -60,6 +75,8 @@ def strategy_distribution_bar(table: pd.DataFrame) -> px.Figure:
 @styled
 def priority_histogram(table: pd.DataFrame) -> px.Figure:
     """Distribution of retention priority scores."""
+    if table.empty:
+        return empty_figure("Priority score distribution")
     return px.histogram(
         table["retention_priority_score"],
         nbins=20,

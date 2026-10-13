@@ -453,6 +453,29 @@ def style_plotly_fig(fig: Any, height: int = CHART_HEIGHT) -> Any:
     return apply_chart_theme(fig, height=height)
 
 
+def empty_figure(title: str, message: str = "No data for the current selection.") -> Any:
+    """Stand-in figure factories return for empty inputs.
+
+    Keeps the card footprint stable (same height as a loaded chart) so filters
+    never collapse the layout, and routes through the shared theme so even the
+    empty state carries the title hierarchy.
+    """
+    import plotly.graph_objects as go
+
+    fig = go.Figure()
+    fig.add_annotation(
+        x=0.5,
+        y=0.5,
+        xref="paper",
+        yref="paper",
+        text=message,
+        showarrow=False,
+    )
+    fig.update_xaxes(visible=False)
+    fig.update_yaxes(visible=False)
+    return apply_chart_theme(fig, title=title)
+
+
 def styled(fn: Any = None, *, height: int = CHART_HEIGHT) -> Any:
     """Decorator routing a Plotly factory's figure through :func:`apply_chart_theme`."""
 
