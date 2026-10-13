@@ -33,7 +33,8 @@ def sidebar_status_html(status: Mapping[str, str]) -> str:
         "<div style='display:flex;justify-content:space-between;gap:0.5rem;"
         "font-size:0.78rem;padding:0.1rem 0;'>"
         f"<span style='color:{tokens.color('muted')};'>{html.escape(str(label))}</span>"
-        f"<span style='font-variant-numeric:tabular-nums;'>{html.escape(str(value))}</span>"
+        f"<span style='font-variant-numeric:tabular-nums;color:{tokens.color('text')};'>"
+        f"{html.escape(str(value))}</span>"
         "</div>"
         for label, value in status.items()
     )
@@ -67,7 +68,11 @@ def render_sidebar_nav(active: str) -> None:
     """
     ensure_theme()
     with st.sidebar:
-        st.markdown("**AI Customer Intelligence**")
+        st.markdown(
+            f"<span style='font-weight:700;color:{tokens.color('text')};'>"
+            "AI Customer Intelligence</span>",
+            unsafe_allow_html=True,
+        )
         for label, path in NAV_PAGES:
             st.page_link(path, label=label)
         st.divider()

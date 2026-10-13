@@ -25,7 +25,7 @@ def empty_state_html(title: str, body: str) -> str:
         f"border-radius:{tokens.RADIUS['lg']};"
         f"background:{tokens.color('surface_alt')};'>"
         f"<div style='font-size:1.6rem;color:{tokens.color('muted_soft')};'>◌</div>"
-        "<div style='font-weight:700;margin:0.35rem 0 0.2rem 0;'>"
+        f"<div style='font-weight:700;margin:0.35rem 0 0.2rem 0;color:{tokens.color('text')};'>"
         f"{html.escape(title)}</div>"
         f"<div style='color:{tokens.color('muted')};font-size:0.88rem;'>"
         f"{html.escape(body)}</div></div>"
@@ -40,7 +40,8 @@ def empty_state(title: str, body: str) -> None:
 def chart_section_html(title: str, caption: str | None = None) -> str:
     """Section title plus an optional muted caption line."""
     out = (
-        "<div style='font-weight:700;font-size:0.95rem;margin:0.75rem 0 0.1rem 0;'>"
+        "<div style='font-weight:700;font-size:0.95rem;margin:0.75rem 0 0.1rem 0;"
+        f"color:{tokens.color('text')};'>"
         f"{html.escape(title)}</div>"
     )
     if caption:

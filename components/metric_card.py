@@ -67,7 +67,8 @@ def metric_card_html(metric: Metric) -> str:
         f"letter-spacing:0.03em;text-transform:uppercase;overflow-wrap:break-word;'{title_attr}>"
         f"{html.escape(metric.label)}</div>"
         "<div style='font-size:1.35rem;font-weight:700;font-variant-numeric:tabular-nums;"
-        f"line-height:1.25;margin-top:0.15rem;overflow-wrap:break-word;'>{html.escape(metric.value)}</div>"
+        f"line-height:1.25;margin-top:0.15rem;overflow-wrap:break-word;color:{tokens.color('text')};'>"
+        f"{html.escape(metric.value)}</div>"
         f"{delta_html}</div>"
     )
 

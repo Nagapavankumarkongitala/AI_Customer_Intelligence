@@ -59,7 +59,8 @@ def status_panel(items: list[tuple[str, str]]) -> None:
             unsafe_allow_html=True,
         )
         right.markdown(
-            f"<span style='font-size:0.85rem;font-variant-numeric:tabular-nums;'>"
+            f"<span style='font-size:0.85rem;font-variant-numeric:tabular-nums;"
+            f"color:{tokens.color('text')};'>"
             f"{html.escape(value)}</span>",
             unsafe_allow_html=True,
         )

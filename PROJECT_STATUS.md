@@ -98,3 +98,5 @@ ormalize_dictionary_rows renders legacy caches as field/detail pairs instead of 
 - Width migration (this change): all 66 use_container_width=True call sites moved to width='stretch' ahead of the Streamlit removal; verified live with zero deprecation warnings.\
 \
 - Sidebar width (this change): rail narrowed 300px to 240px (	okens.SIDEBAR_WIDTH) with !important to beat Streamlit's inline width; drag-resize handle no longer stretches the rail (accepted trade-off). Live-verified: controls fit, no overflow.\
+\
+- Dark ink fix (this change): custom HTML text nodes inherited the static light root ink, rendering invisible values on dark surfaces. Every component text node now carries explicit active-mode color (metric values, empty/chart titles, status values, sidebar title); pinned by an active-mode ink test and live-verified on a fresh server.\

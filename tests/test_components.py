@@ -198,3 +198,24 @@ def test_style_table_falls_back_without_jinja2(monkeypatch) -> None:
     fallback = table_module.style_table(df, risk_cols=("risk_band",), money_cols=("value",))
     assert isinstance(fallback, pd.DataFrame)
     assert fallback["value"].tolist()[0].startswith("₹")
+
+
+def test_builders_emit_active_mode_ink() -> None:
+    """No inherited root ink: text nodes carry the active mode's color.
+
+    The app root follows the static light config, so any text without an
+    explicit color renders light ink on dark surfaces (invisible KPI values).
+    """
+    from components import sidebar as sidebar_module
+
+    original = tokens.active_mode()
+    try:
+        tokens.set_active_mode(tokens.MODE_DARK)
+        dark_text = tokens.DARK["text"]
+        assert dark_text in metric_card_html(Metric("K", "1"))
+        assert dark_text in empty_state_html("T", "B")
+        assert dark_text in chart_section_html("T")
+        assert dark_text in sidebar_module.sidebar_status_html({"A": "b"})
+    finally:
+        tokens.set_active_mode(original)
+    assert tokens.LIGHT["text"] in metric_card_html(Metric("K", "1"))
