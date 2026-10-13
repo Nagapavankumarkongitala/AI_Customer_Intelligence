@@ -3,7 +3,9 @@
 Numbers are formatted through ``utils.formatting`` before display; risk cells
 take their badge backgrounds from tokens so tables, badges, and charts agree.
 Built on ``Styler.map`` (pandas 3 removed ``applymap``) and rendered with
-``st.dataframe``.
+``st.dataframe``. Without the optional ``jinja2`` package the Styler is
+unavailable, so ``style_table`` hands back the formatted frame and only the
+cell painting degrades — values stay formatted either way.
 """
 
 from __future__ import annotations
@@ -13,6 +15,13 @@ import streamlit as st
 
 from utils import formatting
 from visualization import tokens
+
+try:
+    import jinja2  # noqa: F401
+
+    _HAS_JINJA2 = True
+except ImportError:
+    _HAS_JINJA2 = False
 
 
 def format_frame(
@@ -52,9 +61,16 @@ def style_table(
     money_cols: tuple[str, ...] = (),
     pct_cols: tuple[str, ...] = (),
     int_cols: tuple[str, ...] = (),
-) -> pd.io.formats.style.Styler:
-    """Format numerics and paint risk-band cells; returns a Styler (pure)."""
+) -> pd.io.formats.style.Styler | pd.DataFrame:
+    """Format numerics and paint risk-band cells.
+
+    Returns a Styler when ``jinja2`` is installed, otherwise the formatted
+    frame itself (values formatted, painting skipped). ``st.dataframe``
+    renders both, so callers never branch.
+    """
     view = format_frame(df, money_cols, pct_cols, int_cols)
+    if not _HAS_JINJA2:
+        return view
     styler = view.style.map(_risk_cell_style, subset=[c for c in risk_cols if c in view.columns])
     return styler.set_table_styles(
         [{"selector": "td, th", "props": "font-variant-numeric: tabular-nums;"}]

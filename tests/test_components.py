@@ -187,3 +187,14 @@ def test_format_frame_and_risk_cells() -> None:
 
     styler = style_table(df, risk_cols=("risk_band",), money_cols=("value",))
     assert isinstance(styler, pd.io.formats.style.Styler)
+
+
+def test_style_table_falls_back_without_jinja2(monkeypatch) -> None:
+    """Missing jinja2 degrades to formatted values, never a page crash."""
+    import components.table as table_module
+
+    monkeypatch.setattr(table_module, "_HAS_JINJA2", False)
+    df = pd.DataFrame({"risk_band": ["high"], "value": [1234.5]})
+    fallback = table_module.style_table(df, risk_cols=("risk_band",), money_cols=("value",))
+    assert isinstance(fallback, pd.DataFrame)
+    assert fallback["value"].tolist()[0].startswith("₹")

@@ -10,6 +10,7 @@ pyarrow
 joblib
 pyyaml
 pydantic
+jinja2
 
 # Phase-gated: required only where used; import optionally with install guidance.
 xgboost

@@ -85,3 +85,5 @@ fresh outcome windows as behavior drifts.
 - Phase 7 hardening (this change): full suite + coverage (84% total; touched viz/components/utils at 94-100%), Streamlit boot on :8501 with health 200 and zero boot tracebacks, ruff/black clean. Two failures are pre-existing and unrelated (shap 0.53 TreeExplainer rejects LogisticRegression; reproduced on the pristine tree).\
 \
 - Follow-ups (this change): SHAP fixed for shap 0.53 — linear baselines route to LinearExplainer (coef_ duck-typed), 3-D TreeExplainer output sliced to the positive class, scoring falls back to median drivers past the 500-row SHAP cap (all three were latent crashes on the previous suite). ender_nav_tabs shim removed: app + all 9 pages call ender_sidebar directly.\
+\
+- Table hardening (this change): jinja2 added to requirements (was transitive-only) and style_table falls back to the formatted frame when the Styler is unavailable — values stay formatted, only cell painting degrades. Fixes the production crash on interpreters without jinja2.\
