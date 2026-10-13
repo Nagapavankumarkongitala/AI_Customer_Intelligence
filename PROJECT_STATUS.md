@@ -102,3 +102,5 @@ ormalize_dictionary_rows renders legacy caches as field/detail pairs instead of 
 - Dark ink fix (this change): custom HTML text nodes inherited the static light root ink, rendering invisible values on dark surfaces. Every component text node now carries explicit active-mode color (metric values, empty/chart titles, status values, sidebar title); pinned by an active-mode ink test and live-verified on a fresh server.\
 \
 - Dashboard landing (this change): executive dashboard moved into pp.py, pages/09_* deleted; rail is Dashboard + 8 workflow pages. plural_geo_level public for shared titles. Verified by full landing run (11 figures, 9 links).\
+\
+- Startup order (this change): theme CSS and page config now apply before the slow default-dataset bootstrap (with a loading spinner), so first paint is themed with the auto-nav hidden instead of blank. streamlit>=1.65 pinned (verified APIs: persist_state, width, page_link).\

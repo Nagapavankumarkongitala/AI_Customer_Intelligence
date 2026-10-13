@@ -1,5 +1,6 @@
-# Runtime dependencies (spec §3 core stack).
-streamlit
+# Runtime dependencies (spec §3 core stack). Floors are the versions the
+# dashboard is verified against (1.65 API: persist_state, width, page_link).
+streamlit>=1.65
 pandas
 numpy
 plotly

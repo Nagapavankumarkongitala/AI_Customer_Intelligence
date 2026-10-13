@@ -58,16 +58,16 @@ except ConfigurationError as exc:
 
 state_service.initialize(st.session_state)
 
-try:
-    from services import bootstrap_service
-
-    default_manifest = bootstrap_service.load_default_into_state(st.session_state)
-except Exception as exc:  # missing cache or corrupt artifact: app stays usable
-    default_manifest = None
-    st.warning(f"Default dataset unavailable ({exc}). Upload a file to begin.")
-
 st.set_page_config(page_title="AI Customer Intelligence", layout="wide")
 inject_terminal_css()
+with st.spinner("Loading data…"):
+    try:
+        from services import bootstrap_service
+
+        default_manifest = bootstrap_service.load_default_into_state(st.session_state)
+    except Exception as exc:  # missing cache or corrupt artifact: app stays usable
+        default_manifest = None
+        st.warning(f"Default dataset unavailable ({exc}). Upload a file to begin.")
 render_sidebar_nav("app.py")
 
 
