@@ -39,7 +39,6 @@ page_header(
     "Who the customers are, where the revenue concentrates, and how profiles differ "
     "across segments. Missing fields produce notices, never crashes; maps are omitted "
     "because uploaded place names cannot be reliably geocoded.",
-    badge="Step 4 of 9",
 )
 
 features = st.session_state.get("customer_features")

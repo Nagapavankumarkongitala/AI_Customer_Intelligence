@@ -30,7 +30,6 @@ page_header(
     "Data Quality & Cleaning",
     "Overall = 0.40 × completeness + 0.40 × validity + 0.20 × uniqueness. "
     "Every cleaning action is recorded in the audit — nothing is dropped silently.",
-    badge="Step 2 of 9",
 )
 
 raw = st.session_state.get("raw_data")

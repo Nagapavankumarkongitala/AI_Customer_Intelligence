@@ -26,7 +26,6 @@ page_header(
     "Upload a transaction file, review the automatic column mapping, correct it if "
     "needed, then continue to Data Quality & Cleaning. "
     "Required fields: customer_id, transaction_date, amount_spent.",
-    badge="Step 1 of 9",
 )
 
 with controls_expander():

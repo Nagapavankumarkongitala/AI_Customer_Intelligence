@@ -73,7 +73,6 @@ def _retention_frame() -> pd.DataFrame | None:
 page_header(
     "Executive Dashboard",
     "Filter-consistent performance, risk, and retention at a glance.",
-    badge="Step 9 of 9",
 )
 st.markdown(
     "Every card below derives from the same Global Slicers. "

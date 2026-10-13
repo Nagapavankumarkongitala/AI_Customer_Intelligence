@@ -50,7 +50,6 @@ page_header(
     "Future inactivity predicted from historical behavior only: predictors use "
     "transactions on or before the cutoff; the label uses activity after it. "
     "Any post-cutoff predictor is a leakage bug — the builder proves otherwise below.",
-    badge="Step 7 of 9",
 )
 
 clean_data = st.session_state.get("clean_data")

@@ -42,7 +42,6 @@ page_header(
     "Customer-level features feed quantile-based RFM and LRFM scoring. "
     "Segments are named from score components and raw values — never from the "
     "combined score alone.",
-    badge="Step 3 of 9",
 )
 
 clean_data = st.session_state.get("clean_data")

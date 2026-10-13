@@ -45,7 +45,6 @@ page_header(
     "Unsupervised segmentation over the customer feature table. Prepare features, "
     "compare models and cluster counts, then name clusters from their profiles — "
     "IDs stay numeric; business names are assigned only after profiling.",
-    badge="Step 5 of 9",
 )
 
 features = st.session_state.get("customer_features")

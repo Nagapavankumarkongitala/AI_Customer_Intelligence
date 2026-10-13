@@ -37,7 +37,6 @@ page_header(
     "Retention Strategies",
     "Decision support, not promises: historical value × modeled churn risk becomes "
     "a ranked, fully reasoned action list. No causal retention impact is claimed.",
-    badge="Step 8 of 9",
 )
 
 scores = st.session_state.get("churn_scores")

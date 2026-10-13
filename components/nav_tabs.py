@@ -7,6 +7,7 @@ order test pins it to the ``pages/`` directory.
 from __future__ import annotations
 
 NAV_PAGES: list[tuple[str, str]] = [
+    ("Dashboard", "pages/09_Executive_Dashboard.py"),
     ("Home", "app.py"),
     ("Upload", "pages/01_Data_Upload_and_Mapping.py"),
     ("Quality", "pages/02_Data_Quality_and_Cleaning.py"),
@@ -16,5 +17,4 @@ NAV_PAGES: list[tuple[str, str]] = [
     ("Compare", "pages/06_Segmentation_Comparison.py"),
     ("Churn", "pages/07_Churn_Prediction.py"),
     ("Retention", "pages/08_Retention_Strategies.py"),
-    ("Dashboard", "pages/09_Executive_Dashboard.py"),
 ]

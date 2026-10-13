@@ -33,10 +33,12 @@ def _call_count(path: Path, name: str) -> int:
 
 
 def test_nav_order_matches_pages_directory() -> None:
-    """Sidebar order follows the numeric page scheme, landing first."""
-    page_paths = [p for _, p in NAV_PAGES[1:]]
-    assert page_paths == [f"pages/{p.name}" for p in PAGES]
-    assert NAV_PAGES[0] == ("Home", "app.py")
+    """The rail leads with the dashboard; every view is listed exactly once."""
+    assert NAV_PAGES[0] == ("Dashboard", "pages/09_Executive_Dashboard.py")
+    assert sorted(p for _, p in NAV_PAGES) == sorted(
+        ["app.py", *[f"pages/{p.name}" for p in PAGES]]
+    )
+    assert len({p for _, p in NAV_PAGES}) == len(NAV_PAGES)
 
 
 def test_nav_targets_exist() -> None:

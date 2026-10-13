@@ -35,7 +35,6 @@ page_header(
     "Fair comparison across statistical separation, stability, interpretability, and "
     "revenue differentiation. Silhouette is comparable only among AI runs sharing a "
     "feature space — the operational pick never comes from one metric alone.",
-    badge="Step 6 of 9",
 )
 
 features = st.session_state.get("customer_features")
