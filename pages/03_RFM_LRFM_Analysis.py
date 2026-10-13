@@ -7,10 +7,9 @@ import streamlit as st
 import yaml
 
 from components.empty_state import chart_section, empty_state
-from components.filters import control_group, controls_expander
 from components.metric_card import Metric, metric_row
 from components.page_header import page_header, section_header
-from components.sidebar import render_sidebar_footer, render_sidebar_nav
+from components.sidebar import render_sidebar_footer, render_sidebar_nav, sidebar_filters
 from components.table import render_table
 from services import state_service
 from services.export_service import to_csv_bytes
@@ -30,7 +29,13 @@ from visualization.rfm_charts import (
     rfm_heatmap,
     segment_distribution_bar,
 )
-from visualization.theme import inject_terminal_css
+from visualization.theme import apply_chart_theme, inject_terminal_css
+
+
+def _compact(fig):
+    """Reflow a factory figure to the compact tab height (idempotent re-theme)."""
+    return apply_chart_theme(fig, compact=True)
+
 
 configure_logging()
 state_service.initialize(st.session_state)
@@ -55,23 +60,23 @@ if clean_data is None:
 cfg = yaml.safe_load(Path("config.yaml").read_text(encoding="utf-8"))
 
 max_txn = pd.to_datetime(clean_data["transaction_date"]).max().date()
-with controls_expander():
-    with control_group("Scoring Config"):
-        quantiles = st.selectbox(
-            "Quantile levels",
-            [3, 4, 5],
-            index=[3, 4, 5].index(cfg["rfm"]["quantiles"]),
-            help="Higher levels give finer segments; 3 is safest for small datasets.",
-        )
-        snapshot = st.date_input(
-            "Snapshot date",
-            value=max_txn + pd.Timedelta(days=cfg["rfm"]["snapshot_offset_days"]),
-            min_value=max_txn,
-            help="Defaults to one day after the last transaction.",
-        )
-        recent_days = st.number_input("Recent window (days)", min_value=1, value=90, step=7)
+with sidebar_filters("Scoring"):
+    quantiles = st.selectbox(
+        "Quantile levels",
+        [3, 4, 5],
+        index=[3, 4, 5].index(cfg["rfm"]["quantiles"]),
+        help="Higher levels give finer segments; 3 is safest for small datasets.",
+    )
+    snapshot = st.date_input(
+        "Snapshot date",
+        value=max_txn + pd.Timedelta(days=cfg["rfm"]["snapshot_offset_days"]),
+        min_value=max_txn,
+        help="Defaults to one day after the last transaction.",
+    )
+    recent_days = st.number_input("Recent window (days)", min_value=1, value=90, step=7)
+    build_clicked = st.button("Build features & score", type="primary")
 
-if st.button("Build features & score", type="primary"):
+if build_clicked:
     try:
         with st.spinner("Building customer features…"):
             result = compute_customer_features(
@@ -130,38 +135,44 @@ for tab, key in ((tab_rfm, "rfm_results"), (tab_lrfm, "lrfm_results")):
     with tab:
         enriched = features.merge(scored, on="customer_id", suffixes=("", "_seg"))
         profile = segment_profile(enriched, monetary_col="monetary_value")
-        seg_l, seg_r = st.columns([1, 1])
-        with seg_l:
-            with chart_section("Customers per segment"):
+        dist_tab, heat_tab, rel_tab = st.tabs(["Distribution", "Heatmap", "Relationships"])
+        with dist_tab:
+            seg_l, seg_r = st.columns([1, 1])
+            with seg_l:
+                with chart_section("Customers per segment"):
+                    st.plotly_chart(
+                        _compact(segment_distribution_bar(profile)),
+                        width="stretch",
+                        key=f"{key}_seg_dist",
+                    )
+            with seg_r:
+                with chart_section("Revenue per segment"):
+                    st.plotly_chart(
+                        _compact(revenue_by_segment_bar(profile)),
+                        width="stretch",
+                        key=f"{key}_revenue",
+                    )
+        with heat_tab:
+            with chart_section("Customer counts by R × F score"):
                 st.plotly_chart(
-                    segment_distribution_bar(profile),
-                    width="stretch",
-                    key=f"{key}_seg_dist",
+                    _compact(rfm_heatmap(scored)), width="stretch", key=f"{key}_heatmap"
                 )
-        with seg_r:
-            with chart_section("Revenue per segment"):
-                st.plotly_chart(
-                    revenue_by_segment_bar(profile),
-                    width="stretch",
-                    key=f"{key}_revenue",
-                )
-        with chart_section("Customer counts by R × F score"):
-            st.plotly_chart(rfm_heatmap(scored), width="stretch", key=f"{key}_heatmap")
-        scatter_l, scatter_r = st.columns([1, 1])
-        with scatter_l:
-            with chart_section("Recency vs frequency"):
-                st.plotly_chart(
-                    recency_frequency_scatter(enriched),
-                    width="stretch",
-                    key=f"{key}_rf",
-                )
-        with scatter_r:
-            with chart_section("Frequency vs monetary value"):
-                st.plotly_chart(
-                    frequency_monetary_scatter(enriched),
-                    width="stretch",
-                    key=f"{key}_fm",
-                )
+        with rel_tab:
+            scatter_l, scatter_r = st.columns([1, 1])
+            with scatter_l:
+                with chart_section("Recency vs frequency"):
+                    st.plotly_chart(
+                        _compact(recency_frequency_scatter(enriched)),
+                        width="stretch",
+                        key=f"{key}_rf",
+                    )
+            with scatter_r:
+                with chart_section("Frequency vs monetary value"):
+                    st.plotly_chart(
+                        _compact(frequency_monetary_scatter(enriched)),
+                        width="stretch",
+                        key=f"{key}_fm",
+                    )
 
         with st.expander("Segment profile", expanded=False):
             render_table(profile, money_cols=("revenue",))
@@ -180,19 +191,23 @@ for tab, key in ((tab_rfm, "rfm_results"), (tab_lrfm, "lrfm_results")):
                 f"in '{choice}'."
             )
 
-        st.download_button(
-            f"Download {key} (CSV)",
-            data=to_csv_bytes(scored),
-            file_name=f"{key}.csv",
-            mime="text/csv",
-            key=f"dl_{key}",
-        )
-
-st.download_button(
-    "Download customer features (CSV)",
-    data=to_csv_bytes(features),
-    file_name="customer_features.csv",
-    mime="text/csv",
-)
+with sidebar_filters("Exports"):
+    for tab_key, tab_label in (("rfm_results", "RFM"), ("lrfm_results", "LRFM")):
+        scored_state = st.session_state.get(tab_key)
+        if scored_state is not None:
+            st.download_button(
+                f"Download {tab_label} (CSV)",
+                data=to_csv_bytes(scored_state),
+                file_name=f"{tab_key}.csv",
+                mime="text/csv",
+                key=f"dl_{tab_key}",
+            )
+    st.download_button(
+        "Download customer features (CSV)",
+        data=to_csv_bytes(features),
+        file_name="customer_features.csv",
+        mime="text/csv",
+        key="dl_features",
+    )
 
 render_sidebar_footer()

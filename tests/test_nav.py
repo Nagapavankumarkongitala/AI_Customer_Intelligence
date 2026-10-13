@@ -16,6 +16,7 @@ _FOOTER_CALL = "render_sidebar_footer"
 #: decision, not a refactor accident — update deliberately.
 SIDEBAR_FILTER_VIEWS = {
     "app.py",
+    "pages/03_RFM_LRFM_Analysis.py",
     "pages/04_Demographic_Profiling.py",
     "pages/06_Segmentation_Comparison.py",
     "pages/08_Retention_Strategies.py",

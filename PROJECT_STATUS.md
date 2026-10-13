@@ -106,3 +106,5 @@ ormalize_dictionary_rows renders legacy caches as field/detail pairs instead of 
 - Startup order (this change): theme CSS and page config now apply before the slow default-dataset bootstrap (with a loading spinner), so first paint is themed with the auto-nav hidden instead of blank. streamlit>=1.65 pinned (verified APIs: persist_state, width, page_link).\
 \
 - Auto-nav suppression (this change): showSidebarNavigation=false removes the auto page list server-side, so no unstyled sidebar can flash during loads on any version; the redundant CSS hide rule is deleted (test now pins the config).\
+\
+- RFM single-screen (this change): page 03 scoring config + exports moved to rail sidebar sections; RFM/LRFM charts grouped into Distribution/Heatmap/Relationships inner tabs; new compact chart preset (300px, tight margins/type) applied to all 10 figures. Verified live-shape (10 figs at 300px, 3 exports).\

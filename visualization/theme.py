@@ -359,18 +359,26 @@ def adopt_colorway(fig: Any, mode: str | None = None) -> Any:
 def apply_chart_theme(
     fig: Any,
     title: str | None = None,
-    height: int = CHART_HEIGHT,
+    height: int | None = None,
     show_legend: bool | None = None,
+    compact: bool = False,
 ) -> Any:
     """Apply the shared chart theme. Every figure factory ends here.
 
     ``show_legend`` is left alone when ``None`` so single-series charts keep
     Plotly's "no legend needed" behaviour instead of rendering a one-item legend.
     A figure title is re-anchored top-left, matching the page header hierarchy.
+    ``compact`` selects the dense-tab preset (300px, tighter margins and type).
     """
     resolved = tokens.active_mode()
     ink = tokens.palette(resolved)
     dark = resolved == tokens.MODE_DARK
+    if height is None:
+        height = tokens.COMPACT_HEIGHT if compact else CHART_HEIGHT
+    margin = (
+        {"l": 44, "r": 16, "t": 52, "b": 36} if compact else {"l": 52, "r": 28, "t": 64, "b": 48}
+    )
+    title_size = 13 if compact else 15
 
     # Adopt order matters: bare-px defaults become active-colourway values first,
     # then (off the default mode only) the inactive palette is re-mapped.
@@ -385,7 +393,7 @@ def apply_chart_theme(
         height=height,
         colorway=tokens.colorway(resolved),
         font={"family": tokens.FONT_STACK, "size": 12, "color": ink["muted"]},
-        margin={"l": 52, "r": 28, "t": 64, "b": 48},
+        margin=margin,
         hoverlabel={
             "bgcolor": ink["text"] if not dark else ink["surface_alt"],
             "font_color": ink["surface"] if not dark else ink["text"],
@@ -403,7 +411,7 @@ def apply_chart_theme(
                 "xanchor": "left",
                 "y": 0.98,
                 "yanchor": "top",
-                "font": {"size": 15, "color": ink["text"]},
+                "font": {"size": title_size, "color": ink["text"]},
             }
         )
 

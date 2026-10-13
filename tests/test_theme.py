@@ -156,6 +156,21 @@ def test_empty_figure_is_a_titled_placeholder() -> None:
     assert theme.empty_figure("T", "Custom.").layout.annotations[0].text == "Custom."
 
 
+def test_compact_preset_is_dense_but_complete() -> None:
+    """Compact charts render at 300px with tighter margins and smaller titles."""
+    fig = theme.apply_chart_theme(_sample(), title="Titled", compact=True)
+    assert fig.layout.height == tokens.COMPACT_HEIGHT == 300
+    assert fig.layout.margin.t < 64 and fig.layout.margin.b < 48
+    assert fig.layout.title.font.size == 13
+
+    explicit = theme.apply_chart_theme(_sample(), height=500, compact=True)
+    assert explicit.layout.height == 500
+
+    regular = theme.apply_chart_theme(_sample(), title="Titled")
+    assert regular.layout.height == theme.CHART_HEIGHT
+    assert regular.layout.title.font.size == 15
+
+
 def test_adopt_colorway_removes_leaked_defaults() -> None:
     """A factory that passes no colour still renders in the design system.
 
