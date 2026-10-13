@@ -137,6 +137,12 @@ SPACING: Final[dict[str, str]] = {
 
 RADIUS: Final[dict[str, str]] = {"sm": "8px", "md": "12px", "lg": "16px", "pill": "999px"}
 
+#: Sidebar rail width. Streamlit pins the rail with an inline ``width: 300px``
+#: (which beats every stylesheet rule), so this ships ``!important`` like the
+#: standard sidebar-narrowing recipe. Trade-off: the native drag-resize handle
+#: can no longer stretch the rail at runtime.
+SIDEBAR_WIDTH: Final = "15rem"
+
 #: Content cap for the page canvas; wide enough for a 5-card KPI row.
 CONTENT_MAX_WIDTH: Final = "110rem"
 

@@ -221,6 +221,14 @@ def test_sidebar_visible_and_auto_nav_hidden() -> None:
         ), "stylesheet hides the sidebar"
 
 
+def test_sidebar_width_follows_token() -> None:
+    """The rail width ships in both sheets from the single token value."""
+    for sheet in (LIGHT_CSS, DARK_CSS):
+        assert tokens.SIDEBAR_WIDTH in sheet
+        assert 'body [data-testid="stSidebar"]' in sheet
+    assert tokens.SIDEBAR_WIDTH == "15rem"
+
+
 def test_legacy_names_remain_importable() -> None:
     """Migration shims keep the previous theme's public names resolvable."""
     assert TERMINAL_CSS == DARK_CSS

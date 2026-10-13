@@ -93,6 +93,13 @@ html, body { touch-action: manipulation; }
 }
 h1, h2, h3 { color: $text; letter-spacing: -0.02em; }
 a { color: $primary; }
+/* Narrower rail: more room for content. The width must be !important to
+   beat Streamlit's inline width on the section (which also disables the
+   native drag-resize handle — accepted trade-off). */
+body [data-testid="stSidebar"] {
+    width: $sidebar_width !important;
+    min-width: $sidebar_width;
+}
 /* Streamlit's auto-generated page list stays off: the sidebar renders NAV_PAGES. */
 [data-testid="stSidebarNav"] {
     display: none;
@@ -220,6 +227,7 @@ def palette_css_values(mode: str) -> dict[str, str]:
             "scheme": mode,
             "radius": tokens.RADIUS["lg"],
             "content_width": tokens.CONTENT_MAX_WIDTH,
+            "sidebar_width": tokens.SIDEBAR_WIDTH,
         }
     )
     return values
