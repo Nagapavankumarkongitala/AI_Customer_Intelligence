@@ -104,3 +104,5 @@ ormalize_dictionary_rows renders legacy caches as field/detail pairs instead of 
 - Dashboard landing (this change): executive dashboard moved into pp.py, pages/09_* deleted; rail is Dashboard + 8 workflow pages. plural_geo_level public for shared titles. Verified by full landing run (11 figures, 9 links).\
 \
 - Startup order (this change): theme CSS and page config now apply before the slow default-dataset bootstrap (with a loading spinner), so first paint is themed with the auto-nav hidden instead of blank. streamlit>=1.65 pinned (verified APIs: persist_state, width, page_link).\
+\
+- Auto-nav suppression (this change): showSidebarNavigation=false removes the auto page list server-side, so no unstyled sidebar can flash during loads on any version; the redundant CSS hide rule is deleted (test now pins the config).\

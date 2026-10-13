@@ -14,4 +14,4 @@ headless = true
 maxUploadSize = 500
 
 [client]
-showSidebarNavigation = true
+showSidebarNavigation = false

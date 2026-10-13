@@ -211,11 +211,15 @@ def test_sheets_carry_no_colour_outside_tokens() -> None:
 
 
 def test_sidebar_visible_and_auto_nav_hidden() -> None:
-    """The sidebar renders; only Streamlit's auto page list stays hidden."""
+    """The rail is server-suppressed for auto-nav and never CSS-hidden itself."""
     import re
+    import tomllib
+
+    with open(".streamlit/config.toml", "rb") as handle:
+        client = tomllib.load(handle)["client"]
+    assert client["showSidebarNavigation"] is False
 
     for sheet in (LIGHT_CSS, DARK_CSS):
-        assert '[data-testid="stSidebarNav"]' in sheet
         assert (
             re.search(r'\[data-testid="stSidebar"\][^{]*\{[^}]*display:\s*none', sheet) is None
         ), "stylesheet hides the sidebar"

@@ -100,10 +100,6 @@ body [data-testid="stSidebar"] {
     width: $sidebar_width !important;
     min-width: $sidebar_width;
 }
-/* Streamlit's auto-generated page list stays off: the sidebar renders NAV_PAGES. */
-[data-testid="stSidebarNav"] {
-    display: none;
-}
 /* Surface cards */
 .dashboard-card {
     background-color: $surface;
