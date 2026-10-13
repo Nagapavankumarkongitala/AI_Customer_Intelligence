@@ -87,3 +87,5 @@ fresh outcome windows as behavior drifts.
 - Follow-ups (this change): SHAP fixed for shap 0.53 — linear baselines route to LinearExplainer (coef_ duck-typed), 3-D TreeExplainer output sliced to the positive class, scoring falls back to median drivers past the 500-row SHAP cap (all three were latent crashes on the previous suite). ender_nav_tabs shim removed: app + all 9 pages call ender_sidebar directly.\
 \
 - Table hardening (this change): jinja2 added to requirements (was transitive-only) and style_table falls back to the formatted frame when the Styler is unavailable — values stay formatted, only cell painting degrades. Fixes the production crash on interpreters without jinja2.\
+\
+- Slicer move (this change): view slicers live in the rail (ender_sidebar_nav head, sidebar_filters sections, ender_sidebar_footer foot). Moved: page 09 Global Slicers + geography level, page 08 View Filters, page 06 comparison pair, page 04 profiling slicers. Compute-driving config stays in-page. Verified by with-data rail render (6 slicers, 11 figures, footer).\

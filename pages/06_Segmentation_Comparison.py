@@ -14,11 +14,11 @@ from analytics.segmentation_comparison import (
     value_separation,
 )
 from components.empty_state import chart_section, empty_state
-from components.filters import control_group, controls_expander
+from components.filters import controls_expander
 from components.insight_box import insight_box
 from components.metric_card import Metric, metric_row
 from components.page_header import page_header
-from components.sidebar import render_sidebar
+from components.sidebar import render_sidebar_footer, render_sidebar_nav, sidebar_filters
 from services import state_service
 from services.export_service import to_csv_bytes, to_json_bytes
 from utils.logging_config import configure_logging
@@ -28,7 +28,7 @@ from visualization.theme import inject_terminal_css
 configure_logging()
 state_service.initialize(st.session_state)
 inject_terminal_css()
-render_sidebar("pages/06_Segmentation_Comparison.py")
+render_sidebar_nav("pages/06_Segmentation_Comparison.py")
 
 page_header(
     "Segmentation Comparison",
@@ -169,10 +169,9 @@ for i in range(0, len(metrics), 2):
 # --- Pairwise agreement: traditional vs selected AI ---------------------------
 ai_names = [r["model"] for r in rows if r["kind"] == "AI"]
 traditional = [r["model"] for r in rows if r["kind"] == "Traditional"]
-with controls_expander("Comparison Controls"):
-    with control_group("Comparison Pair"):
-        ref = st.selectbox("Traditional reference", traditional)
-        target = st.selectbox("AI model", ai_names)
+with sidebar_filters("Comparison Pair"):
+    ref = st.selectbox("Traditional reference", traditional)
+    target = st.selectbox("AI model", ai_names)
 ct = crosstab_counts(labelings[ref], labelings[target])
 ari = agreement_ari(labelings[ref], labelings[target])
 agree_l, agree_r = st.columns([1, 2])
@@ -236,3 +235,5 @@ st.download_button(
     file_name="segmentation_recommendation.json",
     mime="application/json",
 )
+
+render_sidebar_footer()

@@ -10,7 +10,7 @@ from components.empty_state import chart_section, empty_state
 from components.filters import control_group, controls_expander
 from components.metric_card import Metric, metric_row
 from components.page_header import page_header, section_header
-from components.sidebar import render_sidebar
+from components.sidebar import render_sidebar_footer, render_sidebar_nav
 from components.table import render_table
 from services import state_service
 from services.export_service import to_csv_bytes
@@ -35,7 +35,7 @@ from visualization.theme import inject_terminal_css
 configure_logging()
 state_service.initialize(st.session_state)
 inject_terminal_css()
-render_sidebar("pages/03_RFM_LRFM_Analysis.py")
+render_sidebar_nav("pages/03_RFM_LRFM_Analysis.py")
 
 page_header(
     "RFM & LRFM Analysis",
@@ -195,3 +195,5 @@ st.download_button(
     file_name="customer_features.csv",
     mime="text/csv",
 )
+
+render_sidebar_footer()

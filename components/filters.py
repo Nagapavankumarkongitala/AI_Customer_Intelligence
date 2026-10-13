@@ -1,8 +1,8 @@
-"""Shared page controls: grouped controls inside a collapsed expander.
+"""Shared page controls: compute-driving configuration in collapsed expanders.
 
-Page-specific configuration lives here, next to the analysis it drives. The
-persistent sidebar (``components.sidebar``) holds navigation, appearance, and
-data status only. Group related controls with control_group().
+View slicers live in the sidebar (``components.sidebar.sidebar_filters``);
+everything here drives computation and stays in-page next to the analysis,
+grouped with control_group().
 """
 
 from __future__ import annotations

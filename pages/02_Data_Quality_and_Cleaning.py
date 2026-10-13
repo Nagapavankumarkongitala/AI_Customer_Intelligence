@@ -10,7 +10,7 @@ from components.empty_state import empty_state
 from components.filters import control_group, controls_expander
 from components.metric_card import Metric, metric_row
 from components.page_header import page_header, section_header
-from components.sidebar import render_sidebar
+from components.sidebar import render_sidebar_footer, render_sidebar_nav
 from services import state_service
 from services.cleaning_service import CleaningConfig, clean
 from services.data_dictionary_service import build_dictionary
@@ -24,7 +24,7 @@ from visualization.theme import inject_terminal_css
 configure_logging()
 state_service.initialize(st.session_state)
 inject_terminal_css()
-render_sidebar("pages/02_Data_Quality_and_Cleaning.py")
+render_sidebar_nav("pages/02_Data_Quality_and_Cleaning.py")
 
 page_header(
     "Data Quality & Cleaning",
@@ -210,3 +210,5 @@ if clean_data is not None:
             file_name="cleaning_audit.json",
             mime="application/json",
         )
+
+render_sidebar_footer()

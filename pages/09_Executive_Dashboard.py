@@ -6,17 +6,12 @@ import streamlit as st
 from analytics.demographics import GEO_LEVELS
 from components.empty_state import chart_section, empty_state
 from components.export_buttons import csv_download_button
-from components.filters import (
-    control_group,
-    controls_expander,
-    date_range_filter,
-    multiselect_filter,
-)
+from components.filters import date_range_filter, multiselect_filter
 from components.insight_box import insight_box
 from components.metric_card import Metric, metric_row
 from components.page_header import page_header, section_header
 from components.panels import download_panel
-from components.sidebar import render_sidebar
+from components.sidebar import render_sidebar_footer, render_sidebar_nav, sidebar_filters
 from components.table import render_table
 from services import state_service
 from services.dashboard_service import (
@@ -49,7 +44,7 @@ from visualization.theme import inject_terminal_css
 configure_logging()
 state_service.initialize(st.session_state)
 inject_terminal_css()
-render_sidebar("pages/09_Executive_Dashboard.py")
+render_sidebar_nav("pages/09_Executive_Dashboard.py")
 
 
 def _fallback_features(txns: pd.DataFrame) -> pd.DataFrame:
@@ -103,29 +98,30 @@ master = build_master(
     retention=_retention_frame(),
 )
 
-with controls_expander("Global Slicers"):
-    with control_group("Date & Geography"):
-        date_start, date_end = date_range_filter(txns["_txn_date"])
-        filters: dict = {"date_start": date_start, "date_end": date_end}
-        for level in ("country", "region", "state", "city", "gender"):
-            opts = (
-                sorted(txns[level].dropna().unique())
-                if level in txns.columns
-                else sorted(master[level].dropna().unique()) if level in master.columns else []
-            )
-            filters[level] = multiselect_filter(
-                level.capitalize(), [str(o) for o in opts], key=f"f_{level}"
-            )
-        for key, column in (
-            ("rfm_segment", "rfm_segment"),
-            ("ai_segment", "ai_segment"),
-            ("risk_band", "risk_band"),
-            ("value_tier", "customer_value_tier"),
-        ):
-            opts = sorted(master[column].dropna().unique()) if column in master.columns else []
-            filters[key] = multiselect_filter(
-                key.replace("_", " ").title(), [str(o) for o in opts], key=f"f_{key}"
-            )
+with sidebar_filters():
+    date_start, date_end = date_range_filter(txns["_txn_date"])
+    filters: dict = {"date_start": date_start, "date_end": date_end}
+    for level in ("country", "region", "state", "city", "gender"):
+        opts = (
+            sorted(txns[level].dropna().unique())
+            if level in txns.columns
+            else sorted(master[level].dropna().unique()) if level in master.columns else []
+        )
+        filters[level] = multiselect_filter(
+            level.capitalize(), [str(o) for o in opts], key=f"f_{level}"
+        )
+    for key, column in (
+        ("rfm_segment", "rfm_segment"),
+        ("ai_segment", "ai_segment"),
+        ("risk_band", "risk_band"),
+        ("value_tier", "customer_value_tier"),
+    ):
+        opts = sorted(master[column].dropna().unique()) if column in master.columns else []
+        filters[key] = multiselect_filter(
+            key.replace("_", " ").title(), [str(o) for o in opts], key=f"f_{key}"
+        )
+    geo_levels = [lvl for lvl in GEO_LEVELS if lvl in txns.columns]
+    level = st.selectbox("Geography level", geo_levels) if geo_levels else None
 
 txns_f, master_f = apply_filters(txns, master, filters)
 if master_f.empty:
@@ -277,10 +273,7 @@ else:
     )
 
 section_header("Demographics & geography", "Who and where the filtered base is.")
-geo_levels = [lvl for lvl in GEO_LEVELS if lvl in txns_f.columns]
 if geo_levels:
-    with controls_expander("Geography View"):
-        level = st.selectbox("Geography level", geo_levels)
     geo = (
         txns_f[level]
         .fillna("Unknown")
@@ -345,3 +338,5 @@ else:
     masked["customer_id"] = masked["customer_id"].map(mask_customer_id)
     with st.expander("Customer overview, IDs masked (top 200)", expanded=False):
         st.dataframe(masked.head(200), use_container_width=True)
+
+render_sidebar_footer()

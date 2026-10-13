@@ -1,16 +1,23 @@
-"""Persistent left sidebar: navigation, appearance, and data status.
+"""Persistent left sidebar: navigation, page slicers, appearance, data status.
 
 The single nav source for the app — page order and labels come from
 ``components.nav_tabs.NAV_PAGES`` so the sidebar can never disagree with page
-routing. ``render_sidebar`` applies the stored theme first (so the toggle takes
-effect on the rerun it triggers), then renders nav links, the appearance radio,
-and a compact data-status block. Pure builders stay testable without a session.
+routing. Views compose the rail in order:
+
+1. ``render_sidebar_nav`` first (theme, title, page links, appearance toggle),
+2. ``sidebar_filters`` sections for the page's view slicers,
+3. ``render_sidebar_footer`` last (data status).
+
+Compute-driving configuration stays in-page next to the analysis it drives;
+only view slicers move to the rail. Pure builders stay testable without a
+session.
 """
 
 from __future__ import annotations
 
 import html
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
+from contextlib import contextmanager
 
 import pandas as pd
 import streamlit as st
@@ -53,8 +60,11 @@ def collect_status(state: Mapping) -> dict[str, str]:
     }
 
 
-def render_sidebar(active: str) -> None:
-    """Render the full sidebar. ``active`` is kept for call-site stability."""
+def render_sidebar_nav(active: str) -> None:
+    """Rail head: stored theme, title, page links, appearance toggle.
+
+    ``active`` is kept for call-site stability; link highlighting is automatic.
+    """
     ensure_theme()
     with st.sidebar:
         st.markdown("**AI Customer Intelligence**")
@@ -63,5 +73,18 @@ def render_sidebar(active: str) -> None:
         st.divider()
         theme_toggle()
         st.caption("Dark is the heritage console skin; native controls stay light.")
+
+
+@contextmanager
+def sidebar_filters(title: str = "Filters", expanded: bool = False) -> Iterator[None]:
+    """Collapsed rail section holding a page's view slicers."""
+    with st.sidebar:
+        with st.expander(title, expanded=expanded):
+            yield
+
+
+def render_sidebar_footer() -> None:
+    """Rail foot: data-status block. Called last so slicers sit above it."""
+    with st.sidebar:
         st.divider()
         st.markdown(sidebar_status_html(collect_status(st.session_state)), unsafe_allow_html=True)

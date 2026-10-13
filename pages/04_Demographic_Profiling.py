@@ -10,10 +10,9 @@ from analytics.demographics import (
 )
 from analytics.statistical_tests import run_segment_tests
 from components.empty_state import chart_section, empty_state
-from components.filters import control_group, controls_expander
 from components.metric_card import Metric, metric_row
 from components.page_header import page_header, section_header
-from components.sidebar import render_sidebar
+from components.sidebar import render_sidebar_footer, render_sidebar_nav, sidebar_filters
 from services import state_service
 from services.export_service import to_csv_bytes
 from utils import formatting
@@ -33,7 +32,7 @@ from visualization.theme import inject_terminal_css
 configure_logging()
 state_service.initialize(st.session_state)
 inject_terminal_css()
-render_sidebar("pages/04_Demographic_Profiling.py")
+render_sidebar_nav("pages/04_Demographic_Profiling.py")
 
 page_header(
     "Demographic Profiling",
@@ -49,17 +48,16 @@ if features is None:
     st.stop()
 
 rfm = st.session_state.get("rfm_results")
-with controls_expander("Profiling Controls"):
-    with control_group("Profiling Slicers"):
-        segment_source = st.selectbox(
-            "Segment labels for per-segment views",
-            [s for s in ("RFM", "LRFM") if st.session_state.get(f"{s.lower()}_results") is not None]
-            or ["(none available)"],
-        )
-        bands_spec = st.text_input(
-            "Age bands (lo-hi pairs, last may be open like 65+)",
-            value="0-17,18-24,25-34,35-49,50-64,65+",
-        )
+with sidebar_filters("Profiling Slicers"):
+    segment_source = st.selectbox(
+        "Segment labels for per-segment views",
+        [s for s in ("RFM", "LRFM") if st.session_state.get(f"{s.lower()}_results") is not None]
+        or ["(none available)"],
+    )
+    bands_spec = st.text_input(
+        "Age bands (lo-hi pairs, last may be open like 65+)",
+        value="0-17,18-24,25-34,35-49,50-64,65+",
+    )
 
 segments = None
 if segment_source in ("RFM", "LRFM"):
@@ -217,3 +215,5 @@ with st.expander("Downloads", expanded=False):
             mime="text/csv",
             key=f"dl_demo_{name}",
         )
+
+render_sidebar_footer()

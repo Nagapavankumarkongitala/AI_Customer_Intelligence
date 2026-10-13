@@ -4,7 +4,7 @@ import streamlit as st
 
 from components.metric_card import Metric, metric_row
 from components.page_header import page_header, section_header
-from components.sidebar import render_sidebar
+from components.sidebar import render_sidebar_footer, render_sidebar_nav
 from services import state_service
 from utils.config import load_config
 from utils.exceptions import ConfigurationError
@@ -31,7 +31,7 @@ except Exception as exc:  # missing cache or corrupt artifact: app stays usable
 
 st.set_page_config(page_title="AI Customer Intelligence", layout="wide")
 inject_terminal_css()
-render_sidebar("app.py")
+render_sidebar_nav("app.py")
 
 page_header(
     "AI Customer Intelligence",
@@ -152,3 +152,5 @@ metric_row(
         for label, key in stages
     ]
 )
+
+render_sidebar_footer()

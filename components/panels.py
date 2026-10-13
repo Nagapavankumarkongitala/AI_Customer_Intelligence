@@ -1,7 +1,8 @@
 """Panels: the three framed blocks pages compose views from.
 
-``filter_panel`` is the "Controls & Filters" expander (re-exported from
-``components.filters`` so panels are the one import a page needs).
+``filter_panel`` is the "Controls & Filters" expander for compute-driving
+configuration (re-exported from ``components.filters`` so panels are the one
+import a page needs). View slicers belong in ``sidebar_filters`` instead.
 ``status_panel`` renders pipeline-status facts. ``download_panel`` groups the
 CSV/Excel/JSON exports for one artefact. All three are thin compositions over
 existing, tested primitives — no new download or filter logic lives here.

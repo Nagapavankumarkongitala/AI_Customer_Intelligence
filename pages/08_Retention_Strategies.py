@@ -6,7 +6,7 @@ from components.empty_state import chart_section, empty_state
 from components.filters import controls_expander, multiselect_filter
 from components.metric_card import Metric, metric_row
 from components.page_header import page_header, section_header
-from components.sidebar import render_sidebar
+from components.sidebar import render_sidebar_footer, render_sidebar_nav, sidebar_filters
 from components.table import render_table
 from retention_engine.offer_recommender import describe_offer
 from services import state_service
@@ -31,7 +31,7 @@ from visualization.theme import inject_terminal_css
 configure_logging()
 state_service.initialize(st.session_state)
 inject_terminal_css()
-render_sidebar("pages/08_Retention_Strategies.py")
+render_sidebar_nav("pages/08_Retention_Strategies.py")
 
 page_header(
     "Retention Strategies",
@@ -154,7 +154,7 @@ with strat_r:
     with chart_section("Priority score distribution"):
         st.plotly_chart(priority_histogram(table), use_container_width=True)
 
-with controls_expander("View Filters"):
+with sidebar_filters("View Filters"):
     regions = sorted(table["region"].dropna().unique()) if "region" in table.columns else []
     region = multiselect_filter("Region", [str(r) for r in regions], key="ret_region")
     segs = sorted(table["segment"].dropna().unique()) if "segment" in table.columns else []
@@ -205,3 +205,5 @@ st.download_button(
     file_name="retention_actions.csv",
     mime="text/csv",
 )
+
+render_sidebar_footer()
