@@ -143,6 +143,20 @@ def test_segment_and_action_maps_are_all_or_nothing() -> None:
     assert tokens.action_map(["Monitor"]) == {"Monitor": tokens.color("muted_soft")}
     assert tokens.action_map(["Monitor", "Nope"]) is None
     assert tokens.action_map([]) is None
+    assert tokens.segment_map(5) is None
+    assert tokens.action_map("Monitor") == {"Monitor": tokens.color("muted_soft")}
+
+
+def test_readable_ink_and_bad_hex() -> None:
+    """Ink picks the legible side; malformed hex raises instead of guessing."""
+    assert tokens.readable_ink("#FFFFFF") == tokens.LIGHT["text"]
+    assert tokens.readable_ink("#000000") == tokens.LIGHT["surface"]
+    for bad in ("zzz", "#FFF", "#GGGGGG"):
+        try:
+            tokens.contrast_ratio(bad, "#FFFFFF")
+        except ValueError:
+            continue
+        raise AssertionError(f"{bad} did not raise")
 
 
 def test_risk_colors_cover_configured_bands() -> None:

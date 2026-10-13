@@ -81,3 +81,5 @@ fresh outcome windows as behavior drifts.
 - Phase 5 (this change): visualization refactor — 	okens.segment_map/action_map (all-or-nothing stable hues), segment/action maps wired into RFM/segmentation/retention factories (positional/magnitude coloring fixed), 	heme.empty_figure titled placeholders on all bar/scatter/line factories, missing axis labels filled. No signature changes; module names kept.\
 \
 - Phase 6 (this change): remaining 8 pages + landing migrated to the component library (page/section headers with step badges, metric rows, chart sections, conditional tables, empty-state guards, factual insight boxes). Filter/service/gating logic untouched; kpi_row retained for compatibility. Verified by empty-session runs of all 9 views plus targeted suites.\
+\
+- Phase 7 hardening (this change): full suite + coverage (84% total; touched viz/components/utils at 94-100%), Streamlit boot on :8501 with health 200 and zero boot tracebacks, ruff/black clean. Two failures are pre-existing and unrelated (shap 0.53 TreeExplainer rejects LogisticRegression; reproduced on the pristine tree).\
