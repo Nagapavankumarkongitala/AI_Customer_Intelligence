@@ -7,7 +7,6 @@ is assertable without a Streamlit session.
 from __future__ import annotations
 
 import pandas as pd
-from pandas.io.formats.style import Styler
 
 from components.empty_state import chart_section_html, empty_state_html
 from components.insight_box import insight_box_html
@@ -187,6 +186,8 @@ def test_format_frame_and_risk_cells() -> None:
     assert _risk_cell_style("whatever") == ""
 
     styler = style_table(df, risk_cols=("risk_band",), money_cols=("value",))
+    from pandas.io.formats.style import Styler
+
     assert isinstance(styler, Styler)
 
 
@@ -199,6 +200,20 @@ def test_style_table_falls_back_without_jinja2(monkeypatch) -> None:
     fallback = table_module.style_table(df, risk_cols=("risk_band",), money_cols=("value",))
     assert isinstance(fallback, pd.DataFrame)
     assert fallback["value"].tolist()[0].startswith("₹")
+
+
+def test_jinja2_usability_checks_version_not_presence(monkeypatch) -> None:
+    """A present-but-old jinja2 (e.g. 3.1.4) still takes the fallback path."""
+    import components.table as table_module
+
+    assert table_module._jinja2_usable() is True
+
+    import importlib.metadata
+
+    monkeypatch.setattr(importlib.metadata, "version", lambda name: "3.1.4")
+    assert table_module._jinja2_usable() is False
+    monkeypatch.setattr(importlib.metadata, "version", lambda name: "3.1.5")
+    assert table_module._jinja2_usable() is True
 
 
 def test_builders_emit_active_mode_ink() -> None:

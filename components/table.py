@@ -10,19 +10,43 @@ cell painting degrades — values stay formatted either way.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import pandas as pd
 import streamlit as st
-from pandas.io.formats.style import Styler
 
 from utils import formatting
 from visualization import tokens
 
+if TYPE_CHECKING:  # never imported at runtime: pandas hard-requires jinja2 here
+    from pandas.io.formats.style import Styler
+
 try:
     import jinja2  # noqa: F401
 
-    _HAS_JINJA2 = True
+    _JINJA2_IMPORTED = True
 except ImportError:
-    _HAS_JINJA2 = False
+    _JINJA2_IMPORTED = False
+
+
+def _jinja2_usable() -> bool:
+    """True when the Styler backend is usable: jinja2>=3.1.5 per pandas.
+
+    Presence alone is not enough — older installs pass the import and then
+    fail at first Styler access, which is exactly the crash this guards.
+    """
+    if not _JINJA2_IMPORTED:
+        return False
+    try:
+        from importlib.metadata import version
+
+        major, minor, patch, *_ = (int(part) for part in version("jinja2").split("."))
+    except (ImportError, ValueError):
+        return False
+    return (major, minor, patch) >= (3, 1, 5)
+
+
+_HAS_JINJA2 = _jinja2_usable()
 
 
 def format_frame(
