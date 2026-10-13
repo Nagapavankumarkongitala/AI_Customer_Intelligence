@@ -103,7 +103,7 @@ if default_manifest:
                 .rename_axis("segment")
                 .reset_index(name="customers")
             )
-            st.dataframe(mix, use_container_width=True)
+            st.dataframe(mix, width="stretch")
     with st.expander("Churn test metrics (default run)", expanded=False):
         meta = st.session_state.get("churn_model_metadata") or {}
         if meta.get("metrics"):

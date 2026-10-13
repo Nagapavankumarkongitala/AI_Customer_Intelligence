@@ -187,21 +187,21 @@ trends = trend_tables(txns_f, master_f)
 trend_left, trend_right = st.columns(2)
 with trend_left:
     with chart_section("Revenue trend"):
-        st.plotly_chart(revenue_trend_fig(trends["revenue"]), use_container_width=True)
+        st.plotly_chart(revenue_trend_fig(trends["revenue"]), width="stretch")
 with trend_right:
     with chart_section("Customer activity trend"):
-        st.plotly_chart(activity_trend_fig(trends["activity"]), use_container_width=True)
+        st.plotly_chart(activity_trend_fig(trends["activity"]), width="stretch")
 mix_left, mix_right = st.columns(2)
 with mix_left:
     with chart_section("New vs returning customers"):
-        st.plotly_chart(new_returning_fig(trends["cohort"]), use_container_width=True)
+        st.plotly_chart(new_returning_fig(trends["cohort"]), width="stretch")
 portfolio = (
     segment_portfolio(master_f, "rfm_segment") if "rfm_segment" in master_f.columns else None
 )
 with mix_right:
     with chart_section("Customer vs revenue share by segment"):
         if portfolio is not None:
-            st.plotly_chart(portfolio_bar_fig(portfolio, "rfm_segment"), use_container_width=True)
+            st.plotly_chart(portfolio_bar_fig(portfolio, "rfm_segment"), width="stretch")
         else:
             empty_state(
                 "No RFM segments yet",
@@ -232,7 +232,7 @@ matrix_cols = {
 }
 if ret_f is not None and not ret_f.empty and matrix_cols.issubset(ret_f.columns):
     with chart_section("Value–risk matrix"):
-        st.plotly_chart(value_risk_matrix(ret_f), use_container_width=True)
+        st.plotly_chart(value_risk_matrix(ret_f), width="stretch")
     insight_box(
         f"{len(ret_f):,} of {len(master_f):,} filtered customers carry a "
         "recommended retention action.",
@@ -250,7 +250,7 @@ if "risk_band" in master_f.columns:
     risk_left, risk_right = st.columns(2)
     with risk_left:
         with chart_section("Customers per risk band"):
-            st.plotly_chart(risk_band_bar(master_f), use_container_width=True)
+            st.plotly_chart(risk_band_bar(master_f), width="stretch")
     with risk_right:
         with chart_section("High-value, high-risk (IDs masked)"):
             hvhr = high_value_high_risk(master_f)
@@ -291,7 +291,7 @@ if geo_levels:
                     .rename_axis("age_band")
                     .reset_index(name="customers")
                 )
-                st.plotly_chart(age_band_bar(bands), use_container_width=True)
+                st.plotly_chart(age_band_bar(bands), width="stretch")
             else:
                 empty_state(
                     "No age bands yet",
@@ -299,19 +299,19 @@ if geo_levels:
                 )
     with demo_right:
         with chart_section(f"Top {level}s by customers"):
-            st.plotly_chart(top_geo_bar(geo, level), use_container_width=True)
+            st.plotly_chart(top_geo_bar(geo, level), width="stretch")
     with chart_section(f"Customer footprint ({level})"):
-        st.plotly_chart(geo_treemap(geo.head(30), level), use_container_width=True)
+        st.plotly_chart(geo_treemap(geo.head(30), level), width="stretch")
 
 section_header("Retention", "Actions for the filtered customers.")
 if ret_f is not None and not ret_f.empty:
     ret_left, ret_right = st.columns(2)
     with ret_left:
         with chart_section("Customers per recommended action"):
-            st.plotly_chart(strategy_distribution_bar(ret_f), use_container_width=True)
+            st.plotly_chart(strategy_distribution_bar(ret_f), width="stretch")
     with ret_right:
         with chart_section("Revenue at risk per action"):
-            st.plotly_chart(revenue_at_risk_bar(ret_f), use_container_width=True)
+            st.plotly_chart(revenue_at_risk_bar(ret_f), width="stretch")
     metric_row([Metric("Campaign-ready customers", formatting.fmt_int(len(ret_f)))])
     download_panel(ret_f, "executive_retention_export", "dl_exec_ret")
 else:
@@ -329,7 +329,7 @@ if st.checkbox("I am authorized to view raw customer identifiers"):
     detail = master_f.copy()
     detail["customer_id"] = detail["customer_id"].astype(str)
     with st.expander("Customer detail (top 200)", expanded=False):
-        st.dataframe(detail.head(200), use_container_width=True)
+        st.dataframe(detail.head(200), width="stretch")
     csv_download_button(
         detail, "executive_customer_detail.csv", "Download detail (CSV)", key="dl_exec_detail"
     )
@@ -337,6 +337,6 @@ else:
     masked = master_f.copy()
     masked["customer_id"] = masked["customer_id"].map(mask_customer_id)
     with st.expander("Customer overview, IDs masked (top 200)", expanded=False):
-        st.dataframe(masked.head(200), use_container_width=True)
+        st.dataframe(masked.head(200), width="stretch")
 
 render_sidebar_footer()

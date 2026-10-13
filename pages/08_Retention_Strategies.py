@@ -142,17 +142,17 @@ metric_row(
 ret_l, ret_r = st.columns([1, 1])
 with ret_l:
     with chart_section("Value–risk matrix"):
-        st.plotly_chart(value_risk_matrix(table), use_container_width=True)
+        st.plotly_chart(value_risk_matrix(table), width="stretch")
 with ret_r:
     with chart_section("Revenue at risk per action"):
-        st.plotly_chart(revenue_at_risk_bar(table), use_container_width=True)
+        st.plotly_chart(revenue_at_risk_bar(table), width="stretch")
 strat_l, strat_r = st.columns([1, 1])
 with strat_l:
     with chart_section("Customers per recommended action"):
-        st.plotly_chart(strategy_distribution_bar(table), use_container_width=True)
+        st.plotly_chart(strategy_distribution_bar(table), width="stretch")
 with strat_r:
     with chart_section("Priority score distribution"):
-        st.plotly_chart(priority_histogram(table), use_container_width=True)
+        st.plotly_chart(priority_histogram(table), width="stretch")
 
 with sidebar_filters("View Filters"):
     regions = sorted(table["region"].dropna().unique()) if "region" in table.columns else []
@@ -191,8 +191,8 @@ campaign, channel_summary = export_campaign(
     view, top_n=int(top_n), min_priority=float(min_priority)
 )
 with st.expander("Campaign export", expanded=False):
-    st.dataframe(channel_summary, use_container_width=True)
-    st.dataframe(campaign.head(100), use_container_width=True)
+    st.dataframe(channel_summary, width="stretch")
+    st.dataframe(campaign.head(100), width="stretch")
 st.download_button(
     "Download campaign (CSV)",
     data=to_csv_bytes(campaign),

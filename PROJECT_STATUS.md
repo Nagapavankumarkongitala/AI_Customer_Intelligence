@@ -94,3 +94,5 @@ fresh outcome windows as behavior drifts.
 ormalize_dictionary_rows renders legacy caches as field/detail pairs instead of raising.\
 \
 - Browser pass (this change): all 10 views audited in light via DOM (headings, cards, figure hues/heights, overflow, console clean); dark verified with persistence across navigation. Fixed: theme reset on page switch (persist_state='session' on the toggle), Sankey missing title, geo plural titles, tighter KPI type for narrow columns. Known cosmetic upstream: Streamlit double-bolds chart titles; use_container_width deprecation warnings (functional).\
+\
+- Width migration (this change): all 66 use_container_width=True call sites moved to width='stretch' ahead of the Streamlit removal; verified live with zero deprecation warnings.\

@@ -103,7 +103,7 @@ st.success(
     f"{len(raw.columns)} columns."
 )
 with st.expander("Inspect file preview (top 10)", expanded=False):
-    st.dataframe(raw.head(10), use_container_width=True)
+    st.dataframe(raw.head(10), width="stretch")
 
 mapping = st.session_state.get("_mapping_draft") or dict(
     st.session_state.get("column_mapping") or {}

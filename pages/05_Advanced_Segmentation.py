@@ -139,7 +139,7 @@ if model != "hdbscan" and st.button(f"Sweep k = {k_min}…{k_max}"):
                 model, prepared_state["matrix"], k_min=k_min, k_max=k_max, random_state=int(seed)
             )
         with st.expander(f"k sweep {k_min}…{k_max}", expanded=False):
-            st.dataframe(sweep, use_container_width=True)
+            st.dataframe(sweep, width="stretch")
             st.caption(
                 "Higher silhouette / Calinski-Harabasz and lower Davies-Bouldin are "
                 "better — but never choose on one metric alone (see page 06)."
@@ -191,7 +191,7 @@ if batch_clicked:
                 }
                 for r in batch
             ],
-            use_container_width=True,
+            width="stretch",
         )
     if skipped:
         for r in skipped:
@@ -260,24 +260,20 @@ metric_row(
 emb_l, emb_r = st.columns([1, 1])
 with emb_l:
     with chart_section("Clusters (PCA 2D)"):
-        st.plotly_chart(
-            pca_scatter(prepared_state["matrix"], run["labels"]), use_container_width=True
-        )
+        st.plotly_chart(pca_scatter(prepared_state["matrix"], run["labels"]), width="stretch")
 with emb_r:
     with chart_section("Clusters (UMAP 2D)"):
         try:
             st.plotly_chart(
                 umap_scatter(prepared_state["matrix"], run["labels"]),
-                use_container_width=True,
+                width="stretch",
             )
         except ImportError as exc:
             st.info(str(exc))
 if run["model"] == "autoencoder":
     from deep_learning.latent_space_visualization import latent_scatter
 
-    st.plotly_chart(
-        latent_scatter(run["fitted"]["latent"], run["labels"]), use_container_width=True
-    )
+    st.plotly_chart(latent_scatter(run["fitted"]["latent"], run["labels"]), width="stretch")
     with st.expander("Training history", expanded=False):
         st.write({k: v[-5:] for k, v in run["fitted"]["history"].items()})
 
@@ -294,12 +290,12 @@ profile["business_name"] = profile["business_name"].fillna("Noise")
 prof_l, prof_r = st.columns([1, 1])
 with prof_l:
     with chart_section("Customers per cluster"):
-        st.plotly_chart(cluster_size_bar(profile), use_container_width=True)
+        st.plotly_chart(cluster_size_bar(profile), width="stretch")
 with prof_r:
     with chart_section("Cluster profile (median, z-scored per feature)"):
-        st.plotly_chart(profile_heatmap(profile), use_container_width=True)
+        st.plotly_chart(profile_heatmap(profile), width="stretch")
 with st.expander("Cluster profile table", expanded=False):
-    st.dataframe(profile.drop(columns=["member_ids"], errors="ignore"), use_container_width=True)
+    st.dataframe(profile.drop(columns=["member_ids"], errors="ignore"), width="stretch")
 
 with st.expander("Name clusters", expanded=False):
     st.markdown("Adjust business names if the profiles suggest better ones:")

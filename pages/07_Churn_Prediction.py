@@ -197,7 +197,7 @@ if bundles:
                     for name, b in bundles.items()
                 ]
             ),
-            use_container_width=True,
+            width="stretch",
         )
     with controls_expander("Model Detail"):
         detail = st.selectbox("Model detail", list(bundles))
@@ -215,25 +215,23 @@ if bundles:
         with chart_section("ROC curve"):
             st.plotly_chart(
                 roc_curve_fig(bundle["test_y"], bundle["test_proba"]),
-                use_container_width=True,
+                width="stretch",
             )
     with eval_r:
         with chart_section("Calibration curve"):
             st.plotly_chart(
                 calibration_curve_fig(calibration_table(bundle["test_y"], bundle["test_proba"])),
-                use_container_width=True,
+                width="stretch",
             )
     perf_l, perf_r = st.columns([1, 1])
     with perf_l:
         with chart_section("Confusion matrix"):
-            st.plotly_chart(
-                confusion_fig(bundle["test_metrics"]["confusion"]), use_container_width=True
-            )
+            st.plotly_chart(confusion_fig(bundle["test_metrics"]["confusion"]), width="stretch")
     with perf_r:
         with chart_section("Cumulative gain"):
             st.plotly_chart(
                 gain_chart_fig(lift_gain_table(bundle["test_y"], bundle["test_proba"])),
-                use_container_width=True,
+                width="stretch",
             )
     with st.expander("Threshold metrics", expanded=False):
         st.write(
@@ -242,10 +240,10 @@ if bundles:
 
     section_header("Explainability")
     with chart_section("Global feature importance"):
-        st.plotly_chart(importance_bar_fig(bundle["importance"]), use_container_width=True)
+        st.plotly_chart(importance_bar_fig(bundle["importance"]), width="stretch")
     if detail == "logreg":
         with st.expander("Coefficients & odds ratios", expanded=False):
-            st.dataframe(logreg_effects(bundle["pipeline"]), use_container_width=True)
+            st.dataframe(logreg_effects(bundle["pipeline"]), width="stretch")
     try:
         shap_frame = shap_values(bundle["pipeline"], dataset.frame[bundle["feature_cols"]])
         st.markdown("Mean |SHAP| (global, sample):")
@@ -283,7 +281,7 @@ if scores is not None:
     risk_l, risk_r = st.columns([1, 2])
     with risk_l:
         with chart_section("Customers per risk band"):
-            st.plotly_chart(risk_band_bar(scores), use_container_width=True)
+            st.plotly_chart(risk_band_bar(scores), width="stretch")
     with risk_r:
         with st.expander("Scored customers (top 200)", expanded=False):
             render_table(scores.head(200), risk_cols=("risk_band",))

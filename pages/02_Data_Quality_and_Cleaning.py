@@ -178,12 +178,12 @@ if audit:
 clean_data = st.session_state.get("clean_data")
 if clean_data is not None:
     with st.expander("Cleaned preview (top 20)", expanded=False):
-        st.dataframe(clean_data.head(20), use_container_width=True)
+        st.dataframe(clean_data.head(20), width="stretch")
 
     dictionary_rows = normalize_dictionary_rows(st.session_state.get("data_dictionary"))
     if dictionary_rows:
         with st.expander("Data dictionary", expanded=False):
-            st.dataframe(pd.DataFrame(dictionary_rows), use_container_width=True)
+            st.dataframe(pd.DataFrame(dictionary_rows), width="stretch")
 
     d1, d2, d3 = st.columns(3)
     with d1:

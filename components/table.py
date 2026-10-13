@@ -90,5 +90,5 @@ def render_table(
         st.caption(caption)
     st.dataframe(
         style_table(df, risk_cols, money_cols, pct_cols, int_cols),
-        use_container_width=True,
+        width="stretch",
     )

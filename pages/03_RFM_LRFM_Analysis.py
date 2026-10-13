@@ -121,7 +121,7 @@ metric_row(
 )
 
 with st.expander("Customer feature preview (top 20)", expanded=False):
-    st.dataframe(features.head(20), use_container_width=True)
+    st.dataframe(features.head(20), width="stretch")
 
 tab_rfm, tab_lrfm = st.tabs(["RFM", "LRFM"])
 for tab, key in ((tab_rfm, "rfm_results"), (tab_lrfm, "lrfm_results")):
@@ -136,31 +136,31 @@ for tab, key in ((tab_rfm, "rfm_results"), (tab_lrfm, "lrfm_results")):
             with chart_section("Customers per segment"):
                 st.plotly_chart(
                     segment_distribution_bar(profile),
-                    use_container_width=True,
+                    width="stretch",
                     key=f"{key}_seg_dist",
                 )
         with seg_r:
             with chart_section("Revenue per segment"):
                 st.plotly_chart(
                     revenue_by_segment_bar(profile),
-                    use_container_width=True,
+                    width="stretch",
                     key=f"{key}_revenue",
                 )
         with chart_section("Customer counts by R × F score"):
-            st.plotly_chart(rfm_heatmap(scored), use_container_width=True, key=f"{key}_heatmap")
+            st.plotly_chart(rfm_heatmap(scored), width="stretch", key=f"{key}_heatmap")
         scatter_l, scatter_r = st.columns([1, 1])
         with scatter_l:
             with chart_section("Recency vs frequency"):
                 st.plotly_chart(
                     recency_frequency_scatter(enriched),
-                    use_container_width=True,
+                    width="stretch",
                     key=f"{key}_rf",
                 )
         with scatter_r:
             with chart_section("Frequency vs monetary value"):
                 st.plotly_chart(
                     frequency_monetary_scatter(enriched),
-                    use_container_width=True,
+                    width="stretch",
                     key=f"{key}_fm",
                 )
 
@@ -175,7 +175,7 @@ for tab, key in ((tab_rfm, "rfm_results"), (tab_lrfm, "lrfm_results")):
                 help="Customer identifiers appear only in this authorized detail view.",
             )
             drill = enriched[enriched["segment"] == choice].head(200)
-            st.dataframe(drill, use_container_width=True, key=f"{key}_drill")
+            st.dataframe(drill, width="stretch", key=f"{key}_drill")
             st.caption(
                 f"Showing up to 200 of {(scored['segment'] == choice).sum()} customers "
                 f"in '{choice}'."

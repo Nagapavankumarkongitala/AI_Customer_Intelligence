@@ -142,7 +142,7 @@ for label, scored in (("RFM", rfm), ("LRFM", lrfm)):
 
 table = pd.DataFrame(rows)
 with st.expander("Model scorecard", expanded=False):
-    st.dataframe(table.drop(columns=["checklist"]), use_container_width=True)
+    st.dataframe(table.drop(columns=["checklist"]), width="stretch")
     st.caption(
         "RFM/LRFM silhouette is blank by design: different feature space, not comparable. "
         "Stability 1.0 for RFM/LRFM: deterministic rules on fixed features."
@@ -162,7 +162,7 @@ for i in range(0, len(metrics), 2):
             with chart_section(title):
                 st.plotly_chart(
                     metric_comparison_bar(table, metric, title),
-                    use_container_width=True,
+                    width="stretch",
                     key=f"cmp_{metric}",
                 )
 
@@ -179,9 +179,9 @@ with agree_l:
     metric_row([Metric(f"Adjusted Rand Index ({ref} vs {target})", f"{ari:.3f}")])
 with agree_r:
     with chart_section(f"Customer flow ({ref} → {target})"):
-        st.plotly_chart(sankey_mapping(ct, ref, target), use_container_width=True)
+        st.plotly_chart(sankey_mapping(ct, ref, target), width="stretch")
 with st.expander("Cross-tabulation (counts)", expanded=False):
-    st.dataframe(ct, use_container_width=True)
+    st.dataframe(ct, width="stretch")
 
 # --- Per-model checklists ------------------------------------------------------
 with st.expander("Interpretability checklists"):
@@ -189,7 +189,7 @@ with st.expander("Interpretability checklists"):
         st.markdown(f"**{row['model']}** — {row['interpretability_passes']} checks pass")
         st.dataframe(
             pd.DataFrame(row["checklist"]),
-            use_container_width=True,
+            width="stretch",
             key=f"checklist_{row['model']}",
         )
 
@@ -201,7 +201,7 @@ if churn_table is None:
     st.info("Churn-rate association unlocks in Phase 6 once churn labels exist.")
 else:
     with st.expander(f"Churn rate by {target} segment", expanded=False):
-        st.dataframe(churn_table, use_container_width=True)
+        st.dataframe(churn_table, width="stretch")
 
 # --- Recommendation ------------------------------------------------------------
 recommendation = recommend_model(table.rename(columns={"model": "name"}).to_dict(orient="records"))
