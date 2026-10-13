@@ -2,14 +2,14 @@
 
 Numbers are formatted through ``utils.formatting`` before display; risk cells
 take their badge backgrounds from tokens so tables, badges, and charts agree.
-Built on ``Styler.map`` (pandas 3 removed ``applymap``) and rendered with
-``st.dataframe``. Without the optional ``jinja2`` package the Styler is
-unavailable, so ``style_table`` hands back the formatted frame and only the
-cell painting degrades — values stay formatted either way.
+With the optional ``jinja2`` package the Styler path keeps dataframe
+interactivity; without it the standalone HTML table keeps the same values and
+risk colors instead of crashing.
 """
 
 from __future__ import annotations
 
+import html
 from typing import TYPE_CHECKING
 
 import pandas as pd
@@ -80,6 +80,40 @@ def _risk_cell_style(value: object) -> str:
     return f"background-color: {bg}; color: {fg}; font-weight: 600;"
 
 
+def html_table(df: pd.DataFrame, risk_cols: tuple[str, ...] = ()) -> str:
+    """Standalone HTML table with inline risk-cell painting (pure, no jinja2).
+
+    Used when the Styler backend is unavailable; keeps the conditional colors
+    instead of silently dropping them. Values must already be display strings
+    (see ``format_frame``) — everything is HTML-escaped here.
+    """
+    border = tokens.color("border")
+    muted = tokens.color("muted")
+    text = tokens.color("text")
+    head = "".join(
+        f"<th style='text-align:left;padding:6px 8px;color:{muted};font-size:0.78rem;"
+        f"text-transform:uppercase;letter-spacing:0.04em;border-bottom:2px solid {border};'>"
+        f"{html.escape(str(column))}</th>"
+        for column in df.columns
+    )
+    rows = []
+    for _, record in df.iterrows():
+        cells = "".join(
+            f"<td style='padding:6px 8px;border-top:1px solid {border};color:{text};"
+            f"{_risk_cell_style(record[column]) if column in risk_cols else ''}'>"
+            f"{html.escape(str(record[column]))}</td>"
+            for column in df.columns
+        )
+        rows.append(f"<tr>{cells}</tr>")
+    return (
+        "<div style='overflow-x:auto;border:1px solid "
+        f"{border};border-radius:12px;'>"
+        "<table style='width:100%;border-collapse:collapse;font-size:0.85rem;"
+        "font-variant-numeric:tabular-nums;'>"
+        f"<thead><tr>{head}</tr></thead><tbody>{''.join(rows)}</tbody></table></div>"
+    )
+
+
 def style_table(
     df: pd.DataFrame,
     risk_cols: tuple[str, ...] = (),
@@ -110,10 +144,20 @@ def render_table(
     int_cols: tuple[str, ...] = (),
     caption: str | None = None,
 ) -> None:
-    """Render a formatted, conditionally painted table full-width."""
+    """Render a formatted, conditionally painted table full-width.
+
+    With jinja2 the Styler path keeps dataframe interactivity; without it the
+    standalone HTML table keeps the same values and risk colors.
+    """
     if caption:
         st.caption(caption)
-    st.dataframe(
-        style_table(df, risk_cols, money_cols, pct_cols, int_cols),
-        width="stretch",
-    )
+    if _HAS_JINJA2:
+        st.dataframe(
+            style_table(df, risk_cols, money_cols, pct_cols, int_cols),
+            width="stretch",
+        )
+    else:
+        st.markdown(
+            html_table(format_frame(df, money_cols, pct_cols, int_cols), risk_cols),
+            unsafe_allow_html=True,
+        )

@@ -216,6 +216,21 @@ def test_jinja2_usability_checks_version_not_presence(monkeypatch) -> None:
     assert table_module._jinja2_usable() is True
 
 
+def test_html_table_paints_without_jinja2() -> None:
+    """The standalone table keeps values, escaping, and risk colors."""
+    from components.table import html_table
+
+    df = pd.DataFrame(
+        {"risk_band": ["high", "low"], "value": ["₹1,235", "₹679"], "note": ["<b>x</b>", "ok"]}
+    )
+    out = html_table(df, risk_cols=("risk_band",))
+    assert "<table" in out and out.count("<tr>") == 3  # header + 2 rows
+    assert "&lt;b&gt;x&lt;/b&gt;" in out
+    bg, fg = tokens.risk_badge("high")
+    assert bg in out and fg in out
+    assert tokens.risk_badge("low")[0] in out
+
+
 def test_builders_emit_active_mode_ink() -> None:
     """No inherited root ink: text nodes carry the active mode's color.
 
