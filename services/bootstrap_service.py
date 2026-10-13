@@ -121,7 +121,7 @@ def build_default_run(force: bool = False) -> dict:
         },
         "cleaning",
     )
-    _write_json({k: str(v) for k, v in dictionary.items()}, "dictionary")
+    _write_json(dictionary.to_dict(orient="records"), "dictionary")
 
     # 4-5. Features + RFM/LRFM (snapshot = max transaction + 1 day).
     from analytics.customer_features import build_customer_features

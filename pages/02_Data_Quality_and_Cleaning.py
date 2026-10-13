@@ -13,7 +13,7 @@ from components.page_header import page_header, section_header
 from components.sidebar import render_sidebar_footer, render_sidebar_nav
 from services import state_service
 from services.cleaning_service import CleaningConfig, clean
-from services.data_dictionary_service import build_dictionary
+from services.data_dictionary_service import build_dictionary, normalize_dictionary_rows
 from services.export_service import to_csv_bytes, to_excel_bytes, to_json_bytes
 from services.profiling_service import compute_quality
 from utils import formatting
@@ -180,7 +180,7 @@ if clean_data is not None:
     with st.expander("Cleaned preview (top 20)", expanded=False):
         st.dataframe(clean_data.head(20), use_container_width=True)
 
-    dictionary_rows = st.session_state.get("data_dictionary") or []
+    dictionary_rows = normalize_dictionary_rows(st.session_state.get("data_dictionary"))
     if dictionary_rows:
         with st.expander("Data dictionary", expanded=False):
             st.dataframe(pd.DataFrame(dictionary_rows), use_container_width=True)

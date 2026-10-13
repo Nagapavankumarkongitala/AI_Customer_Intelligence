@@ -56,3 +56,22 @@ def build_dictionary(
             entry.update({"min": None, "max": None, "mean": None, "median": None})
         rows.append(entry)
     return pd.DataFrame(rows)
+
+
+def normalize_dictionary_rows(value: object) -> list[dict]:
+    """Records list for the dictionary expander, whatever shape state holds.
+
+    The live page stores ``to_dict(orient="records")``; older bootstrap caches
+    stored a column→text mapping instead, which surfaces as field/detail pairs
+    so those caches render instead of crashing.
+    """
+    if value is None:
+        return []
+    if isinstance(value, pd.DataFrame):
+        return value.to_dict(orient="records")
+    if isinstance(value, dict):
+        return [{"field": key, "detail": val} for key, val in value.items()]
+    try:
+        return list(value)  # type: ignore[arg-type]
+    except TypeError:
+        return []

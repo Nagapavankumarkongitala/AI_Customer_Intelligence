@@ -89,3 +89,6 @@ fresh outcome windows as behavior drifts.
 - Table hardening (this change): jinja2 added to requirements (was transitive-only) and style_table falls back to the formatted frame when the Styler is unavailable — values stay formatted, only cell painting degrades. Fixes the production crash on interpreters without jinja2.\
 \
 - Slicer move (this change): view slicers live in the rail (ender_sidebar_nav head, sidebar_filters sections, ender_sidebar_footer foot). Moved: page 09 Global Slicers + geography level, page 08 View Filters, page 06 comparison pair, page 04 profiling slicers. Compute-driving config stays in-page. Verified by with-data rail render (6 slicers, 11 figures, footer).\
+\
+- Dictionary crash fix (this change): bootstrap wrote the dictionary cache as column?text (DataFrame.items), crashing page 02 on load; writer now stores records-orient like the live path, and 
+ormalize_dictionary_rows renders legacy caches as field/detail pairs instead of raising.\
