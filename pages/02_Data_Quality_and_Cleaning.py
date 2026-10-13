@@ -6,13 +6,17 @@ import pandas as pd
 import streamlit as st
 import yaml
 
+from components.empty_state import empty_state
 from components.filters import control_group, controls_expander
+from components.metric_card import Metric, metric_row
 from components.nav_tabs import render_nav_tabs
+from components.page_header import page_header, section_header
 from services import state_service
 from services.cleaning_service import CleaningConfig, clean
 from services.data_dictionary_service import build_dictionary
 from services.export_service import to_csv_bytes, to_excel_bytes, to_json_bytes
 from services.profiling_service import compute_quality
+from utils import formatting
 from utils.exceptions import CustomerIntelligenceError
 from utils.logging_config import configure_logging
 from visualization.theme import inject_terminal_css
@@ -22,15 +26,20 @@ state_service.initialize(st.session_state)
 inject_terminal_css()
 render_nav_tabs("pages/02_Data_Quality_and_Cleaning.py")
 
-st.markdown(
+page_header(
+    "Data Quality & Cleaning",
     "Overall = 0.40 × completeness + 0.40 × validity + 0.20 × uniqueness. "
-    "Every cleaning action is recorded in the audit — nothing is dropped silently."
+    "Every cleaning action is recorded in the audit — nothing is dropped silently.",
+    badge="Step 2 of 9",
 )
 
 raw = st.session_state.get("raw_data")
 mapping = st.session_state.get("column_mapping") or {}
 if raw is None or not mapping:
-    st.info("Complete Data Upload & Mapping first (upload a file and save the mapping).")
+    empty_state(
+        "No mapped data yet",
+        "Complete Data Upload & Mapping first (upload a file and save the mapping).",
+    )
     st.stop()
 
 cfg = yaml.safe_load(Path("config.yaml").read_text(encoding="utf-8"))
@@ -48,11 +57,15 @@ except CustomerIntelligenceError as exc:
     st.error(str(exc))
     st.stop()
 
-c1, c2, c3, c4 = st.columns(4)
-c1.metric("Completeness", f"{quality.completeness}%")
-c2.metric("Validity", f"{quality.validity}%")
-c3.metric("Uniqueness", f"{quality.uniqueness}%")
-c4.metric("Overall", f"{quality.overall}%")
+section_header("Quality scores")
+metric_row(
+    [
+        Metric("Completeness", f"{quality.completeness}%"),
+        Metric("Validity", f"{quality.validity}%"),
+        Metric("Uniqueness", f"{quality.uniqueness}%"),
+        Metric("Overall", f"{quality.overall}%"),
+    ]
+)
 
 with st.expander("Issue breakdown & warnings", expanded=False):
     st.write({k: v for k, v in quality.counts.items() if k != "total_rows"})
@@ -147,10 +160,14 @@ if st.button("Apply cleaning", type="primary"):
 
 audit = st.session_state.get("cleaning_audit") or {}
 if audit:
-    a1, a2, a3 = st.columns(3)
-    a1.metric("Input rows", audit["input_rows"])
-    a2.metric("Output rows", audit["output_rows"])
-    a3.metric("Rows removed", audit["rows_removed"])
+    section_header("Cleaning audit")
+    metric_row(
+        [
+            Metric("Input rows", formatting.fmt_int(audit["input_rows"])),
+            Metric("Output rows", formatting.fmt_int(audit["output_rows"])),
+            Metric("Rows removed", formatting.fmt_int(audit["rows_removed"])),
+        ]
+    )
     with st.expander("Audit rules", expanded=False):
         st.write(audit["rules"])
         st.caption(

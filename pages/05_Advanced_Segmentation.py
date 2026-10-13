@@ -5,9 +5,11 @@ from pathlib import Path
 import streamlit as st
 import yaml
 
+from components.empty_state import chart_section, empty_state
 from components.filters import control_group, controls_expander
-from components.metric_cards import kpi_row
+from components.metric_card import Metric, metric_row
 from components.nav_tabs import render_nav_tabs
+from components.page_header import page_header, section_header
 from segmentation.common import labels_to_series
 from segmentation.evaluation import evaluate_clustering
 from segmentation.segment_naming import propose_names
@@ -38,15 +40,17 @@ state_service.initialize(st.session_state)
 inject_terminal_css()
 render_nav_tabs("pages/05_Advanced_Segmentation.py")
 
-st.markdown(
+page_header(
+    "Advanced Segmentation",
     "Unsupervised segmentation over the customer feature table. Prepare features, "
     "compare models and cluster counts, then name clusters from their profiles — "
-    "IDs stay numeric; business names are assigned only after profiling."
+    "IDs stay numeric; business names are assigned only after profiling.",
+    badge="Step 5 of 9",
 )
 
 features = st.session_state.get("customer_features")
 if features is None:
-    st.info("Build customer features on RFM / LRFM Analysis first.")
+    empty_state("No features yet", "Build customer features on RFM / LRFM Analysis first.")
     st.stop()
 
 cfg = yaml.safe_load(Path("config.yaml").read_text(encoding="utf-8"))
@@ -98,7 +102,7 @@ if st.button("Prepare features"):
 
 prepared_state = st.session_state.get("seg_prepared")
 if prepared_state is None:
-    st.info("Select features and prepare them to continue.")
+    empty_state("No prepared features", "Select features and prepare them to continue.")
     st.stop()
 
 report = prepared_state["report"]
@@ -231,22 +235,22 @@ run = st.session_state.get("seg_run")
 if run is None:
     st.stop()
 
-st.subheader("3 · Evaluation")
+section_header("Evaluation")
 metrics = run["metrics"]
-kpi_row(
+metric_row(
     [
-        ("Clusters", str(metrics["n_clusters"])),
-        ("Silhouette ↑", str(metrics["silhouette"])),
-        ("Noise", f"{metrics['noise_pct']}%"),
-        ("Seed stability (ARI)", str(run["stability"]["mean_pairwise_ari"])),
+        Metric("Clusters", str(metrics["n_clusters"])),
+        Metric("Silhouette ↑", str(metrics["silhouette"])),
+        Metric("Noise", f"{metrics['noise_pct']}%"),
+        Metric("Seed stability (ARI)", str(run["stability"]["mean_pairwise_ari"])),
     ]
 )
-kpi_row(
+metric_row(
     [
-        ("Davies-Bouldin ↓", str(metrics["davies_bouldin"])),
-        ("Min cluster size", str(metrics["min_cluster_size"])),
-        ("Calinski-Harabasz ↑", str(metrics["calinski_harabasz"])),
-        (
+        Metric("Davies-Bouldin ↓", str(metrics["davies_bouldin"])),
+        Metric("Min cluster size", str(metrics["min_cluster_size"])),
+        Metric("Calinski-Harabasz ↑", str(metrics["calinski_harabasz"])),
+        Metric(
             "Bootstrap",
             str((run["stability"].get("bootstrap") or {}).get("mean_ari", "n/a")),
         ),
@@ -255,14 +259,19 @@ kpi_row(
 
 emb_l, emb_r = st.columns([1, 1])
 with emb_l:
-    st.plotly_chart(pca_scatter(prepared_state["matrix"], run["labels"]), use_container_width=True)
-with emb_r:
-    try:
+    with chart_section("Clusters (PCA 2D)"):
         st.plotly_chart(
-            umap_scatter(prepared_state["matrix"], run["labels"]), use_container_width=True
+            pca_scatter(prepared_state["matrix"], run["labels"]), use_container_width=True
         )
-    except ImportError as exc:
-        st.info(str(exc))
+with emb_r:
+    with chart_section("Clusters (UMAP 2D)"):
+        try:
+            st.plotly_chart(
+                umap_scatter(prepared_state["matrix"], run["labels"]),
+                use_container_width=True,
+            )
+        except ImportError as exc:
+            st.info(str(exc))
 if run["model"] == "autoencoder":
     from deep_learning.latent_space_visualization import latent_scatter
 
@@ -272,7 +281,7 @@ if run["model"] == "autoencoder":
     with st.expander("Training history", expanded=False):
         st.write({k: v[-5:] for k, v in run["fitted"]["history"].items()})
 
-st.subheader("4 · Profile & name clusters")
+section_header("Profile & name clusters")
 profile = build_cluster_profile(
     features,
     run["labels"],
@@ -284,9 +293,11 @@ profile = profile.merge(name_table[["cluster_id", "business_name"]], on="cluster
 profile["business_name"] = profile["business_name"].fillna("Noise")
 prof_l, prof_r = st.columns([1, 1])
 with prof_l:
-    st.plotly_chart(cluster_size_bar(profile), use_container_width=True)
+    with chart_section("Customers per cluster"):
+        st.plotly_chart(cluster_size_bar(profile), use_container_width=True)
 with prof_r:
-    st.plotly_chart(profile_heatmap(profile), use_container_width=True)
+    with chart_section("Cluster profile (median, z-scored per feature)"):
+        st.plotly_chart(profile_heatmap(profile), use_container_width=True)
 with st.expander("Cluster profile table", expanded=False):
     st.dataframe(profile.drop(columns=["member_ids"], errors="ignore"), use_container_width=True)
 

@@ -79,3 +79,5 @@ fresh outcome windows as behavior drifts.
 - Phase 4 (this change): pages/09_Executive_Dashboard.py rebuilt on the component library (page/section headers, 5+2 metric rows, 2-per-row chart sections, value-risk matrix centerpiece, factual insight boxes, conditional tables, empty states, retained gated drill-down). No service/model changes; filter logic and IDs-masking untouched.\
 \
 - Phase 5 (this change): visualization refactor — 	okens.segment_map/action_map (all-or-nothing stable hues), segment/action maps wired into RFM/segmentation/retention factories (positional/magnitude coloring fixed), 	heme.empty_figure titled placeholders on all bar/scatter/line factories, missing axis labels filled. No signature changes; module names kept.\
+\
+- Phase 6 (this change): remaining 8 pages + landing migrated to the component library (page/section headers with step badges, metric rows, chart sections, conditional tables, empty-state guards, factual insight boxes). Filter/service/gating logic untouched; kpi_row retained for compatibility. Verified by empty-session runs of all 9 views plus targeted suites.\

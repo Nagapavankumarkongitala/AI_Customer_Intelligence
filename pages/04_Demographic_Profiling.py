@@ -9,11 +9,14 @@ from analytics.demographics import (
     segment_composition,
 )
 from analytics.statistical_tests import run_segment_tests
+from components.empty_state import chart_section, empty_state
 from components.filters import control_group, controls_expander
-from components.metric_cards import kpi_row
+from components.metric_card import Metric, metric_row
 from components.nav_tabs import render_nav_tabs
+from components.page_header import page_header, section_header
 from services import state_service
 from services.export_service import to_csv_bytes
+from utils import formatting
 from utils.exceptions import CustomerIntelligenceError
 from utils.logging_config import configure_logging
 from visualization.demographic_charts import (
@@ -32,15 +35,17 @@ state_service.initialize(st.session_state)
 inject_terminal_css()
 render_nav_tabs("pages/04_Demographic_Profiling.py")
 
-st.markdown(
+page_header(
+    "Demographic Profiling",
     "Who the customers are, where the revenue concentrates, and how profiles differ "
     "across segments. Missing fields produce notices, never crashes; maps are omitted "
-    "because uploaded place names cannot be reliably geocoded."
+    "because uploaded place names cannot be reliably geocoded.",
+    badge="Step 4 of 9",
 )
 
 features = st.session_state.get("customer_features")
 if features is None:
-    st.info("Build customer features on RFM / LRFM Analysis first.")
+    empty_state("No features yet", "Build customer features on RFM / LRFM Analysis first.")
     st.stop()
 
 rfm = st.session_state.get("rfm_results")
@@ -74,57 +79,73 @@ for note in profile.notes:
     st.info(note)
 
 if profile.missing_pct:
-    st.subheader("Missing demographic indicators")
-    kpi_row([(f"{field} missing", f"{pct}%") for field, pct in profile.missing_pct.items()])
+    section_header("Missing demographic indicators")
+    metric_row(
+        [Metric(f"{field} missing", f"{pct}%") for field, pct in profile.missing_pct.items()]
+    )
 
 if "age_summary" in profile.tables:
     summary = profile.tables["age_summary"].iloc[0]
-    st.subheader("Age")
-    kpi_row(
+    section_header("Age")
+    metric_row(
         [
-            ("Customers with age", f"{summary['customers_with_age']:,}"),
-            ("Mean age", f"{summary['mean_age']}"),
-            ("Median age", f"{summary['median_age']}"),
+            Metric(
+                "Customers with age",
+                formatting.fmt_int(summary["customers_with_age"]),
+            ),
+            Metric("Mean age", f"{summary['mean_age']}"),
+            Metric("Median age", f"{summary['median_age']}"),
         ]
     )
     age_l, age_r = st.columns([1, 1])
     with age_l:
-        st.plotly_chart(age_histogram(features["age"]), use_container_width=True)
+        with chart_section("Age distribution"):
+            st.plotly_chart(age_histogram(features["age"]), use_container_width=True)
     with age_r:
-        st.plotly_chart(age_band_bar(profile.tables["age_bands"]), use_container_width=True)
+        with chart_section("Customers per age band"):
+            st.plotly_chart(age_band_bar(profile.tables["age_bands"]), use_container_width=True)
 
 if "gender" in profile.tables:
-    st.subheader("Gender")
+    section_header("Gender")
     gender_l, gender_r = st.columns([3, 2])
     with gender_l:
-        st.plotly_chart(gender_bar(profile.tables["gender"]), use_container_width=True)
+        with chart_section("Customers by gender"):
+            st.plotly_chart(gender_bar(profile.tables["gender"]), use_container_width=True)
     with gender_r:
         with st.expander("Gender table", expanded=False):
             st.dataframe(profile.tables["gender"], use_container_width=True)
 
-st.subheader("Geography")
+section_header("Geography")
 geo_levels = [lvl for lvl in GEO_LEVELS if f"geo_{lvl}" in profile.tables]
 if not geo_levels:
-    st.info("No geographic fields (city/state/country/region) are present in this dataset.")
+    empty_state(
+        "No geography available",
+        "No geographic fields (city/state/country/region) are present in this dataset.",
+    )
 geo_tab = st.tabs([lvl.capitalize() for lvl in geo_levels]) if geo_levels else []
 for tab, level in zip(geo_tab, geo_levels, strict=True):
     with tab:
         table = profile.tables[f"geo_{level}"]
         geo_l, geo_r = st.columns([1, 1])
         with geo_l:
-            st.plotly_chart(
-                top_geo_bar(table, level), use_container_width=True, key=f"geo_top_{level}"
-            )
+            with chart_section(f"Top {level}s by customers"):
+                st.plotly_chart(
+                    top_geo_bar(table, level), use_container_width=True, key=f"geo_top_{level}"
+                )
         with geo_r:
             if "revenue" in table.columns:
-                st.plotly_chart(
-                    revenue_geo_bar(table, level),
-                    use_container_width=True,
-                    key=f"geo_rev_{level}",
-                )
-        st.plotly_chart(
-            geo_treemap(table.head(30), level), use_container_width=True, key=f"geo_tree_{level}"
-        )
+                with chart_section(f"Top {level}s by revenue"):
+                    st.plotly_chart(
+                        revenue_geo_bar(table, level),
+                        use_container_width=True,
+                        key=f"geo_rev_{level}",
+                    )
+        with chart_section(f"Customer share by {level}"):
+            st.plotly_chart(
+                geo_treemap(table.head(30), level),
+                use_container_width=True,
+                key=f"geo_tree_{level}",
+            )
         with st.expander(f"{level.capitalize()} table (top 50)", expanded=False):
             st.dataframe(table.head(50), use_container_width=True, key=f"geo_table_{level}")
 
@@ -151,13 +172,14 @@ if segments is not None and "segment_profiles" in profile.tables:
         cols = st.columns([1] * len(pair))
         for col, (column, comp) in zip(cols, pair, strict=True):
             with col:
-                st.plotly_chart(
-                    stacked_composition_bar(comp, column),
-                    use_container_width=True,
-                    key=f"comp_{column}",
-                )
+                with chart_section(f"{column} mix by segment"):
+                    st.plotly_chart(
+                        stacked_composition_bar(comp, column),
+                        use_container_width=True,
+                        key=f"comp_{column}",
+                    )
 
-    st.subheader("Do segments differ significantly?")
+    section_header("Do segments differ significantly?")
     st.markdown(
         "Continuous variables use ANOVA, Welch ANOVA, or Kruskal-Wallis (chosen by "
         "normality and variance checks); categorical use chi-square or Fisher exact. "

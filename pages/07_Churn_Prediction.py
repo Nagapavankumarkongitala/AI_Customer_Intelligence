@@ -14,9 +14,12 @@ from churn.evaluation import (
     lift_gain_table,
 )
 from churn.explainability import logreg_effects, shap_values
+from components.empty_state import chart_section, empty_state
 from components.filters import control_group, controls_expander
-from components.metric_cards import kpi_row
+from components.metric_card import Metric, metric_row
 from components.nav_tabs import render_nav_tabs
+from components.page_header import page_header, section_header
+from components.table import render_table
 from services import state_service
 from services.churn_service import (
     available_models,
@@ -42,15 +45,17 @@ state_service.initialize(st.session_state)
 inject_terminal_css()
 render_nav_tabs("pages/07_Churn_Prediction.py")
 
-st.markdown(
+page_header(
+    "Churn Prediction",
     "Future inactivity predicted from historical behavior only: predictors use "
     "transactions on or before the cutoff; the label uses activity after it. "
-    "Any post-cutoff predictor is a leakage bug — the builder proves otherwise below."
+    "Any post-cutoff predictor is a leakage bug — the builder proves otherwise below.",
+    badge="Step 7 of 9",
 )
 
 clean_data = st.session_state.get("clean_data")
 if clean_data is None:
-    st.info("Complete Data Quality & Cleaning first.")
+    empty_state("No clean data yet", "Complete Data Quality & Cleaning first.")
     st.stop()
 
 cfg = yaml.safe_load(Path("config.yaml").read_text(encoding="utf-8"))
@@ -98,12 +103,19 @@ if st.button("Build churn dataset", type="primary"):
             "excluded_short_history": dataset.labeling.excluded_short_history,
         }
         rate = dataset.frame["churn"].mean()
-        kpi_row(
+        metric_row(
             [
-                ("Labeled customers", f"{len(dataset.frame):,}"),
-                ("Churn rate", f"{rate:.1%}"),
-                ("Excluded (short history)", str(dataset.labeling.excluded_short_history)),
-                ("Predictors ≤ cutoff", "proven" if dataset.leakage_ok else "LEAKED"),
+                Metric("Labeled customers", f"{len(dataset.frame):,}"),
+                Metric("Churn rate", f"{rate:.1%}"),
+                Metric(
+                    "Excluded (short history)",
+                    str(dataset.labeling.excluded_short_history),
+                ),
+                Metric(
+                    "Predictors ≤ cutoff",
+                    "proven" if dataset.leakage_ok else "LEAKED",
+                    tone="positive" if dataset.leakage_ok else "negative",
+                ),
             ]
         )
         if dataset.labeling.partial_window:
@@ -124,7 +136,10 @@ if st.button("Build churn dataset", type="primary"):
 
 dataset = st.session_state.get("churn_dataset_obj")
 if dataset is None:
-    st.info("Configure the observation/cutoff/horizon and build the dataset.")
+    empty_state(
+        "No churn dataset yet",
+        "Configure the observation/cutoff/horizon and build the dataset.",
+    )
     st.stop()
 
 with controls_expander("Training Controls"):
@@ -197,31 +212,37 @@ if bundles:
     bundle = bundles[detail]
     eval_l, eval_r = st.columns([1, 1])
     with eval_l:
-        st.plotly_chart(
-            roc_curve_fig(bundle["test_y"], bundle["test_proba"]), use_container_width=True
-        )
+        with chart_section("ROC curve"):
+            st.plotly_chart(
+                roc_curve_fig(bundle["test_y"], bundle["test_proba"]),
+                use_container_width=True,
+            )
     with eval_r:
-        st.plotly_chart(
-            calibration_curve_fig(calibration_table(bundle["test_y"], bundle["test_proba"])),
-            use_container_width=True,
-        )
+        with chart_section("Calibration curve"):
+            st.plotly_chart(
+                calibration_curve_fig(calibration_table(bundle["test_y"], bundle["test_proba"])),
+                use_container_width=True,
+            )
     perf_l, perf_r = st.columns([1, 1])
     with perf_l:
-        st.plotly_chart(
-            confusion_fig(bundle["test_metrics"]["confusion"]), use_container_width=True
-        )
+        with chart_section("Confusion matrix"):
+            st.plotly_chart(
+                confusion_fig(bundle["test_metrics"]["confusion"]), use_container_width=True
+            )
     with perf_r:
-        st.plotly_chart(
-            gain_chart_fig(lift_gain_table(bundle["test_y"], bundle["test_proba"])),
-            use_container_width=True,
-        )
+        with chart_section("Cumulative gain"):
+            st.plotly_chart(
+                gain_chart_fig(lift_gain_table(bundle["test_y"], bundle["test_proba"])),
+                use_container_width=True,
+            )
     with st.expander("Threshold metrics", expanded=False):
         st.write(
             classification_metrics(bundle["test_y"], bundle["test_proba"], threshold=threshold)
         )
 
-    st.subheader("3 · Explainability")
-    st.plotly_chart(importance_bar_fig(bundle["importance"]), use_container_width=True)
+    section_header("Explainability")
+    with chart_section("Global feature importance"):
+        st.plotly_chart(importance_bar_fig(bundle["importance"]), use_container_width=True)
     if detail == "logreg":
         with st.expander("Coefficients & odds ratios", expanded=False):
             st.dataframe(logreg_effects(bundle["pipeline"]), use_container_width=True)
@@ -232,7 +253,7 @@ if bundles:
     except ImportError as exc:
         st.info(str(exc))
 
-    st.subheader("4 · Score all customers")
+    section_header("Score all customers")
     st.markdown(
         "Scores current customers (features as of the latest transaction) with the "
         "trained pipeline. Bands follow `config.yaml` risk bands."
@@ -261,10 +282,11 @@ scores = st.session_state.get("churn_scores")
 if scores is not None:
     risk_l, risk_r = st.columns([1, 2])
     with risk_l:
-        st.plotly_chart(risk_band_bar(scores), use_container_width=True)
+        with chart_section("Customers per risk band"):
+            st.plotly_chart(risk_band_bar(scores), use_container_width=True)
     with risk_r:
         with st.expander("Scored customers (top 200)", expanded=False):
-            st.dataframe(scores.head(200), use_container_width=True)
+            render_table(scores.head(200), risk_cols=("risk_band",))
     st.download_button(
         "Download churn scores (CSV)",
         data=to_csv_bytes(scores),

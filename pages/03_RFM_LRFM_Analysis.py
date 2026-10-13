@@ -6,9 +6,12 @@ import pandas as pd
 import streamlit as st
 import yaml
 
+from components.empty_state import chart_section, empty_state
 from components.filters import control_group, controls_expander
-from components.metric_cards import kpi_row
+from components.metric_card import Metric, metric_row
 from components.nav_tabs import render_nav_tabs
+from components.page_header import page_header, section_header
+from components.table import render_table
 from services import state_service
 from services.export_service import to_csv_bytes
 from services.feature_service import (
@@ -17,6 +20,7 @@ from services.feature_service import (
     run_rfm,
     segment_profile,
 )
+from utils import formatting
 from utils.exceptions import CustomerIntelligenceError
 from utils.logging_config import configure_logging
 from visualization.rfm_charts import (
@@ -33,15 +37,20 @@ state_service.initialize(st.session_state)
 inject_terminal_css()
 render_nav_tabs("pages/03_RFM_LRFM_Analysis.py")
 
-st.markdown(
+page_header(
+    "RFM & LRFM Analysis",
     "Customer-level features feed quantile-based RFM and LRFM scoring. "
     "Segments are named from score components and raw values — never from the "
-    "combined score alone."
+    "combined score alone.",
+    badge="Step 3 of 9",
 )
 
 clean_data = st.session_state.get("clean_data")
 if clean_data is None:
-    st.info("Complete Data Quality & Cleaning first (apply cleaning to get clean data).")
+    empty_state(
+        "No clean data yet",
+        "Complete Data Quality & Cleaning first (apply cleaning to get clean data).",
+    )
     st.stop()
 
 cfg = yaml.safe_load(Path("config.yaml").read_text(encoding="utf-8"))
@@ -95,19 +104,19 @@ if st.button("Build features & score", type="primary"):
 
 features = st.session_state.get("customer_features")
 if features is None:
-    st.info("Configure and run scoring to see segments.")
+    empty_state("No features yet", "Configure and run scoring to see segments.")
     st.stop()
 
-st.subheader("Customer base")
-kpi_row(
+section_header("Customer base")
+metric_row(
     [
-        ("Customers", f"{len(features):,}"),
-        ("Total revenue", f"₹{features['monetary_value'].sum():,.0f}"),
-        (
+        Metric("Customers", formatting.fmt_int(len(features))),
+        Metric("Total revenue", formatting.fmt_money(features["monetary_value"].sum())),
+        Metric(
             "Average order value",
-            f"₹{features['monetary_value'].sum() / features['frequency'].sum():,.0f}",
+            formatting.fmt_money(features["monetary_value"].sum() / features["frequency"].sum()),
         ),
-        ("Avg recency (days)", f"{features['recency_days'].mean():,.0f}"),
+        Metric("Avg recency (days)", f"{features['recency_days'].mean():,.0f}"),
     ]
 )
 
@@ -122,31 +131,41 @@ for tab, key in ((tab_rfm, "rfm_results"), (tab_lrfm, "lrfm_results")):
     with tab:
         enriched = features.merge(scored, on="customer_id", suffixes=("", "_seg"))
         profile = segment_profile(enriched, monetary_col="monetary_value")
-        trio_l, trio_m, trio_r = st.columns([1, 1, 1])
-        with trio_l:
-            st.plotly_chart(
-                segment_distribution_bar(profile),
-                use_container_width=True,
-                key=f"{key}_seg_dist",
-            )
-        with trio_m:
-            st.plotly_chart(
-                revenue_by_segment_bar(profile), use_container_width=True, key=f"{key}_revenue"
-            )
-        with trio_r:
+        seg_l, seg_r = st.columns([1, 1])
+        with seg_l:
+            with chart_section("Customers per segment"):
+                st.plotly_chart(
+                    segment_distribution_bar(profile),
+                    use_container_width=True,
+                    key=f"{key}_seg_dist",
+                )
+        with seg_r:
+            with chart_section("Revenue per segment"):
+                st.plotly_chart(
+                    revenue_by_segment_bar(profile),
+                    use_container_width=True,
+                    key=f"{key}_revenue",
+                )
+        with chart_section("Customer counts by R × F score"):
             st.plotly_chart(rfm_heatmap(scored), use_container_width=True, key=f"{key}_heatmap")
         scatter_l, scatter_r = st.columns([1, 1])
         with scatter_l:
-            st.plotly_chart(
-                recency_frequency_scatter(enriched), use_container_width=True, key=f"{key}_rf"
-            )
+            with chart_section("Recency vs frequency"):
+                st.plotly_chart(
+                    recency_frequency_scatter(enriched),
+                    use_container_width=True,
+                    key=f"{key}_rf",
+                )
         with scatter_r:
-            st.plotly_chart(
-                frequency_monetary_scatter(enriched), use_container_width=True, key=f"{key}_fm"
-            )
+            with chart_section("Frequency vs monetary value"):
+                st.plotly_chart(
+                    frequency_monetary_scatter(enriched),
+                    use_container_width=True,
+                    key=f"{key}_fm",
+                )
 
         with st.expander("Segment profile", expanded=False):
-            st.dataframe(profile, use_container_width=True, key=f"{key}_profile")
+            render_table(profile, money_cols=("revenue",))
 
         with st.expander("Customer drill-down", expanded=False):
             choice = st.selectbox(

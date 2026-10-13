@@ -3,8 +3,10 @@
 import pandas as pd
 import streamlit as st
 
+from components.empty_state import empty_state
 from components.filters import control_group, controls_expander
 from components.nav_tabs import render_nav_tabs
+from components.page_header import page_header
 from services import state_service
 from services.column_detection import validate_mapping
 from services.data_service import load_upload_bytes
@@ -19,10 +21,12 @@ state_service.initialize(st.session_state)
 inject_terminal_css()
 render_nav_tabs("pages/01_Data_Upload_and_Mapping.py")
 
-st.markdown(
+page_header(
+    "Data Upload & Mapping",
     "Upload a transaction file, review the automatic column mapping, correct it if "
-    "needed, then continue to **Data Quality & Cleaning**. "
-    "Required fields: `customer_id`, `transaction_date`, `amount_spent`."
+    "needed, then continue to Data Quality & Cleaning. "
+    "Required fields: customer_id, transaction_date, amount_spent.",
+    badge="Step 1 of 9",
 )
 
 with controls_expander():
@@ -91,7 +95,7 @@ if uploaded is not None:
 
 raw = st.session_state.get("raw_data")
 if raw is None:
-    st.info("Upload a file or load the demo data to begin mapping.")
+    empty_state("No data yet", "Upload a file or load the demo data to begin mapping.")
     st.stop()
 
 st.success(

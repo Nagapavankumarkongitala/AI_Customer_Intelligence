@@ -2,9 +2,12 @@
 
 import streamlit as st
 
+from components.empty_state import chart_section, empty_state
 from components.filters import controls_expander, multiselect_filter
-from components.metric_cards import kpi_row
+from components.metric_card import Metric, metric_row
 from components.nav_tabs import render_nav_tabs
+from components.page_header import page_header, section_header
+from components.table import render_table
 from retention_engine.offer_recommender import describe_offer
 from services import state_service
 from services.export_service import to_csv_bytes
@@ -14,6 +17,7 @@ from services.retention_service import (
     export_campaign,
     retention_summary,
 )
+from utils import formatting
 from utils.exceptions import CustomerIntelligenceError
 from utils.logging_config import configure_logging
 from visualization.retention_charts import (
@@ -29,15 +33,20 @@ state_service.initialize(st.session_state)
 inject_terminal_css()
 render_nav_tabs("pages/08_Retention_Strategies.py")
 
-st.markdown(
+page_header(
+    "Retention Strategies",
     "Decision support, not promises: historical value × modeled churn risk becomes "
-    "a ranked, fully reasoned action list. No causal retention impact is claimed."
+    "a ranked, fully reasoned action list. No causal retention impact is claimed.",
+    badge="Step 8 of 9",
 )
 
 scores = st.session_state.get("churn_scores")
 features = st.session_state.get("customer_features")
 if scores is None or features is None:
-    st.info("Score customers on Churn Prediction first (needs churn scores + features).")
+    empty_state(
+        "No scores yet",
+        "Score customers on Churn Prediction first (needs churn scores + features).",
+    )
     st.stop()
 
 features = features.copy()
@@ -109,26 +118,41 @@ st.session_state["retention_results"] = {
 summary = retention_summary(table)
 st.info(matrix.disclaimer)
 
-st.subheader("At a glance")
-kpi_row(
+section_header("At a glance")
+critical_count = int(summary["band_mix"].get("critical", 0))
+metric_row(
     [
-        ("Revenue at risk", f"₹{summary['total_revenue_at_risk']:,.0f}"),
-        ("Customers scored", f"{summary['customers']:,}"),
-        ("Top action", max(summary["strategy_mix"], key=summary["strategy_mix"].get)),
-        ("Critical band", str(summary["band_mix"].get("critical", 0))),
+        Metric(
+            "Revenue at risk",
+            formatting.fmt_money(summary["total_revenue_at_risk"]),
+        ),
+        Metric("Customers scored", formatting.fmt_int(summary["customers"])),
+        Metric(
+            "Top action",
+            max(summary["strategy_mix"], key=summary["strategy_mix"].get),
+        ),
+        Metric(
+            "Critical band",
+            str(critical_count),
+            tone="negative" if critical_count else "neutral",
+        ),
     ]
 )
 
 ret_l, ret_r = st.columns([1, 1])
 with ret_l:
-    st.plotly_chart(value_risk_matrix(table), use_container_width=True)
+    with chart_section("Value–risk matrix"):
+        st.plotly_chart(value_risk_matrix(table), use_container_width=True)
 with ret_r:
-    st.plotly_chart(revenue_at_risk_bar(table), use_container_width=True)
+    with chart_section("Revenue at risk per action"):
+        st.plotly_chart(revenue_at_risk_bar(table), use_container_width=True)
 strat_l, strat_r = st.columns([1, 1])
 with strat_l:
-    st.plotly_chart(strategy_distribution_bar(table), use_container_width=True)
+    with chart_section("Customers per recommended action"):
+        st.plotly_chart(strategy_distribution_bar(table), use_container_width=True)
 with strat_r:
-    st.plotly_chart(priority_histogram(table), use_container_width=True)
+    with chart_section("Priority score distribution"):
+        st.plotly_chart(priority_histogram(table), use_container_width=True)
 
 with controls_expander("View Filters"):
     regions = sorted(table["region"].dropna().unique()) if "region" in table.columns else []
@@ -144,7 +168,11 @@ if segs:
     view = view[view["segment"].isin(seg_pick)]
 view = view[view["risk_band"].isin(band_pick)]
 with st.expander("Ranked customers (top 200 of filter)", expanded=False):
-    st.dataframe(view.head(200), use_container_width=True)
+    render_table(
+        view.head(200),
+        risk_cols=("risk_band",),
+        money_cols=("revenue_at_risk", "expected_value_proxy_historical"),
+    )
     st.caption(
         f"Showing up to 200 of {len(view)} filtered customers. Every row names its "
         "strategy rule — click into action_reason for the full audit trail."

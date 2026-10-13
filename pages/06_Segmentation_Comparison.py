@@ -13,8 +13,12 @@ from analytics.segmentation_comparison import (
     size_balance,
     value_separation,
 )
+from components.empty_state import chart_section, empty_state
 from components.filters import control_group, controls_expander
+from components.insight_box import insight_box
+from components.metric_card import Metric, metric_row
 from components.nav_tabs import render_nav_tabs
+from components.page_header import page_header
 from services import state_service
 from services.export_service import to_csv_bytes, to_json_bytes
 from utils.logging_config import configure_logging
@@ -26,10 +30,12 @@ state_service.initialize(st.session_state)
 inject_terminal_css()
 render_nav_tabs("pages/06_Segmentation_Comparison.py")
 
-st.markdown(
+page_header(
+    "Segmentation Comparison",
     "Fair comparison across statistical separation, stability, interpretability, and "
     "revenue differentiation. Silhouette is comparable only among AI runs sharing a "
-    "feature space — the operational pick never comes from one metric alone."
+    "feature space — the operational pick never comes from one metric alone.",
+    badge="Step 6 of 9",
 )
 
 features = st.session_state.get("customer_features")
@@ -37,10 +43,13 @@ rfm = st.session_state.get("rfm_results")
 lrfm = st.session_state.get("lrfm_results")
 ai_runs = [r for r in (st.session_state.get("segmentation_runs") or []) if "labels" in r]
 if features is None or (rfm is None and lrfm is None):
-    st.info("Score RFM/LRFM on page 03 first.")
+    empty_state("No scores yet", "Score RFM/LRFM on page 03 first.")
     st.stop()
 if not ai_runs:
-    st.info("Save at least one AI run on page 05 first (re-save older runs to attach labels).")
+    empty_state(
+        "No AI runs yet",
+        "Save at least one AI run on page 05 first (re-save older runs to attach labels).",
+    )
     st.stop()
 
 money = features.set_index("customer_id")["monetary_value"]
@@ -150,11 +159,12 @@ for i in range(0, len(metrics), 2):
     cols = st.columns([1] * len(pair))
     for col, (metric, title) in zip(cols, pair, strict=True):
         with col:
-            st.plotly_chart(
-                metric_comparison_bar(table, metric, title),
-                use_container_width=True,
-                key=f"cmp_{metric}",
-            )
+            with chart_section(title):
+                st.plotly_chart(
+                    metric_comparison_bar(table, metric, title),
+                    use_container_width=True,
+                    key=f"cmp_{metric}",
+                )
 
 # --- Pairwise agreement: traditional vs selected AI ---------------------------
 ai_names = [r["model"] for r in rows if r["kind"] == "AI"]
@@ -167,9 +177,10 @@ ct = crosstab_counts(labelings[ref], labelings[target])
 ari = agreement_ari(labelings[ref], labelings[target])
 agree_l, agree_r = st.columns([1, 2])
 with agree_l:
-    st.metric(f"Adjusted Rand Index ({ref} vs {target})", ari)
+    metric_row([Metric(f"Adjusted Rand Index ({ref} vs {target})", f"{ari:.3f}")])
 with agree_r:
-    st.plotly_chart(sankey_mapping(ct, ref, target), use_container_width=True)
+    with chart_section(f"Customer flow ({ref} → {target})"):
+        st.plotly_chart(sankey_mapping(ct, ref, target), use_container_width=True)
 with st.expander("Cross-tabulation (counts)", expanded=False):
     st.dataframe(ct, use_container_width=True)
 
@@ -195,7 +206,11 @@ else:
 
 # --- Recommendation ------------------------------------------------------------
 recommendation = recommend_model(table.rename(columns={"model": "name"}).to_dict(orient="records"))
-st.info(recommendation["rationale"])
+insight_box(
+    "Model recommendation",
+    recommendation["rationale"],
+    tone="info",
+)
 with controls_expander("Operational Pick"):
     choice = st.selectbox(
         "Operational model (evidence above — disagree if it says otherwise)",
