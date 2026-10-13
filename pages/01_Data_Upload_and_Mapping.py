@@ -19,10 +19,9 @@ state_service.initialize(st.session_state)
 inject_terminal_css()
 render_nav_tabs("pages/01_Data_Upload_and_Mapping.py")
 
-st.title("01 · Data Upload & Mapping")
 st.markdown(
     "Upload a transaction file, review the automatic column mapping, correct it if "
-    "needed, then continue to **02 · Data Quality & Cleaning**. "
+    "needed, then continue to **Data Quality & Cleaning**. "
     "Required fields: `customer_id`, `transaction_date`, `amount_spent`."
 )
 
@@ -32,6 +31,7 @@ with controls_expander():
             "Transaction file", type=[s.lstrip(".") for s in SUPPORTED_UPLOAD_SUFFIXES]
         )
         use_demo = st.button("Load synthetic demo data")
+        use_default = st.button("Load default dataset (data_edited.csv)")
     with control_group("Column Mapping (auto-detected, correct as needed)"):
         raw_preview = st.session_state.get("raw_data")
         if raw_preview is not None:
@@ -59,6 +59,25 @@ if use_demo:
         st.session_state["raw_data"] = preview.frame
         st.session_state["source_filename"] = name
         st.session_state["column_mapping"] = dict(preview.proposal.mapping)
+    except CustomerIntelligenceError as exc:
+        st.error(str(exc))
+if use_default:
+    try:
+        from services import bootstrap_service
+
+        state_service.reset(st.session_state)
+        manifest = bootstrap_service.load_default_into_state(st.session_state)
+        if manifest is None:
+            st.error(
+                "Default cache not built yet. Run `python scripts/build_default_run.py` "
+                "once, then retry."
+            )
+        else:
+            st.success(
+                f"Default dataset {manifest['source']} loaded with pre-trained runs: "
+                f"{manifest['customers']:,} customers, "
+                f"churn {manifest['selected_churn_model']} AUC {manifest['churn_auc']:.3f}."
+            )
     except CustomerIntelligenceError as exc:
         st.error(str(exc))
 if uploaded is not None:
@@ -115,7 +134,7 @@ with col_a:
                 ],
             )
             st.session_state["column_mapping"] = dict(mapping)
-            st.success("Mapping saved. Continue to 02 · Data Quality & Cleaning.")
+            st.success("Mapping saved. Continue to Data Quality & Cleaning.")
         except CustomerIntelligenceError as exc:
             st.error(str(exc))
 with col_b:

@@ -19,10 +19,17 @@ except ConfigurationError as exc:
 
 state_service.initialize(st.session_state)
 
+try:
+    from services import bootstrap_service
+
+    default_manifest = bootstrap_service.load_default_into_state(st.session_state)
+except Exception as exc:  # missing cache or corrupt artifact: app stays usable
+    default_manifest = None
+    st.warning(f"Default dataset unavailable ({exc}). Upload a file to begin.")
+
 st.set_page_config(page_title="AI Customer Intelligence", layout="wide")
 inject_terminal_css()
 render_nav_tabs("app.py")
-st.title("AI Customer Intelligence Platform")
 
 st.markdown("""
 Upload customer transactions once, then move through the sidebar pages in order:
@@ -56,6 +63,72 @@ st.info(
     "`python utils/sample_data.py` and upload `data/sample/sample_customer_transactions.csv`."
 )
 
+st.subheader("Default dataset & pre-trained runs")
+if default_manifest:
+    st.success(
+        f"**{default_manifest['source']}** auto-loaded: "
+        f"{default_manifest['rows']:,} transactions, "
+        f"{default_manifest['customers']:,} customers "
+        f"(built {default_manifest['built_at']}). All pages below show its results."
+    )
+    kpis = [
+        ("Quality score", f"{default_manifest['quality_overall']:.1f}"),
+        (
+            "RFM / LRFM segments",
+            f"{default_manifest['rfm_segments']} / {default_manifest['lrfm_segments']}",
+        ),
+        (
+            "Segmentation",
+            f"{default_manifest['selected_segmentation_model']} "
+            f"(+{len(default_manifest['segmentation_models'])} trained)",
+        ),
+        (
+            f"Churn {default_manifest['selected_churn_model']}",
+            f"AUC {default_manifest['churn_auc']:.3f} · rate {default_manifest['churn_rate']:.1%}",
+        ),
+        ("Retention ranked", f"{default_manifest['retention_customers']:,}"),
+    ]
+    kpi_cols = st.columns(len(kpis))
+    for col, (label, value) in zip(kpi_cols, kpis, strict=True):
+        col.metric(label, value)
+
+    with st.expander("RFM segment mix (default run)", expanded=False):
+        rfm_default = st.session_state.get("rfm_results")
+        if rfm_default is not None:
+            mix = (
+                rfm_default["segment"]
+                .value_counts()
+                .rename_axis("segment")
+                .reset_index(name="customers")
+            )
+            st.dataframe(mix, use_container_width=True)
+    with st.expander("Churn test metrics (default run)", expanded=False):
+        meta = st.session_state.get("churn_model_metadata") or {}
+        if meta.get("metrics"):
+            st.write(
+                {
+                    k: (round(v, 4) if isinstance(v, float) else v)
+                    for k, v in meta["metrics"].items()
+                }
+            )
+            st.caption(
+                f"Model {meta.get('model')} · cutoff {meta.get('cutoff')} · "
+                f"horizon {meta.get('horizon_days')}d · calibration {meta.get('calibration')}."
+            )
+    with st.expander("Retention summary (default run)", expanded=False):
+        retention_default = st.session_state.get("retention_results") or {}
+        if retention_default.get("summary"):
+            st.write(retention_default["summary"])
+    st.caption(
+        "Hierarchical/ensemble segmentation are skipped in the default run (O(n²) at "
+        "~25k customers) — train them on page 05. Rebuild after data changes with "
+        "`python scripts/build_default_run.py --force`."
+    )
+else:
+    st.info(
+        "Default cache not built yet. Run `python scripts/build_default_run.py` once, "
+        "then reload — or upload any file on Data Upload & Mapping."
+    )
 st.subheader("Pipeline status")
 status = state_service.status_report(st.session_state)
 stages = [

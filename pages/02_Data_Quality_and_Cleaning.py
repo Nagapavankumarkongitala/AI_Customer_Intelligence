@@ -22,7 +22,6 @@ state_service.initialize(st.session_state)
 inject_terminal_css()
 render_nav_tabs("pages/02_Data_Quality_and_Cleaning.py")
 
-st.title("02 · Data Quality & Cleaning")
 st.markdown(
     "Overall = 0.40 × completeness + 0.40 × validity + 0.20 × uniqueness. "
     "Every cleaning action is recorded in the audit — nothing is dropped silently."
@@ -31,7 +30,7 @@ st.markdown(
 raw = st.session_state.get("raw_data")
 mapping = st.session_state.get("column_mapping") or {}
 if raw is None or not mapping:
-    st.info("Complete 01 · Data Upload & Mapping first (upload a file and save the mapping).")
+    st.info("Complete Data Upload & Mapping first (upload a file and save the mapping).")
     st.stop()
 
 cfg = yaml.safe_load(Path("config.yaml").read_text(encoding="utf-8"))

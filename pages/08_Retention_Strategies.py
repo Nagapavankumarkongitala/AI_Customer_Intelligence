@@ -29,7 +29,6 @@ state_service.initialize(st.session_state)
 inject_terminal_css()
 render_nav_tabs("pages/08_Retention_Strategies.py")
 
-st.title("08 · Retention Strategies")
 st.markdown(
     "Decision support, not promises: historical value × modeled churn risk becomes "
     "a ranked, fully reasoned action list. No causal retention impact is claimed."
@@ -38,7 +37,7 @@ st.markdown(
 scores = st.session_state.get("churn_scores")
 features = st.session_state.get("customer_features")
 if scores is None or features is None:
-    st.info("Score customers on 07 · Churn Prediction first (needs churn scores + features).")
+    st.info("Score customers on Churn Prediction first (needs churn scores + features).")
     st.stop()
 
 features = features.copy()

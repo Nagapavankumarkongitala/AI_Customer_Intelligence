@@ -32,7 +32,6 @@ state_service.initialize(st.session_state)
 inject_terminal_css()
 render_nav_tabs("pages/04_Demographic_Profiling.py")
 
-st.title("04 · Demographic & Geographic Profiling")
 st.markdown(
     "Who the customers are, where the revenue concentrates, and how profiles differ "
     "across segments. Missing fields produce notices, never crashes; maps are omitted "
@@ -41,7 +40,7 @@ st.markdown(
 
 features = st.session_state.get("customer_features")
 if features is None:
-    st.info("Build customer features on 03 · RFM / LRFM Analysis first.")
+    st.info("Build customer features on RFM / LRFM Analysis first.")
     st.stop()
 
 rfm = st.session_state.get("rfm_results")

@@ -42,7 +42,6 @@ state_service.initialize(st.session_state)
 inject_terminal_css()
 render_nav_tabs("pages/07_Churn_Prediction.py")
 
-st.title("07 · Churn Prediction")
 st.markdown(
     "Future inactivity predicted from historical behavior only: predictors use "
     "transactions on or before the cutoff; the label uses activity after it. "
@@ -51,7 +50,7 @@ st.markdown(
 
 clean_data = st.session_state.get("clean_data")
 if clean_data is None:
-    st.info("Complete 02 · Data Quality & Cleaning first.")
+    st.info("Complete Data Quality & Cleaning first.")
     st.stop()
 
 cfg = yaml.safe_load(Path("config.yaml").read_text(encoding="utf-8"))

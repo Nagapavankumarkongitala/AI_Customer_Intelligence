@@ -33,7 +33,6 @@ state_service.initialize(st.session_state)
 inject_terminal_css()
 render_nav_tabs("pages/03_RFM_LRFM_Analysis.py")
 
-st.title("03 · RFM / LRFM Analysis")
 st.markdown(
     "Customer-level features feed quantile-based RFM and LRFM scoring. "
     "Segments are named from score components and raw values — never from the "
@@ -42,7 +41,7 @@ st.markdown(
 
 clean_data = st.session_state.get("clean_data")
 if clean_data is None:
-    st.info("Complete 02 · Data Quality & Cleaning first (apply cleaning to get clean data).")
+    st.info("Complete Data Quality & Cleaning first (apply cleaning to get clean data).")
     st.stop()
 
 cfg = yaml.safe_load(Path("config.yaml").read_text(encoding="utf-8"))

@@ -38,7 +38,6 @@ state_service.initialize(st.session_state)
 inject_terminal_css()
 render_nav_tabs("pages/05_Advanced_Segmentation.py")
 
-st.title("05 · Advanced Segmentation")
 st.markdown(
     "Unsupervised segmentation over the customer feature table. Prepare features, "
     "compare models and cluster counts, then name clusters from their profiles — "
@@ -47,7 +46,7 @@ st.markdown(
 
 features = st.session_state.get("customer_features")
 if features is None:
-    st.info("Build customer features on 03 · RFM / LRFM Analysis first.")
+    st.info("Build customer features on RFM / LRFM Analysis first.")
     st.stop()
 
 cfg = yaml.safe_load(Path("config.yaml").read_text(encoding="utf-8"))

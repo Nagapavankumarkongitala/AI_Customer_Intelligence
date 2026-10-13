@@ -26,7 +26,6 @@ state_service.initialize(st.session_state)
 inject_terminal_css()
 render_nav_tabs("pages/06_Segmentation_Comparison.py")
 
-st.title("06 · Segmentation Comparison")
 st.markdown(
     "Fair comparison across statistical separation, stability, interpretability, and "
     "revenue differentiation. Silhouette is comparable only among AI runs sharing a "

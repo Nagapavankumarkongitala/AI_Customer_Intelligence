@@ -65,7 +65,6 @@ def _retention_frame() -> pd.DataFrame | None:
     return pd.DataFrame(rows) if rows else None
 
 
-st.title("09 · Executive Dashboard")
 st.markdown(
     "Every card below derives from the same sidebar filters. "
     "Customer IDs are masked except in the gated drill-down."
@@ -73,7 +72,7 @@ st.markdown(
 
 clean_data = st.session_state.get("clean_data")
 if clean_data is None:
-    st.info("Complete 02 · Data Quality & Cleaning first — the dashboard needs clean data.")
+    st.info("Complete Data Quality & Cleaning first — the dashboard needs clean data.")
     st.stop()
 
 features = st.session_state.get("customer_features")
