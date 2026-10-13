@@ -15,10 +15,10 @@ _FOOTER_CALL = "render_sidebar_footer"
 #: compute-driving configuration in-page. Changing this set is a design
 #: decision, not a refactor accident — update deliberately.
 SIDEBAR_FILTER_VIEWS = {
+    "app.py",
     "pages/04_Demographic_Profiling.py",
     "pages/06_Segmentation_Comparison.py",
     "pages/08_Retention_Strategies.py",
-    "pages/09_Executive_Dashboard.py",
 }
 
 
@@ -33,8 +33,8 @@ def _call_count(path: Path, name: str) -> int:
 
 
 def test_nav_order_matches_pages_directory() -> None:
-    """The rail leads with the dashboard; every view is listed exactly once."""
-    assert NAV_PAGES[0] == ("Dashboard", "pages/09_Executive_Dashboard.py")
+    """The rail leads with the dashboard landing; every view is listed exactly once."""
+    assert NAV_PAGES[0] == ("Dashboard", "app.py")
     assert sorted(p for _, p in NAV_PAGES) == sorted(
         ["app.py", *[f"pages/{p.name}" for p in PAGES]]
     )
@@ -48,7 +48,7 @@ def test_nav_targets_exist() -> None:
 
 
 def test_every_view_renders_sidebar_nav() -> None:
-    """app.py + all 9 pages open the rail with render_sidebar_nav."""
+    """app.py + all 8 pages open the rail with render_sidebar_nav."""
     missing = [str(p) for p in TARGETS if _call_count(p, _NAV_CALL) == 0]
     assert missing == []
 
@@ -62,7 +62,7 @@ def test_nav_rendered_exactly_once() -> None:
 
 
 def test_every_view_renders_sidebar_footer() -> None:
-    """app.py + all 9 pages close the rail with render_sidebar_footer."""
+    """app.py + all 8 pages close the rail with render_sidebar_footer."""
     missing = [str(p) for p in TARGETS if _call_count(p, _FOOTER_CALL) == 0]
     assert missing == []
     doubled = [

@@ -8,7 +8,7 @@ import plotly.express as px
 from visualization.theme import PRIMARY, PRIMARY_DISCRETE, PRIMARY_SCALE, empty_figure, styled
 
 
-def _plural(level: str) -> str:
+def plural_geo_level(level: str) -> str:
     """English plural for a geographic level (city→cities, country→countries)."""
     if level.endswith("y"):
         return f"{level[:-1]}ies"
@@ -66,7 +66,7 @@ def gender_bar(gender: pd.DataFrame) -> px.Figure:
 @styled
 def top_geo_bar(geo: pd.DataFrame, level: str, top_n: int = 10) -> px.Figure:
     """Top values for a geographic level."""
-    plural = _plural(level)
+    plural = plural_geo_level(level)
     if geo.empty:
         return empty_figure(f"Top {plural} by customers")
     return px.bar(
@@ -82,7 +82,7 @@ def top_geo_bar(geo: pd.DataFrame, level: str, top_n: int = 10) -> px.Figure:
 @styled
 def revenue_geo_bar(geo: pd.DataFrame, level: str, top_n: int = 10) -> px.Figure:
     """Top values for a geographic level by revenue."""
-    plural = _plural(level)
+    plural = plural_geo_level(level)
     if geo.empty:
         return empty_figure(f"Top {plural} by revenue")
     return px.bar(
