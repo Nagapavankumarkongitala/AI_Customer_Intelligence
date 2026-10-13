@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import pandas as pd
 import streamlit as st
+from pandas.io.formats.style import Styler
 
 from utils import formatting
 from visualization import tokens
@@ -61,7 +62,7 @@ def style_table(
     money_cols: tuple[str, ...] = (),
     pct_cols: tuple[str, ...] = (),
     int_cols: tuple[str, ...] = (),
-) -> pd.io.formats.style.Styler | pd.DataFrame:
+) -> Styler | pd.DataFrame:
     """Format numerics and paint risk-band cells.
 
     Returns a Styler when ``jinja2`` is installed, otherwise the formatted
