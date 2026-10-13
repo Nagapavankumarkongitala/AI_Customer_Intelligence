@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pandas as pd
 
 from components.sidebar import collect_status, sidebar_status_html
@@ -58,3 +60,24 @@ def test_theme_preference_survives_outside_the_contract() -> None:
     from services.state_service import _DEFAULTS
 
     assert THEME_KEY not in _DEFAULTS
+
+
+def test_toggle_reads_durable_labels_with_session_persistence() -> None:
+    """Display labels resolve from plain mappings; the radio persists by design.
+
+    Streamlit drops page-scoped widget values on every page switch (verified
+    live), so the toggle requires both ``key=`` and ``persist_state="session"``
+    — this test trips if either is removed.
+    """
+    from components.theme import _stored_label
+
+    assert _stored_label({}) == "Light"
+    assert _stored_label({THEME_KEY: "Dark"}) == "Dark"
+    assert _stored_label({THEME_KEY: "dark"}) == "Dark"
+    assert _stored_label({THEME_KEY: "nonsense"}) == "Light"
+
+    radio_lines = [
+        line for line in Path("components/theme.py").read_text(encoding="utf-8").splitlines()
+    ]
+    assert any('persist_state="session"' in line for line in radio_lines)
+    assert any("key=THEME_KEY" in line for line in radio_lines)

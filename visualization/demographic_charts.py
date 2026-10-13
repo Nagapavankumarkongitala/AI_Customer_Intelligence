@@ -8,6 +8,15 @@ import plotly.express as px
 from visualization.theme import PRIMARY, PRIMARY_DISCRETE, PRIMARY_SCALE, empty_figure, styled
 
 
+def _plural(level: str) -> str:
+    """English plural for a geographic level (city→cities, country→countries)."""
+    if level.endswith("y"):
+        return f"{level[:-1]}ies"
+    if level.endswith("s"):
+        return f"{level}es"
+    return f"{level}s"
+
+
 @styled
 def age_histogram(ages: pd.Series) -> px.Figure:
     """Distribution of customer ages."""
@@ -57,30 +66,32 @@ def gender_bar(gender: pd.DataFrame) -> px.Figure:
 @styled
 def top_geo_bar(geo: pd.DataFrame, level: str, top_n: int = 10) -> px.Figure:
     """Top values for a geographic level."""
+    plural = _plural(level)
     if geo.empty:
-        return empty_figure(f"Top {level}s by customers")
+        return empty_figure(f"Top {plural} by customers")
     return px.bar(
         geo.head(top_n),
         x=level,
         y="customers",
         color="customers",
         color_continuous_scale=PRIMARY_SCALE,
-        title=f"Top {level}s by customers",
+        title=f"Top {plural} by customers",
     )
 
 
 @styled
 def revenue_geo_bar(geo: pd.DataFrame, level: str, top_n: int = 10) -> px.Figure:
     """Top values for a geographic level by revenue."""
+    plural = _plural(level)
     if geo.empty:
-        return empty_figure(f"Top {level}s by revenue")
+        return empty_figure(f"Top {plural} by revenue")
     return px.bar(
         geo.head(top_n),
         x=level,
         y="revenue",
         color="revenue",
         color_continuous_scale=PRIMARY_SCALE,
-        title=f"Top {level}s by revenue",
+        title=f"Top {plural} by revenue",
     )
 
 

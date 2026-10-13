@@ -142,7 +142,7 @@ def sankey_mapping(contingency: pd.DataFrame, source_name: str, target_name: str
                 "color": tokens.with_alpha(tokens.color("primary"), 0.25),
             },
         )
-    )
+    ).update_layout(title=f"{source_name} → {target_name} flow")
 
 
 @styled

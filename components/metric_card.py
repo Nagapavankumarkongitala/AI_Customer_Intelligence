@@ -62,12 +62,12 @@ def metric_card_html(metric: Metric) -> str:
         f"border-top:3px solid {accent};"
         f"border-radius:{tokens.RADIUS['lg']};"
         f"box-shadow:{tokens.shadow('card')};"
-        "padding:0.9rem 1.1rem;min-height:6.5rem;'>"
-        f"<div style='color:{tokens.color('muted')};font-size:0.74rem;font-weight:600;"
-        f"letter-spacing:0.04em;text-transform:uppercase;'{title_attr}>"
+        "padding:0.85rem 0.95rem;min-height:6.5rem;'>"
+        f"<div style='color:{tokens.color('muted')};font-size:0.70rem;font-weight:600;"
+        f"letter-spacing:0.03em;text-transform:uppercase;overflow-wrap:break-word;'{title_attr}>"
         f"{html.escape(metric.label)}</div>"
-        "<div style='font-size:1.55rem;font-weight:700;font-variant-numeric:tabular-nums;"
-        f"line-height:1.25;margin-top:0.15rem;'>{html.escape(metric.value)}</div>"
+        "<div style='font-size:1.35rem;font-weight:700;font-variant-numeric:tabular-nums;"
+        f"line-height:1.25;margin-top:0.15rem;overflow-wrap:break-word;'>{html.escape(metric.value)}</div>"
         f"{delta_html}</div>"
     )
 

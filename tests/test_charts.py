@@ -246,6 +246,28 @@ def test_action_charts_use_stable_hues() -> None:
     assert _trace_colors(retention_charts.strategy_distribution_bar(table)) == expected
 
 
+def test_geo_titles_use_english_plurals() -> None:
+    """Level names pluralize correctly in chart titles (no 'citys')."""
+    geo = pd.DataFrame({"city": ["Pune"], "customers": [3], "revenue": [500.0]})
+    assert demographic_charts.top_geo_bar(geo, "city").layout.title.text == (
+        "Top cities by customers"
+    )
+    assert demographic_charts.revenue_geo_bar(geo, "city").layout.title.text == (
+        "Top cities by revenue"
+    )
+    country = pd.DataFrame({"country": ["India"], "customers": [3]})
+    assert "countries" in demographic_charts.top_geo_bar(country, "country").layout.title.text
+    region = pd.DataFrame({"region": ["West"], "customers": [3]})
+    assert "regions" in demographic_charts.top_geo_bar(region, "region").layout.title.text
+
+
+def test_sankey_has_a_title() -> None:
+    """The flow chart names its endpoints instead of Plotly's placeholder."""
+    contingency = pd.DataFrame({"B": [5]}, index=pd.Index(["A"], name="src"))
+    fig = segmentation_charts.sankey_mapping(contingency, "RFM", "AI")
+    assert fig.layout.title.text == "RFM → AI flow"
+
+
 def test_empty_inputs_return_titled_placeholders() -> None:
     """Empty inputs render a titled empty state instead of crashing or blanking."""
     from visualization.theme import empty_figure
@@ -285,8 +307,8 @@ def test_empty_inputs_return_titled_placeholders() -> None:
         (demographic_charts.age_histogram(pd.Series([], dtype=float)), "Age distribution"),
         (demographic_charts.age_band_bar(pd.DataFrame()), "Customers per age band"),
         (demographic_charts.gender_bar(pd.DataFrame()), "Customers by gender"),
-        (demographic_charts.top_geo_bar(pd.DataFrame(), "city"), "Top citys by customers"),
-        (demographic_charts.revenue_geo_bar(pd.DataFrame(), "city"), "Top citys by revenue"),
+        (demographic_charts.top_geo_bar(pd.DataFrame(), "city"), "Top cities by customers"),
+        (demographic_charts.revenue_geo_bar(pd.DataFrame(), "city"), "Top cities by revenue"),
         (demographic_charts.geo_treemap(pd.DataFrame(), "city"), "Customer share by city"),
         (
             demographic_charts.stacked_composition_bar(pd.DataFrame(), "gender"),
