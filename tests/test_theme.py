@@ -201,11 +201,15 @@ def test_sheets_carry_no_colour_outside_tokens() -> None:
             assert found.upper() in palette_values, f"{mode} CSS carries stray colour {found}"
 
 
-def test_sidebar_stays_collapsed_until_navigation_moves() -> None:
-    """Filters live in expanders until the sidebar rework; both sheets agree."""
+def test_sidebar_visible_and_auto_nav_hidden() -> None:
+    """The sidebar renders; only Streamlit's auto page list stays hidden."""
+    import re
+
     for sheet in (LIGHT_CSS, DARK_CSS):
-        assert '[data-testid="stSidebar"]' in sheet
-        assert "display: none" in sheet
+        assert '[data-testid="stSidebarNav"]' in sheet
+        assert (
+            re.search(r'\[data-testid="stSidebar"\][^{]*\{[^}]*display:\s*none', sheet) is None
+        ), "stylesheet hides the sidebar"
 
 
 def test_legacy_names_remain_importable() -> None:

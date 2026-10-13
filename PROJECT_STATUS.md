@@ -70,3 +70,8 @@ All 8 build phases done.
 Done — plus UI overhauls (terminal → glassmorphism → navy/cyan tab-bar UI with
 control expanders and train-all). Maintenance mode; revalidate churn models on
 fresh outcome windows as behavior drifts.
+\
+## UI redesign (light foundation, in progress)
+- Phase 1 (committed): isualization/tokens.py (light default + dark skins, segment/risk/action maps, WCAG guards), isualization/theme.py rewritten around pply_chart_theme/load_theme (dark re-map, foreign-default adoption), light .streamlit/config.toml, rewritten theme/token tests.
+- Phase 2 (committed): utils/formatting.py plus components/ library (page_header, metric_card max 5/row, status_badge, insight_box, empty_state, panels, 	able) with tests. Legacy kpi_row/inject_terminal_css kept importable.
+- Phase 3 (this change): persistent left sidebar (components/sidebar.py: NAV_PAGES nav, appearance toggle, data status), components/theme.py preference outside the 19-key state contract, ender_nav_tabs kept as a delegating shim (zero page edits), 	est_no_sidebar_usage replaced with sidebar guards. Next: executive-dashboard rebuild, visualization refactor, remaining pages, hardening.\

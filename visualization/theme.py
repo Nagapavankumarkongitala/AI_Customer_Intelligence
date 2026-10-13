@@ -93,22 +93,9 @@ html, body { touch-action: manipulation; }
 }
 h1, h2, h3 { color: $text; letter-spacing: -0.02em; }
 a { color: $primary; }
-/* Sidebar stays collapsed until the navigation rework moves filters into it. */
-[data-testid="stSidebar"], [data-testid="stSidebarNav"],
-[data-testid="collapsedControl"] {
+/* Streamlit's auto-generated page list stays off: the sidebar renders NAV_PAGES. */
+[data-testid="stSidebarNav"] {
     display: none;
-}
-/* Top tab bar */
-.nav-tab {
-    text-align: center;
-    padding: 0.45rem 0.2rem;
-    font-size: 0.82rem;
-    color: $muted;
-}
-.nav-active {
-    color: $primary;
-    border-bottom: 2px solid $primary;
-    font-weight: 600;
 }
 /* Surface cards */
 .dashboard-card {

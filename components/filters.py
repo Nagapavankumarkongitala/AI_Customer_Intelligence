@@ -1,8 +1,8 @@
-"""Shared page controls: grouped filters inside a collapsed expander.
+"""Shared page controls: grouped controls inside a collapsed expander.
 
-The sidebar is hidden entirely (see theme CSS); every control lives in a
-per-page "Controls & Filters" expander so the canvas stays a KPI/graph terminal.
-Group related controls with control_group().
+Page-specific configuration lives here, next to the analysis it drives. The
+persistent sidebar (``components.sidebar``) holds navigation, appearance, and
+data status only. Group related controls with control_group().
 """
 
 from __future__ import annotations
