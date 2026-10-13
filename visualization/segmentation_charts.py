@@ -8,6 +8,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from sklearn.decomposition import PCA
 
+from visualization import tokens
 from visualization.theme import PRIMARY_DISCRETE, PRIMARY_SCALE, styled
 
 
@@ -107,12 +108,17 @@ def sankey_mapping(contingency: pd.DataFrame, source_name: str, target_name: str
                 values.append(value)
     return go.Figure(
         go.Sankey(
-            node={"label": labels, "pad": 12, "thickness": 16, "color": "#0E7490"},
+            node={
+                "label": labels,
+                "pad": 12,
+                "thickness": 16,
+                "color": tokens.color("secondary_dim"),
+            },
             link={
                 "source": link_source,
                 "target": link_target,
                 "value": values,
-                "color": "rgba(204,255,0,0.25)",
+                "color": tokens.with_alpha(tokens.color("primary"), 0.25),
             },
         )
     )

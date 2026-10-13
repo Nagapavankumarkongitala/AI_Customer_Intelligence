@@ -8,15 +8,16 @@ import plotly.express as px
 import plotly.graph_objects as go
 from sklearn.metrics import auc, roc_curve
 
+from visualization import tokens
 from visualization.theme import (
     MUTED,
     PRIMARY,
     PRIMARY_SCALE,
-    RISK_AMBER,
-    RISK_GREEN,
-    RISK_RED,
     styled,
 )
+
+#: Band order for risk visuals (config.yaml churn.risk_bands keys).
+RISK_BAND_ORDER = ("low", "medium", "high", "critical")
 
 
 @styled
@@ -116,18 +117,12 @@ def importance_bar_fig(importance: pd.DataFrame, top_n: int = 15) -> px.Figure:
 @styled
 def risk_band_bar(scores: pd.DataFrame) -> px.Figure:
     """Customer counts per risk band in band order (semantic risk hues)."""
-    order = ["low", "medium", "high", "critical"]
-    counts = scores["risk_band"].value_counts().reindex(order, fill_value=0)
+    counts = scores["risk_band"].value_counts().reindex(RISK_BAND_ORDER, fill_value=0)
     return px.bar(
         x=counts.index.tolist(),
         y=counts.tolist(),
         color=counts.index.tolist(),
-        color_discrete_map={
-            "low": RISK_GREEN,
-            "medium": RISK_AMBER,
-            "high": "#FF8C00",
-            "critical": RISK_RED,
-        },
+        color_discrete_map={band: tokens.risk_color(band) for band in RISK_BAND_ORDER},
         title="Customers per risk band",
         labels={"x": "Risk band", "y": "Customers"},
     )

@@ -1,47 +1,124 @@
-"""Terminal theme tests: styling wrapper, decorator, glass tokens, contrast."""
+"""Theme tests: the light design system, the one chart styler, and the dark skin."""
 
+from __future__ import annotations
+
+import re
 from pathlib import Path
 
 import pandas as pd
 import plotly.express as px
+import pytest
 
+from visualization import theme, tokens
 from visualization.theme import (
     CANVAS,
     CARD,
+    CHART_HEIGHT,
+    DARK_CSS,
     GLASS_BG,
     GLASS_BLUR,
     GLASS_BORDER,
     GLASS_RADIUS,
     GLASS_SHADOW,
+    LIGHT_CSS,
     MUTED,
     PRIMARY,
     TERMINAL_CSS,
+    apply_chart_theme,
+    build_css,
     inject_terminal_css,
     style_plotly_fig,
     styled,
 )
 
-
-def _luminance(hex_color: str) -> float:
-    rgb = [int(hex_color[i : i + 2], 16) / 255 for i in (1, 3, 5)]
-    lin = [c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4 for c in rgb]
-    return 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2]
+HEX = re.compile(r"#[0-9A-Fa-f]{6}")
 
 
-def _contrast(fg: str, bg: str) -> float:
-    lighter, darker = sorted((_luminance(fg), _luminance(bg)), reverse=True)
-    return (lighter + 0.05) / (darker + 0.05)
+@pytest.fixture(autouse=True)
+def _restore_mode():
+    """Chart theming is module-level state; never leak a mode between tests."""
+    original = tokens.active_mode()
+    yield
+    tokens.set_active_mode(original)
 
 
-def test_style_plotly_fig_dark_terminal() -> None:
-    """Styled figures are transparent dark-mode with muted Inter type."""
-    fig = style_plotly_fig(px.bar(pd.DataFrame({"a": ["x"], "b": [1]}), x="a", y="b"))
+def _sample() -> px.Figure:
+    return px.bar(pd.DataFrame({"a": ["x", "y"], "b": [1, 2]}), x="a", y="b")
+
+
+# --------------------------------------------------------------------------- #
+# Chart theming.
+# --------------------------------------------------------------------------- #
+
+
+def test_apply_chart_theme_uses_light_surface() -> None:
+    """Default charts render on the light surface with muted Inter type."""
+    fig = apply_chart_theme(_sample())
     layout = fig.layout
     assert layout.template is not None
-    assert layout.paper_bgcolor == "rgba(0,0,0,0)"
-    assert layout.plot_bgcolor == "rgba(0,0,0,0)"
-    assert layout.font.color == MUTED
-    assert layout.height == 380
+    assert layout.paper_bgcolor == tokens.LIGHT["surface"]
+    assert layout.plot_bgcolor == tokens.LIGHT["surface"]
+    assert layout.font.color == tokens.LIGHT["muted"]
+    assert layout.height == CHART_HEIGHT
+    assert tokens.DEFAULT_MODE == tokens.MODE_LIGHT
+
+
+def test_apply_chart_theme_anchors_title_top_left() -> None:
+    """A factory title is re-anchored to the top-left, matching the page hierarchy."""
+    fig = apply_chart_theme(
+        px.bar(pd.DataFrame({"a": ["x"], "b": [1]}), x="a", y="b", title="Revenue")
+    )
+    title = fig.layout.title
+    assert title.text == "Revenue"
+    assert title.x == 0.01 and title.xanchor == "left"
+
+
+def test_apply_chart_theme_accepts_explicit_title_override() -> None:
+    """An explicit title argument wins over whatever the factory set."""
+    fig = apply_chart_theme(_sample(), title="Override")
+    assert fig.layout.title.text == "Override"
+
+
+def test_apply_chart_theme_leaves_single_series_legend_alone() -> None:
+    """One trace keeps Plotly's no-legend default instead of a one-item legend."""
+    fig = apply_chart_theme(_sample())
+    assert not fig.layout.showlegend
+    assert apply_chart_theme(_sample(), show_legend=True).layout.showlegend is True
+
+
+def test_apply_chart_theme_positions_multi_series_legend() -> None:
+    """Multi-series figures get a horizontal legend above the plot area."""
+    frame = pd.DataFrame({"a": ["x", "x", "y", "y"], "b": [1, 2, 3, 4], "s": ["p", "q", "p", "q"]})
+    fig = apply_chart_theme(px.bar(frame, x="a", y="b", color="s"))
+    assert fig.layout.legend.orientation == "h"
+    assert fig.layout.legend.y == 1.02 and fig.layout.legend.x == 1
+
+
+def test_apply_chart_theme_remaps_literals_onto_the_dark_palette() -> None:
+    """Dark mode re-maps the factories' light literals onto the dark counterparts.
+
+    Factories are authored once against the default palette; switching mode must
+    not require editing (or even knowing about) them. The figure below carries
+    an explicit palette literal, so this exercises the re-map rather than the
+    separate default-adoption path.
+    """
+    import plotly.graph_objects as go
+
+    literal = go.Figure(go.Bar(x=["x"], y=[1], marker_color=tokens.LIGHT["primary"]))
+    light_fig = apply_chart_theme(literal)
+    assert light_fig.data[0].marker.color.upper() == tokens.LIGHT["primary"].upper()
+
+    tokens.set_active_mode(tokens.MODE_DARK)
+    dark_fig = apply_chart_theme(literal)
+    assert dark_fig.data[0].marker.color.upper() == tokens.DARK["primary"].upper()
+    assert dark_fig.layout.paper_bgcolor == tokens.DARK["surface"]
+
+
+def test_style_plotly_fig_is_the_legacy_entry_point() -> None:
+    """The old helper still styles a figure and still honours an explicit height."""
+    fig = style_plotly_fig(_sample())
+    assert fig.layout.paper_bgcolor == tokens.LIGHT["surface"]
+    assert style_plotly_fig(_sample(), height=200).layout.height == 200
 
 
 def test_styled_decorator_preserves_behavior() -> None:
@@ -49,47 +126,122 @@ def test_styled_decorator_preserves_behavior() -> None:
 
     @styled
     def make():
-        return px.bar(pd.DataFrame({"a": ["x"], "b": [1]}), x="a", y="b")
+        return _sample()
 
     assert make.__name__ == "make"
-    assert make().layout.paper_bgcolor == "rgba(0,0,0,0)"
+    assert make().layout.paper_bgcolor == tokens.LIGHT["surface"]
 
     @styled(height=200)
     def small():
-        return px.bar(pd.DataFrame({"a": ["x"], "b": [1]}), x="a", y="b")
+        return _sample()
 
     assert small().layout.height == 200
 
 
-def test_css_contract() -> None:
-    """CSS compresses padding, defines glass cards, caps tables, highlights KPIs."""
-    assert ".block-container" in TERMINAL_CSS
-    assert ".dashboard-card" in TERMINAL_CSS and CARD in TERMINAL_CSS
-    assert "max-height: 420px" in TERMINAL_CSS
-    assert PRIMARY in TERMINAL_CSS and CANVAS in TERMINAL_CSS
-    assert callable(inject_terminal_css)
+def test_normalize_to_mode_is_reversible() -> None:
+    """The colour re-map round-trips, so no mode can corrupt the other's hues."""
+    fig = _sample()
+    tokens.set_active_mode(tokens.MODE_DARK)
+    dark = theme.normalize_to_mode(fig, tokens.MODE_DARK)
+    back = theme.normalize_to_mode(dark, tokens.MODE_LIGHT)
+    assert back.data[0].marker.color.upper() == fig.data[0].marker.color.upper()
 
 
-def test_glass_tokens_present_in_css() -> None:
-    """Frosted-card tokens (translucency, blur, hairline border, glow canvas) ship."""
+def test_adopt_colorway_removes_leaked_defaults() -> None:
+    """A factory that passes no colour still renders in the design system.
+
+    Bare ``px`` figures carry whatever the process-global default template
+    assigned — Plotly's sequence before Streamlit is imported, Streamlit's
+    ``#00000N`` placeholders after — so this asserts the post-condition rather
+    than assuming which leak is present.
+    """
+    leaked = _sample().data[0].marker.color
+    assert leaked.upper() not in {c.upper() for c in tokens.colorway(tokens.MODE_LIGHT)}
+
+    light_marker = apply_chart_theme(_sample()).data[0].marker.color
+    assert light_marker.upper() == tokens.LIGHT["primary"].upper()
+    tokens.set_active_mode(tokens.MODE_DARK)
+    dark_marker = apply_chart_theme(_sample()).data[0].marker.color
+    assert dark_marker.upper() == tokens.DARK["primary"].upper()
+
+
+# --------------------------------------------------------------------------- #
+# Stylesheets.
+# --------------------------------------------------------------------------- #
+
+
+def test_light_stylesheet_is_the_shipped_default() -> None:
+    """The light sheet defines the surface, caps tables, and stays light."""
+    assert "color-scheme: light" in LIGHT_CSS
+    assert tokens.LIGHT["surface"] in LIGHT_CSS
+    assert tokens.LIGHT["background"] in LIGHT_CSS
+    assert ".block-container" in LIGHT_CSS
+    assert ".dashboard-card" in LIGHT_CSS
+    assert "max-height: 420px" in LIGHT_CSS
+    assert "tabular-nums" in LIGHT_CSS
+    assert '[data-testid="stPlotlyChart"]' in LIGHT_CSS
+
+
+def test_dark_stylesheet_retains_the_glass_console() -> None:
+    """The selectable dark skin keeps its frosted cards and glow canvas."""
+    assert "color-scheme: dark" in DARK_CSS
     for token in (GLASS_BG, GLASS_BORDER, GLASS_RADIUS, GLASS_SHADOW):
-        assert token in TERMINAL_CSS
-    assert "backdrop-filter: blur(12px)" in TERMINAL_CSS
-    assert '[data-testid="stMetric"]' in TERMINAL_CSS
-    assert "color-scheme: dark" in TERMINAL_CSS
-    assert "tabular-nums" in TERMINAL_CSS
+        assert token in DARK_CSS
+    assert f"backdrop-filter: {GLASS_BLUR}" in DARK_CSS
     assert GLASS_BLUR == "blur(12px)"
+    assert tokens.DARK["background"] in DARK_CSS
 
 
-def test_text_contrast_on_canvas() -> None:
-    """Primary ≥ 7:1, muted secondary ≥ 4.5:1 on canvas (computed, not eyeballed)."""
-    assert _contrast(PRIMARY, CANVAS) >= 7.0
-    assert _contrast(MUTED, CANVAS) >= 4.5
+def test_sheets_carry_no_colour_outside_tokens() -> None:
+    """Every hex in either stylesheet is a palette value (no drifting literals)."""
+    palette_values = {v.upper() for v in (*tokens.LIGHT.values(), *tokens.DARK.values())}
+    for mode in tokens.MODES:
+        sheet = build_css(mode)
+        for found in HEX.findall(sheet):
+            assert found.upper() in palette_values, f"{mode} CSS carries stray colour {found}"
 
 
-def test_no_legacy_volt_hex() -> None:
-    """The volt palette is fully retired from factories, pages, and latent viz."""
-    offenders = []
+def test_sidebar_stays_collapsed_until_navigation_moves() -> None:
+    """Filters live in expanders until the sidebar rework; both sheets agree."""
+    for sheet in (LIGHT_CSS, DARK_CSS):
+        assert '[data-testid="stSidebar"]' in sheet
+        assert "display: none" in sheet
+
+
+def test_legacy_names_remain_importable() -> None:
+    """Migration shims keep the previous theme's public names resolvable."""
+    assert TERMINAL_CSS == DARK_CSS
+    assert (CANVAS, CARD, PRIMARY, MUTED) == (
+        tokens.LIGHT["background"],
+        tokens.LIGHT["surface"],
+        tokens.LIGHT["primary"],
+        tokens.LIGHT["muted"],
+    )
+    assert callable(inject_terminal_css)
+    assert theme.PRIMARY_SCALE == tokens.sequential_scale(tokens.MODE_LIGHT)
+    assert theme.PRIMARY_DISCRETE == tokens.discrete_colors(tokens.MODE_LIGHT)
+
+
+def test_css_is_rebuilt_from_tokens() -> None:
+    """The cache-clear helper rebuilds identical sheets from the token tables."""
+    before = build_css(tokens.MODE_LIGHT)
+    theme.clear_theme_cache()
+    assert build_css(tokens.MODE_LIGHT) == before
+    assert theme.TERMINAL_CSS == theme.DARK_CSS
+
+
+# --------------------------------------------------------------------------- #
+# Retired palette.
+# --------------------------------------------------------------------------- #
+
+
+def test_no_retired_volt_colour_hides_in_any_form() -> None:
+    """The volt palette is gone from factories, pages, latent viz, and config.
+
+    Includes the rgba() form, which is how the last trace of it survived a
+    hex-only scan.
+    """
+    offenders: list[str] = []
     targets = [
         *Path("visualization").glob("*.py"),
         *Path("pages").glob("*.py"),
@@ -98,6 +250,19 @@ def test_no_legacy_volt_hex() -> None:
     ]
     for path in targets:
         for i, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
-            if "#CCFF00" in line or "#9DB800" in line or "VOLT" in line:
+            if "#CCFF00" in line or "#9DB800" in line or "VOLT" in line or "204,255,0" in line:
                 offenders.append(f"{path}:{i}")
     assert offenders == []
+
+
+def test_chart_layer_keeps_colours_in_the_token_table() -> None:
+    """No figure factory hard-codes a hex; every colour traces back to tokens."""
+    offenders: list[str] = []
+    exempt = {"tokens.py", "theme.py"}
+    for path in Path("visualization").glob("*.py"):
+        if path.name in exempt:
+            continue
+        for i, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            for found in HEX.findall(line):
+                offenders.append(f"{path}:{i}: {found}")
+    assert offenders == [], f"hard-coded colours in chart factories: {offenders}"
