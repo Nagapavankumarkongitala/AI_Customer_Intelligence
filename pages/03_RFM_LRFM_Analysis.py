@@ -166,7 +166,7 @@ for tab, key in ((tab_rfm, "rfm_results"), (tab_lrfm, "lrfm_results")):
                     st.plotly_chart(
                         rfm_scatter_matrix(enriched),
                         width="stretch",
-                        key=f"{key}_matrix",
+                        key=f"{key}_relmatrix",
                     )
                     if len(enriched) > 2000:
                         st.caption("Scatter matrix shows a 2,000-customer sample.")

@@ -134,3 +134,5 @@ ormalize_dictionary_rows renders legacy caches as field/detail pairs instead of 
 - RFM tab refresh (this change): value labels on segment bars with hidden y-axis; R-F heatmap replaced by bubble chart; twin 25k-point scatters replaced by one parallel-coordinates view; Matrix tab renamed. Old scatter factories deleted.\
 \
 - Relationships matrix (this change): new fm_scatter_matrix (sampled SPLOM, segment hues) with a Matrix/Parcoords view switch in the Relationships tab; old scatter factories deleted.\
+\
+- Duplicate-key guard (this change): fixed RFM elmatrix/matrix key clash; new 	est_element_keys fails on repeated key expressions per view (proven against the bug).\
