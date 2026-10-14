@@ -130,3 +130,5 @@ ormalize_dictionary_rows renders legacy caches as field/detail pairs instead of 
 - Y-gutter reclaim (this change): left margins tightened (52/44 to 36/30) with y automargin so ticks never clip; plot area expands into the removed title space.\
 \
 - Y-gap root fix (this change): Plotly reserved a 24px title standoff for the removed titles; standoff now 0 with the axis line off. Plot edge moved 75 to 49px live-measured; the rest is tick values plus the 24px floor.\
+\
+- RFM tab refresh (this change): value labels on segment bars with hidden y-axis; R-F heatmap replaced by bubble chart; twin 25k-point scatters replaced by one parallel-coordinates view; Matrix tab renamed. Old scatter factories deleted.\

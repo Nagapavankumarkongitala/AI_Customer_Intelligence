@@ -23,10 +23,9 @@ from utils import formatting
 from utils.exceptions import CustomerIntelligenceError
 from utils.logging_config import configure_logging
 from visualization.rfm_charts import (
-    frequency_monetary_scatter,
-    recency_frequency_scatter,
     revenue_by_segment_bar,
-    rfm_heatmap,
+    rfm_bubble,
+    rfm_parallel_plot,
     segment_distribution_bar,
 )
 from visualization.theme import apply_chart_theme, inject_terminal_css, without_title
@@ -135,7 +134,7 @@ for tab, key in ((tab_rfm, "rfm_results"), (tab_lrfm, "lrfm_results")):
     with tab:
         enriched = features.merge(scored, on="customer_id", suffixes=("", "_seg"))
         profile = cached_segment_profile(enriched, monetary_col="monetary_value")
-        dist_tab, heat_tab, rel_tab = st.tabs(["Distribution", "Heatmap", "Relationships"])
+        dist_tab, matrix_tab, rel_tab = st.tabs(["Distribution", "Matrix", "Relationships"])
         with dist_tab:
             seg_l, seg_r = st.columns([1, 1])
             with seg_l:
@@ -152,27 +151,16 @@ for tab, key in ((tab_rfm, "rfm_results"), (tab_lrfm, "lrfm_results")):
                         width="stretch",
                         key=f"{key}_revenue",
                     )
-        with heat_tab:
+        with matrix_tab:
             with chart_section("Customer counts by R × F score"):
-                st.plotly_chart(
-                    _compact(rfm_heatmap(scored)), width="stretch", key=f"{key}_heatmap"
-                )
+                st.plotly_chart(_compact(rfm_bubble(scored)), width="stretch", key=f"{key}_matrix")
         with rel_tab:
-            scatter_l, scatter_r = st.columns([1, 1])
-            with scatter_l:
-                with chart_section("Recency vs frequency"):
-                    st.plotly_chart(
-                        _compact(recency_frequency_scatter(enriched)),
-                        width="stretch",
-                        key=f"{key}_rf",
-                    )
-            with scatter_r:
-                with chart_section("Frequency vs monetary value"):
-                    st.plotly_chart(
-                        _compact(frequency_monetary_scatter(enriched)),
-                        width="stretch",
-                        key=f"{key}_fm",
-                    )
+            with chart_section("Recency, frequency and value"):
+                st.plotly_chart(
+                    _compact(rfm_parallel_plot(enriched)),
+                    width="stretch",
+                    key=f"{key}_parcoords",
+                )
 
         with st.expander("Segment profile", expanded=False):
             render_table(profile, money_cols=("revenue",))

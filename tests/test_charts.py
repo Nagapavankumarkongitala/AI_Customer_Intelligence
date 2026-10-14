@@ -38,9 +38,8 @@ def test_rfm_charts_render() -> None:
     for fig in (
         rfm_charts.segment_distribution_bar(profile),
         rfm_charts.revenue_by_segment_bar(profile),
-        rfm_charts.recency_frequency_scatter(seg),
-        rfm_charts.frequency_monetary_scatter(seg),
-        rfm_charts.rfm_heatmap(seg),
+        rfm_charts.rfm_parallel_plot(seg),
+        rfm_charts.rfm_bubble(seg),
     ):
         assert len(fig.data) > 0
 
@@ -209,10 +208,9 @@ def test_segment_share_donut() -> None:
             "monetary_value": [100.0, 300.0],
         }
     )
-    assert _trace_colors(rfm_charts.recency_frequency_scatter(frame)) == {
-        "Champions": tokens.SEGMENT_COLORS["Champions"],
-        "Lost Customers": tokens.SEGMENT_COLORS["Lost Customers"],
-    }
+    parcoords = rfm_charts.rfm_parallel_plot(frame)
+    assert len(parcoords.data) > 0
+    assert parcoords.layout.title.text == "Recency, frequency and value"
 
     sizes = pd.DataFrame(
         {
@@ -321,12 +319,8 @@ def test_empty_inputs_return_titled_placeholders() -> None:
     cases = [
         (rfm_charts.segment_distribution_bar(pd.DataFrame()), "Customers per segment"),
         (rfm_charts.revenue_by_segment_bar(pd.DataFrame()), "Revenue per segment"),
-        (rfm_charts.recency_frequency_scatter(pd.DataFrame()), "Recency vs frequency"),
-        (
-            rfm_charts.frequency_monetary_scatter(pd.DataFrame()),
-            "Frequency vs monetary value",
-        ),
-        (rfm_charts.rfm_heatmap(pd.DataFrame()), "Customer counts by R × F score"),
+        (rfm_charts.rfm_parallel_plot(pd.DataFrame()), "Recency, frequency and value"),
+        (rfm_charts.rfm_bubble(pd.DataFrame()), "Customer counts by R × F score"),
         (churn_charts.roc_curve_fig(np.array([]), np.array([])), "ROC curve"),
         (churn_charts.calibration_curve_fig(pd.DataFrame()), "Calibration curve"),
         (churn_charts.confusion_fig({}), "Confusion matrix"),
@@ -380,7 +374,7 @@ def test_empty_inputs_return_titled_placeholders() -> None:
             "Silhouette",
         ),
     ]
-    assert len(cases) == 31
+    assert len(cases) == 30
     for fig, title in cases:
         assert len(fig.data) == 0, title
         assert fig.layout.title.text == title, title

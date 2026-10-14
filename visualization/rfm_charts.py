@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 
 from visualization import tokens
 from visualization.theme import PRIMARY_DISCRETE, PRIMARY_SCALE, empty_figure, styled
@@ -19,36 +20,54 @@ def _segment_map_or_sequence(values: object) -> dict:
 
 @styled
 def segment_distribution_bar(profile: pd.DataFrame, segment_col: str = "segment") -> px.Figure:
-    """Customer counts per segment, largest first, in segment hues."""
+    """Customer counts per segment, largest first, in segment hues.
+
+    Values ride on the bars, so the y-axis carries no information and stays
+    hidden; the shared theme still supplies fonts, grid, and margins.
+    """
     if profile.empty:
         return empty_figure("Customers per segment")
     col = segment_col if segment_col in profile.columns else profile.columns[0]
-    return px.bar(
+    fig = px.bar(
         profile,
         x=col,
         y="customers",
         color=col,
+        text="customers",
         **_segment_map_or_sequence(profile[col]),
         title="Customers per segment",
         labels={col: "Segment", "customers": "Customers"},
     )
+    fig.update_traces(texttemplate="%{y:,}", textposition="outside")
+    top = float(profile["customers"].max())
+    fig.update_yaxes(visible=False, range=[0, top * 1.12 if top > 0 else 1])
+    return fig
 
 
 @styled
 def revenue_by_segment_bar(profile: pd.DataFrame, segment_col: str = "segment") -> px.Figure:
-    """Revenue contribution per segment, in segment hues."""
+    """Revenue contribution per segment, in segment hues.
+
+    Values ride on the bars, so the y-axis carries no information and stays
+    hidden; the shared theme still supplies fonts, grid, and margins.
+    """
     if profile.empty:
         return empty_figure("Revenue per segment")
     col = segment_col if segment_col in profile.columns else profile.columns[0]
-    return px.bar(
+    fig = px.bar(
         profile,
         x=col,
         y="revenue",
         color=col,
+        text="revenue",
         **_segment_map_or_sequence(profile[col]),
         title="Revenue per segment",
         labels={col: "Segment", "revenue": "Revenue"},
     )
+    fig.update_traces(texttemplate="%{y:,.0f}", textposition="outside")
+    top = float(profile["revenue"].max())
+    fig.update_yaxes(visible=False, range=[0, top * 1.12 if top > 0 else 1])
+    return fig
 
 
 @styled
@@ -86,63 +105,63 @@ def segment_share_donut(profile: pd.DataFrame, segment_col: str = "segment") -> 
 
 
 @styled
-def recency_frequency_scatter(features: pd.DataFrame, color_col: str = "segment") -> px.Figure:
-    """Recency vs frequency, colored by segment when available."""
-    if features.empty:
-        return empty_figure("Recency vs frequency")
-    data = features.copy()
-    color = color_col if color_col in data.columns else None
-    color_kwargs = (
-        _segment_map_or_sequence(data[color])
-        if color
-        else {"color_discrete_sequence": PRIMARY_DISCRETE}
+def rfm_parallel_plot(features: pd.DataFrame) -> go.Figure:
+    """Recency, frequency, and monetary value as parallel coordinates.
+
+    One quiet line per customer, colored by monetary value: value
+    concentration across recency and frequency reads as color bands.
+    Replaces the two overplotted 25k-point scatters with a single view.
+    """
+    dims = [c for c in ("recency_days", "frequency", "monetary_value") if c in features.columns]
+    if features.empty or not dims:
+        return empty_figure("Recency, frequency and value")
+    data = features[dims].apply(pd.to_numeric, errors="coerce").dropna()
+    if data.empty:
+        return empty_figure("Recency, frequency and value")
+    color = data["monetary_value"] if "monetary_value" in data.columns else data[dims[-1]]
+    fig = go.Figure(
+        go.Parcoords(
+            dimensions=[{"label": c.replace("_", " "), "values": data[c]} for c in dims],
+            line={
+                "color": color,
+                "colorscale": PRIMARY_SCALE,
+                "showscale": True,
+                "colorbar": {"title": "Value"},
+            },
+            labelangle=0,
+        )
     )
-    return px.scatter(
-        data,
-        x="recency_days",
-        y="frequency",
-        color=color,
-        **color_kwargs,
-        hover_data=["customer_id", "monetary_value"],
-        title="Recency vs frequency",
-        labels={"recency_days": "Recency (days)", "frequency": "Frequency"},
-    )
+    fig.update_layout(title="Recency, frequency and value")
+    return fig
 
 
 @styled
-def frequency_monetary_scatter(features: pd.DataFrame, color_col: str = "segment") -> px.Figure:
-    """Frequency vs monetary value, colored by segment when available."""
-    if features.empty:
-        return empty_figure("Frequency vs monetary value")
-    data = features.copy()
-    color = color_col if color_col in data.columns else None
-    color_kwargs = (
-        _segment_map_or_sequence(data[color])
-        if color
-        else {"color_discrete_sequence": PRIMARY_DISCRETE}
-    )
-    return px.scatter(
-        data,
-        x="frequency",
-        y="monetary_value",
-        color=color,
-        **color_kwargs,
-        hover_data=["customer_id", "recency_days"],
-        title="Frequency vs monetary value",
-        labels={"frequency": "Frequency", "monetary_value": "Monetary value"},
-    )
-
-
-@styled
-def rfm_heatmap(scored: pd.DataFrame) -> px.Figure:
-    """Customer counts across R (rows) × F (columns)."""
+def rfm_bubble(scored: pd.DataFrame) -> px.Figure:
+    """Customer counts across R × F as bubbles sized and colored by count."""
     if scored.empty:
         return empty_figure("Customer counts by R × F score")
     matrix = pd.crosstab(scored["R"], scored["F"])
-    return px.imshow(
-        matrix,
-        text_auto=True,
+    long = matrix.reset_index().melt(id_vars="R", var_name="F", value_name="customers")
+    long = long[long["customers"] > 0]
+    if long.empty:
+        return empty_figure("Customer counts by R × F score")
+    fig = px.scatter(
+        long,
+        x="F",
+        y="R",
+        size="customers",
+        color="customers",
         color_continuous_scale=PRIMARY_SCALE,
+        size_max=36,
         title="Customer counts by R × F score",
-        labels={"x": "F score", "y": "R score", "color": "Customers"},
+        labels={"F": "F score", "R": "R score", "customers": "Customers"},
+        hover_data={"F": True, "R": True, "customers": True},
     )
+    ticks = sorted(set(long["F"].tolist()) | set(long["R"].tolist()))
+    fig.update_xaxes(dtick=1)
+    fig.update_yaxes(dtick=1)
+    if ticks:
+        lo, hi = min(ticks) - 0.6, max(ticks) + 0.6
+        fig.update_xaxes(range=[lo, hi])
+        fig.update_yaxes(range=[lo, hi])
+    return fig
