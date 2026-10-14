@@ -202,6 +202,8 @@ def test_y_axis_titles_removed_ticks_kept() -> None:
     assert fig.data[0].y is not None
     assert fig.layout.margin.l < 36
     assert fig.layout.yaxis.automargin is True
+    assert fig.layout.yaxis.title.standoff == 0
+    assert fig.layout.yaxis.showline is False
 
 
 def test_adopt_colorway_removes_leaked_defaults() -> None:

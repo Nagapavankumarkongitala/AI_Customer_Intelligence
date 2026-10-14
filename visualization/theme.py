@@ -463,9 +463,10 @@ def apply_chart_theme(
     fig.update_yaxes(
         gridcolor=ink["grid"],
         zeroline=False,
-        linecolor=ink["border"],
+        showline=False,
         tickfont={"color": ink["muted"]},
         title_text="",
+        title_standoff=0,
         automargin=True,
     )
 
