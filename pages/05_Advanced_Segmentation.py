@@ -275,7 +275,11 @@ with emb_r:
 if run["model"] == "autoencoder":
     from deep_learning.latent_space_visualization import latent_scatter
 
-    st.plotly_chart(latent_scatter(run["fitted"]["latent"], run["labels"]), width="stretch")
+    with chart_section("Latent space (autoencoder)"):
+        st.plotly_chart(
+            without_title(latent_scatter(run["fitted"]["latent"], run["labels"])),
+            width="stretch",
+        )
     with st.expander("Training history", expanded=False):
         st.write({k: v[-5:] for k, v in run["fitted"]["history"].items()})
 

@@ -146,7 +146,7 @@ for tab, level in zip(geo_tab, geo_levels, strict=True):
                     )
         with chart_section(f"Customer share by {level}"):
             st.plotly_chart(
-                geo_treemap(table.head(30), level),
+                without_title(geo_treemap(table.head(30), level)),
                 width="stretch",
                 key=f"geo_tree_{level}",
             )
