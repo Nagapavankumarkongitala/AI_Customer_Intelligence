@@ -9,6 +9,22 @@ from visualization.theme import PRIMARY, PRIMARY_DISCRETE, RISK_GREEN, empty_fig
 
 
 @styled
+def revenue_area_fig(table: pd.DataFrame) -> px.Figure:
+    """Monthly revenue area (filled)."""
+    if table.empty:
+        return empty_figure("Revenue trend")
+    return px.area(
+        table,
+        x="month",
+        y="revenue",
+        markers=True,
+        color_discrete_sequence=[PRIMARY],
+        title="Revenue trend",
+        labels={"month": "Month", "revenue": "Revenue"},
+    )
+
+
+@styled
 def revenue_trend_fig(table: pd.DataFrame) -> px.Figure:
     """Monthly revenue line."""
     if table.empty:

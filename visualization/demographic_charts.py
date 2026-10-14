@@ -80,11 +80,25 @@ def top_geo_bar(geo: pd.DataFrame, level: str, top_n: int = 10) -> px.Figure:
 
 
 @styled
-def revenue_geo_bar(geo: pd.DataFrame, level: str, top_n: int = 10) -> px.Figure:
-    """Top values for a geographic level by revenue."""
+def revenue_geo_bar(
+    geo: pd.DataFrame, level: str, top_n: int = 10, horizontal: bool = False
+) -> px.Figure:
+    """Top values for a geographic level by revenue, vertical or horizontal."""
     plural = plural_geo_level(level)
     if geo.empty:
         return empty_figure(f"Top {plural} by revenue")
+    if horizontal:
+        ordered = geo.head(top_n).sort_values("revenue")
+        return px.bar(
+            ordered,
+            x="revenue",
+            y=level,
+            orientation="h",
+            color="revenue",
+            color_continuous_scale=PRIMARY_SCALE,
+            title=f"Top {plural} by revenue",
+            labels={"revenue": "Revenue", level: level.capitalize()},
+        )
     return px.bar(
         geo.head(top_n),
         x=level,

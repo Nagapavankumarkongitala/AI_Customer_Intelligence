@@ -108,3 +108,5 @@ ormalize_dictionary_rows renders legacy caches as field/detail pairs instead of 
 - Auto-nav suppression (this change): showSidebarNavigation=false removes the auto page list server-side, so no unstyled sidebar can flash during loads on any version; the redundant CSS hide rule is deleted (test now pins the config).\
 \
 - RFM single-screen (this change): page 03 scoring config + exports moved to rail sidebar sections; RFM/LRFM charts grouped into Distribution/Heatmap/Relationships inner tabs; new compact chart preset (300px, tight margins/type) applied to all 10 figures. Verified live-shape (10 figs at 300px, 3 exports).\
+\
+- Tabbed dashboard landing (this change): Business Overview (5 KPIs, area+segment+risk row, bubble+region+demographics row, top-opps+insights row), Customer Trends, Segments, Churn Risk, Retention tabs; segment bars take segment_col; evenue_area_fig and horizontal geo bars added. Pies declined: 10 RFM segments violate the no-pies-over-5 project rule.\

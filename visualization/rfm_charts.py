@@ -18,34 +18,36 @@ def _segment_map_or_sequence(values: object) -> dict:
 
 
 @styled
-def segment_distribution_bar(profile: pd.DataFrame) -> px.Figure:
+def segment_distribution_bar(profile: pd.DataFrame, segment_col: str = "segment") -> px.Figure:
     """Customer counts per segment, largest first, in segment hues."""
     if profile.empty:
         return empty_figure("Customers per segment")
+    col = segment_col if segment_col in profile.columns else profile.columns[0]
     return px.bar(
         profile,
-        x="segment",
+        x=col,
         y="customers",
-        color="segment",
-        **_segment_map_or_sequence(profile["segment"]),
+        color=col,
+        **_segment_map_or_sequence(profile[col]),
         title="Customers per segment",
-        labels={"segment": "Segment", "customers": "Customers"},
+        labels={col: "Segment", "customers": "Customers"},
     )
 
 
 @styled
-def revenue_by_segment_bar(profile: pd.DataFrame) -> px.Figure:
+def revenue_by_segment_bar(profile: pd.DataFrame, segment_col: str = "segment") -> px.Figure:
     """Revenue contribution per segment, in segment hues."""
     if profile.empty:
         return empty_figure("Revenue per segment")
+    col = segment_col if segment_col in profile.columns else profile.columns[0]
     return px.bar(
         profile,
-        x="segment",
+        x=col,
         y="revenue",
-        color="segment",
-        **_segment_map_or_sequence(profile["segment"]),
+        color=col,
+        **_segment_map_or_sequence(profile[col]),
         title="Revenue per segment",
-        labels={"segment": "Segment", "revenue": "Revenue"},
+        labels={col: "Segment", "revenue": "Revenue"},
     )
 
 

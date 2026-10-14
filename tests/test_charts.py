@@ -171,6 +171,12 @@ def test_segment_charts_use_stable_hues() -> None:
         "Lost Customers": tokens.SEGMENT_COLORS["Lost Customers"],
     }
 
+    renamed = profile.rename(columns={"segment": "rfm_segment"})
+    assert _trace_colors(rfm_charts.segment_distribution_bar(renamed, "rfm_segment")) == {
+        "Champions": tokens.SEGMENT_COLORS["Champions"],
+        "Lost Customers": tokens.SEGMENT_COLORS["Lost Customers"],
+    }
+
     frame = pd.DataFrame(
         {
             "customer_id": ["C1", "C2"],
@@ -266,6 +272,23 @@ def test_sankey_has_a_title() -> None:
     contingency = pd.DataFrame({"B": [5]}, index=pd.Index(["A"], name="src"))
     fig = segmentation_charts.sankey_mapping(contingency, "RFM", "AI")
     assert fig.layout.title.text == "RFM → AI flow"
+
+
+def test_revenue_area_and_horizontal_geo_render() -> None:
+    """Area revenue trend and horizontal geo bars render with data."""
+    trend = pd.DataFrame({"month": ["2024-01", "2024-02"], "revenue": [100.0, 200.0]})
+    area = executive_dashboard.revenue_area_fig(trend)
+    assert len(area.data) > 0
+    assert area.layout.title.text == "Revenue trend"
+    assert executive_dashboard.revenue_area_fig(pd.DataFrame()).layout.title.text == (
+        "Revenue trend"
+    )
+
+    geo = pd.DataFrame({"region": ["West", "East"], "revenue": [500.0, 300.0]})
+    hbar = demographic_charts.revenue_geo_bar(geo, "region", horizontal=True)
+    assert len(hbar.data) > 0
+    assert hbar.layout.title.text == "Top regions by revenue"
+    assert hbar.data[0].orientation == "h"
 
 
 def test_empty_inputs_return_titled_placeholders() -> None:
