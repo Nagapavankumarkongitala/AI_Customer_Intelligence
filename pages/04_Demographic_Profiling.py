@@ -76,44 +76,46 @@ st.session_state["demographic_profile"] = {
 for note in profile.notes:
     st.info(note)
 
-if profile.missing_pct:
-    section_header("Missing demographic indicators")
-    metric_row(
-        [Metric(f"{field} missing", f"{pct}%") for field, pct in profile.missing_pct.items()]
-    )
-
-if "age_summary" in profile.tables:
-    summary = profile.tables["age_summary"].iloc[0]
-    section_header("Age")
-    metric_row(
-        [
-            Metric(
-                "Customers with age",
-                formatting.fmt_int(summary["customers_with_age"]),
-            ),
-            Metric("Mean age", f"{summary['mean_age']}"),
-            Metric("Median age", f"{summary['median_age']}"),
-        ]
-    )
-    age_l, age_r = st.columns([1, 1])
-    with age_l:
+has_age = "age_summary" in profile.tables
+has_gender = "gender" in profile.tables
+if has_age or has_gender:
+    section_header("Age and gender")
+    if has_age:
+        summary = profile.tables["age_summary"].iloc[0]
+        metric_row(
+            [
+                Metric(
+                    "Customers with age",
+                    formatting.fmt_int(summary["customers_with_age"]),
+                ),
+                Metric("Mean age", f"{summary['mean_age']}"),
+                Metric("Median age", f"{summary['median_age']}"),
+            ]
+        )
+    demo_a, demo_b, demo_c = st.columns(3)
+    with demo_a:
         with chart_section("Age distribution"):
-            st.plotly_chart(without_title(age_histogram(features["age"])), width="stretch")
-    with age_r:
+            if has_age:
+                st.plotly_chart(without_title(age_histogram(features["age"])), width="stretch")
+            else:
+                empty_state("No age data yet", "Age appears here after profiling.")
+    with demo_b:
         with chart_section("Customers per age band"):
-            st.plotly_chart(
-                without_title(age_band_bar(profile.tables["age_bands"])), width="stretch"
-            )
-
-if "gender" in profile.tables:
-    section_header("Gender")
-    gender_l, gender_r = st.columns([3, 2])
-    with gender_l:
+            if has_age:
+                st.plotly_chart(
+                    without_title(age_band_bar(profile.tables["age_bands"])),
+                    width="stretch",
+                )
+            else:
+                empty_state("No age bands yet", "Age bands appear here after profiling.")
+    with demo_c:
         with chart_section("Customers by gender"):
-            st.plotly_chart(without_title(gender_bar(profile.tables["gender"])), width="stretch")
-    with gender_r:
-        with st.expander("Gender table", expanded=False):
-            st.dataframe(profile.tables["gender"], width="stretch")
+            if has_gender:
+                st.plotly_chart(
+                    without_title(gender_bar(profile.tables["gender"])), width="stretch"
+                )
+            else:
+                empty_state("No gender data yet", "Gender appears here after profiling.")
 
 section_header("Geography")
 geo_levels = [lvl for lvl in GEO_LEVELS if f"geo_{lvl}" in profile.tables]
@@ -151,19 +153,7 @@ for tab, level in zip(geo_tab, geo_levels, strict=True):
         with st.expander(f"{level.capitalize()} table (top 50)", expanded=False):
             st.dataframe(table.head(50), width="stretch", key=f"geo_table_{level}")
 
-if "concentration" in profile.tables:
-    with st.expander("Geographic concentration", expanded=False):
-        st.dataframe(profile.tables["concentration"], width="stretch")
-        st.caption(
-            "Top-3 share = customers in the 3 largest values. HHI near 1 means one value "
-            "dominates; near 0 means evenly spread."
-        )
-
-if segments is not None and "segment_profiles" in profile.tables:
-    with st.expander("Profiles by segment", expanded=False):
-        st.dataframe(profile.tables["segment_profiles"], width="stretch")
-    with st.expander("Population vs segment", expanded=False):
-        st.dataframe(profile.tables["segment_comparison"], width="stretch")
+if segments is not None:
     comp_charts = [
         (column, cached_segment_composition(features, segments, column))
         for column in ("gender", "region")
@@ -180,6 +170,20 @@ if segments is not None and "segment_profiles" in profile.tables:
                         width="stretch",
                         key=f"comp_{column}",
                     )
+
+if "concentration" in profile.tables:
+    with st.expander("Geographic concentration", expanded=False):
+        st.dataframe(profile.tables["concentration"], width="stretch")
+        st.caption(
+            "Top-3 share = customers in the 3 largest values. HHI near 1 means one value "
+            "dominates; near 0 means evenly spread."
+        )
+
+if segments is not None and "segment_profiles" in profile.tables:
+    with st.expander("Profiles by segment", expanded=False):
+        st.dataframe(profile.tables["segment_profiles"], width="stretch")
+    with st.expander("Population vs segment", expanded=False):
+        st.dataframe(profile.tables["segment_comparison"], width="stretch")
 
     section_header("Do segments differ significantly?")
     st.markdown(
@@ -209,6 +213,10 @@ if segments is not None and "segment_profiles" in profile.tables:
         test_results = cached_run_segment_tests(features, seg_series, continuous, categorical)
     with st.expander("Segment significance tests", expanded=False):
         st.dataframe(test_results, width="stretch")
+
+if "gender" in profile.tables:
+    with st.expander("Gender table", expanded=False):
+        st.dataframe(profile.tables["gender"], width="stretch")
 
 with st.expander("Downloads", expanded=False):
     for name, table in profile.tables.items():

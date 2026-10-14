@@ -120,3 +120,5 @@ ormalize_dictionary_rows renders legacy caches as field/detail pairs instead of 
 - Single chart titles (this change): new 	heme.without_title strips in-figure titles (reclaiming top margin) everywhere a section heading frames the chart; factories keep titles for standalone use. Live-verified: 15 figures title-free, legends intact.\
 \
 - Sidebar collapse fix (this change): the !important rail width overrode Streamlit's collapsed state, pinning a 240px gap with no reflow. Width rule now scoped to [aria-expanded=true]; live-verified collapse to 0px with +240px main reflow and clean expand-back.\
+\
+- Demographics restructure (this change): missing-indicators block removed; Age histogram/bands + gender bar in one 3-column row; gender table moved to bottom; gender/region mix charts moved directly below the geography treemaps.\
