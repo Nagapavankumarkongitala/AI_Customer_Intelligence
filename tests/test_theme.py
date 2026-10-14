@@ -159,7 +159,7 @@ def test_empty_figure_is_a_titled_placeholder() -> None:
 def test_compact_preset_is_dense_but_complete() -> None:
     """Compact charts render at 300px with tighter margins and smaller titles."""
     fig = theme.apply_chart_theme(_sample(), title="Titled", compact=True)
-    assert fig.layout.height == tokens.COMPACT_HEIGHT == 300
+    assert fig.layout.height == theme.CHART_HEIGHT == 300
     assert fig.layout.margin.t < 64 and fig.layout.margin.b < 48
     assert fig.layout.title.font.size == 13
 
@@ -184,7 +184,7 @@ def test_without_title_keeps_chrome_reclaims_margin() -> None:
     compact_bare = theme.without_title(
         theme.apply_chart_theme(_sample(), compact=True), compact=True
     )
-    assert compact_bare.layout.height == tokens.COMPACT_HEIGHT
+    assert compact_bare.layout.height == theme.CHART_HEIGHT
     assert compact_bare.layout.margin.t == 32
 
 

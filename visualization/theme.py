@@ -387,13 +387,14 @@ def apply_chart_theme(
     ``show_legend`` is left alone when ``None`` so single-series charts keep
     Plotly's "no legend needed" behaviour instead of rendering a one-item legend.
     A figure title is re-anchored top-left, matching the page header hierarchy.
-    ``compact`` selects the dense-tab preset (300px, tighter margins and type).
+    ``compact`` selects tighter margins and smaller titles for dense tabbed
+    layouts; height is uniform everywhere.
     """
     resolved = tokens.active_mode()
     ink = tokens.palette(resolved)
     dark = resolved == tokens.MODE_DARK
     if height is None:
-        height = tokens.COMPACT_HEIGHT if compact else CHART_HEIGHT
+        height = CHART_HEIGHT
     margin = (
         {"l": 44, "r": 16, "t": 52, "b": 36} if compact else {"l": 52, "r": 28, "t": 64, "b": 48}
     )

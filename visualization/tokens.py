@@ -149,12 +149,10 @@ SIDEBAR_WIDTH: Final = "15rem"
 #: Content cap for the page canvas; wide enough for a 5-card KPI row.
 CONTENT_MAX_WIDTH: Final = "110rem"
 
-#: Compact chart height for dense tabbed layouts (single-screen groups).
-COMPACT_HEIGHT: Final = 300
-
-#: Chart height floor. 420px keeps a legend, a left-aligned title, and axis
-#: labels legible at the densities this dashboard renders (spec §6).
-CHART_HEIGHT: Final = 420
+#: Chart height everywhere. Compact enough for dense tabbed layouts while
+#: keeping legends, titles, and axis labels legible (spec §6). The ``compact``
+#: theme flag additionally tightens margins and type for single-screen groups.
+CHART_HEIGHT: Final = 300
 
 # --------------------------------------------------------------------------- #
 # Semantic maps.
