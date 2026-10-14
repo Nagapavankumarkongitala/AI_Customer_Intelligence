@@ -389,6 +389,8 @@ def apply_chart_theme(
     A figure title is re-anchored top-left, matching the page header hierarchy.
     ``compact`` selects tighter margins and smaller titles for dense tabbed
     layouts; height is uniform everywhere.
+    Y-axis titles are always dropped: tick values plus the section heading
+    carry the meaning, so the title text would only repeat them.
     """
     resolved = tokens.active_mode()
     ink = tokens.palette(resolved)
@@ -463,7 +465,7 @@ def apply_chart_theme(
         zeroline=False,
         linecolor=ink["border"],
         tickfont={"color": ink["muted"]},
-        title_font={"color": ink["muted"]},
+        title_text="",
     )
 
     # Separate adjacent markers with a hairline in the surface tone.

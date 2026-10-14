@@ -124,3 +124,5 @@ ormalize_dictionary_rows renders legacy caches as field/detail pairs instead of 
 - Demographics restructure (this change): missing-indicators block removed; Age histogram/bands + gender bar in one 3-column row; gender table moved to bottom; gender/region mix charts moved directly below the geography treemaps.\
 \
 - Uniform compact charts (this change): CHART_HEIGHT is now 300px everywhere; compact flag keeps tighter margins/type for dense groups. COMPACT_HEIGHT removed.\
+\
+- Y-axis titles (this change): pply_chart_theme drops y-axis titles globally (ticks and x titles kept); section headings carry the meaning.\

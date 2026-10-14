@@ -188,6 +188,20 @@ def test_without_title_keeps_chrome_reclaims_margin() -> None:
     assert compact_bare.layout.margin.t == 32
 
 
+def test_y_axis_titles_removed_ticks_kept() -> None:
+    """Y titles never render (section headings carry meaning); ticks stay."""
+    import plotly.express as px
+
+    fig = theme.apply_chart_theme(
+        px.bar(pd.DataFrame({"a": ["x"], "b": [1]}), x="a", y="b").update_layout(
+            yaxis_title="B ought to vanish"
+        )
+    )
+    assert fig.layout.yaxis.title.text == ""
+    assert fig.layout.xaxis.title.text == "a"
+    assert fig.data[0].y is not None
+
+
 def test_adopt_colorway_removes_leaked_defaults() -> None:
     """A factory that passes no colour still renders in the design system.
 
