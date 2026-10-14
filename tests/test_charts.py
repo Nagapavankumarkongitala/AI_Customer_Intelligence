@@ -184,6 +184,8 @@ def test_segment_charts_use_stable_hues() -> None:
     ):
         assert fig.layout.xaxis.showticklabels is False
         assert fig.layout.xaxis.title.text == ""
+        assert fig.layout.bargap == 0.1
+        assert fig.data[0].textfont.size == 13
 
 
 def test_segment_share_donut() -> None:
