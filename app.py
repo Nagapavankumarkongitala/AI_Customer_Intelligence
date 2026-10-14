@@ -41,7 +41,10 @@ from visualization.retention_charts import (
     strategy_distribution_bar,
     value_risk_matrix,
 )
-from visualization.rfm_charts import revenue_by_segment_bar, segment_distribution_bar
+from visualization.rfm_charts import (
+    revenue_by_segment_bar,
+    segment_share_donut,
+)
 from visualization.theme import apply_chart_theme, inject_terminal_css
 
 configure_logging()
@@ -211,7 +214,7 @@ with overview_tab:
         with chart_section("Customers per segment"):
             if portfolio is not None:
                 st.plotly_chart(
-                    _compact(segment_distribution_bar(portfolio, "rfm_segment")),
+                    _compact(segment_share_donut(portfolio, "rfm_segment")),
                     width="stretch",
                 )
             else:
@@ -263,31 +266,36 @@ with overview_tab:
                 empty_state("No regions yet", "No regional field in this dataset.")
     with row2_c:
         with chart_section("Customer demographics"):
-            shown = False
-            if "age_band" in master_f.columns:
-                bands = (
-                    master_f["age_band"]
-                    .value_counts()
-                    .rename_axis("age_band")
-                    .reset_index(name="customers")
-                )
-                st.plotly_chart(_compact(age_band_bar(bands)), width="stretch")
-                shown = True
-            if "gender" in master_f.columns:
-                gender_tbl = (
-                    master_f["gender"]
-                    .fillna("Unknown")
-                    .value_counts()
-                    .rename_axis("gender")
-                    .reset_index(name="customers")
-                )
-                st.plotly_chart(_compact(gender_bar(gender_tbl)), width="stretch")
-                shown = True
-            if not shown:
-                empty_state(
-                    "No demographics yet",
-                    "Age and gender appear here after page 04 profiling.",
-                )
+            demo_age_tab, demo_gender_tab = st.tabs(["Age", "Gender"])
+            with demo_age_tab:
+                if "age_band" in master_f.columns:
+                    bands = (
+                        master_f["age_band"]
+                        .value_counts()
+                        .rename_axis("age_band")
+                        .reset_index(name="customers")
+                    )
+                    st.plotly_chart(_compact(age_band_bar(bands)), width="stretch")
+                else:
+                    empty_state(
+                        "No age bands yet",
+                        "Age bands appear here after page 04 profiling.",
+                    )
+            with demo_gender_tab:
+                if "gender" in master_f.columns:
+                    gender_tbl = (
+                        master_f["gender"]
+                        .fillna("Unknown")
+                        .value_counts()
+                        .rename_axis("gender")
+                        .reset_index(name="customers")
+                    )
+                    st.plotly_chart(_compact(gender_bar(gender_tbl)), width="stretch")
+                else:
+                    empty_state(
+                        "No gender data yet",
+                        "Gender appears here after page 04 profiling.",
+                    )
 
     row3_a, row3_b = st.columns(2)
     with row3_a:
@@ -300,6 +308,7 @@ with overview_tab:
                     top_opps,
                     risk_cols=("risk_band",),
                     money_cols=("revenue_at_risk",),
+                    height=320,
                 )
             else:
                 empty_state(

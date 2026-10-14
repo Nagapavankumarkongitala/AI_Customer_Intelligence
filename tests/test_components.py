@@ -231,6 +231,15 @@ def test_html_table_paints_without_jinja2() -> None:
     assert tokens.risk_badge("low")[0] in out
 
 
+def test_html_table_height_caps_scroll_region() -> None:
+    """A height caps the scroll div; without it the table sizes naturally."""
+    from components.table import html_table
+
+    df = pd.DataFrame({"a": ["x"]})
+    assert "max-height:320px" in html_table(df, height=320)
+    assert "max-height" not in html_table(df)
+
+
 def test_builders_emit_active_mode_ink() -> None:
     """No inherited root ink: text nodes carry the active mode's color.
 

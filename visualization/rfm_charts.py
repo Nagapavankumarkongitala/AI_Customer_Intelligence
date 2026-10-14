@@ -52,6 +52,40 @@ def revenue_by_segment_bar(profile: pd.DataFrame, segment_col: str = "segment") 
 
 
 @styled
+def segment_share_donut(profile: pd.DataFrame, segment_col: str = "segment") -> px.Figure:
+    """Customer share per segment as a donut, in segment hues.
+
+    Slices under a few percent stay thin but legible through hover values;
+    the hole centers the total customer count.
+    """
+    if profile.empty:
+        return empty_figure("Customers per segment")
+    col = segment_col if segment_col in profile.columns else profile.columns[0]
+    fig = px.pie(
+        profile,
+        names=col,
+        values="customers",
+        hole=0.45,
+        color=col,
+        **_segment_map_or_sequence(profile[col]),
+        title="Customers per segment",
+        labels={col: "Segment", "customers": "Customers"},
+    )
+    fig.update_traces(textinfo="percent")
+    total = int(profile["customers"].sum())
+    fig.add_annotation(
+        x=0.5,
+        y=0.5,
+        xref="paper",
+        yref="paper",
+        text=f"{total:,}<br>customers",
+        showarrow=False,
+        font={"size": 14},
+    )
+    return fig
+
+
+@styled
 def recency_frequency_scatter(features: pd.DataFrame, color_col: str = "segment") -> px.Figure:
     """Recency vs frequency, colored by segment when available."""
     if features.empty:

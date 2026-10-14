@@ -80,12 +80,13 @@ def _risk_cell_style(value: object) -> str:
     return f"background-color: {bg}; color: {fg}; font-weight: 600;"
 
 
-def html_table(df: pd.DataFrame, risk_cols: tuple[str, ...] = ()) -> str:
+def html_table(df: pd.DataFrame, risk_cols: tuple[str, ...] = (), height: int | None = None) -> str:
     """Standalone HTML table with inline risk-cell painting (pure, no jinja2).
 
     Used when the Styler backend is unavailable; keeps the conditional colors
     instead of silently dropping them. Values must already be display strings
-    (see ``format_frame``) — everything is HTML-escaped here.
+    (see ``format_frame``) — everything is HTML-escaped here. ``height`` caps
+    the scroll region; ``None`` lets the table size naturally.
     """
     border = tokens.color("border")
     muted = tokens.color("muted")
@@ -105,9 +106,10 @@ def html_table(df: pd.DataFrame, risk_cols: tuple[str, ...] = ()) -> str:
             for column in df.columns
         )
         rows.append(f"<tr>{cells}</tr>")
+    scroll = f"max-height:{height}px;overflow:auto;" if height else "overflow-x:auto;"
     return (
         "<div style='overflow-x:auto;border:1px solid "
-        f"{border};border-radius:12px;'>"
+        f"{border};border-radius:12px;{scroll}'>"
         "<table style='width:100%;border-collapse:collapse;font-size:0.85rem;"
         "font-variant-numeric:tabular-nums;'>"
         f"<thead><tr>{head}</tr></thead><tbody>{''.join(rows)}</tbody></table></div>"
@@ -143,21 +145,26 @@ def render_table(
     pct_cols: tuple[str, ...] = (),
     int_cols: tuple[str, ...] = (),
     caption: str | None = None,
+    height: int | None = None,
 ) -> None:
     """Render a formatted, conditionally painted table full-width.
 
     With jinja2 the Styler path keeps dataframe interactivity; without it the
-    standalone HTML table keeps the same values and risk colors.
+    standalone HTML table keeps the same values and risk colors. ``height``
+    caps the scroll region on either path; ``None`` sizes naturally.
     """
     if caption:
         st.caption(caption)
     if _HAS_JINJA2:
+        frame_kwargs: dict = {"width": "stretch"}
+        if height is not None:
+            frame_kwargs["height"] = height
         st.dataframe(
             style_table(df, risk_cols, money_cols, pct_cols, int_cols),
-            width="stretch",
+            **frame_kwargs,
         )
     else:
         st.markdown(
-            html_table(format_frame(df, money_cols, pct_cols, int_cols), risk_cols),
+            html_table(format_frame(df, money_cols, pct_cols, int_cols), risk_cols, height=height),
             unsafe_allow_html=True,
         )

@@ -177,6 +177,29 @@ def test_segment_charts_use_stable_hues() -> None:
         "Lost Customers": tokens.SEGMENT_COLORS["Lost Customers"],
     }
 
+
+def test_segment_share_donut() -> None:
+    """Donut carries segment hues, a hole, and the total in its center."""
+    from visualization import tokens
+
+    profile = pd.DataFrame(
+        {
+            "segment": ["Champions", "Lost Customers"],
+            "customers": [3, 1],
+            "revenue": [900.0, 100.0],
+        }
+    )
+    fig = rfm_charts.segment_share_donut(profile)
+    assert len(fig.data) > 0
+    assert fig.data[0].hole == 0.45
+    assert fig.layout.title.text == "Customers per segment"
+    assert list(fig.data[0].marker.colors) == [
+        tokens.SEGMENT_COLORS["Champions"],
+        tokens.SEGMENT_COLORS["Lost Customers"],
+    ]
+    assert "4<br>customers" in fig.layout.annotations[0].text
+    assert len(rfm_charts.segment_share_donut(pd.DataFrame()).data) == 0
+
     frame = pd.DataFrame(
         {
             "customer_id": ["C1", "C2"],
