@@ -171,6 +171,23 @@ def test_compact_preset_is_dense_but_complete() -> None:
     assert regular.layout.title.font.size == 15
 
 
+def test_without_title_keeps_chrome_reclaims_margin() -> None:
+    """Section-framed charts drop the in-figure title but keep everything else."""
+    fig = theme.apply_chart_theme(_sample(), title="Titled")
+    assert fig.layout.title.text == "Titled"
+    bare = theme.without_title(fig)
+    assert not bare.layout.title.text
+    assert bare.layout.height == theme.CHART_HEIGHT
+    assert bare.layout.margin.t == 40
+    assert len(bare.data) == len(fig.data)
+
+    compact_bare = theme.without_title(
+        theme.apply_chart_theme(_sample(), compact=True), compact=True
+    )
+    assert compact_bare.layout.height == tokens.COMPACT_HEIGHT
+    assert compact_bare.layout.margin.t == 32
+
+
 def test_adopt_colorway_removes_leaked_defaults() -> None:
     """A factory that passes no colour still renders in the design system.
 

@@ -33,7 +33,7 @@ from visualization.segmentation_charts import (
     profile_heatmap,
     umap_scatter,
 )
-from visualization.theme import inject_terminal_css
+from visualization.theme import inject_terminal_css, without_title
 
 configure_logging()
 state_service.initialize(st.session_state)
@@ -259,12 +259,15 @@ metric_row(
 emb_l, emb_r = st.columns([1, 1])
 with emb_l:
     with chart_section("Clusters (PCA 2D)"):
-        st.plotly_chart(pca_scatter(prepared_state["matrix"], run["labels"]), width="stretch")
+        st.plotly_chart(
+            without_title(pca_scatter(prepared_state["matrix"], run["labels"])),
+            width="stretch",
+        )
 with emb_r:
     with chart_section("Clusters (UMAP 2D)"):
         try:
             st.plotly_chart(
-                umap_scatter(prepared_state["matrix"], run["labels"]),
+                without_title(umap_scatter(prepared_state["matrix"], run["labels"])),
                 width="stretch",
             )
         except ImportError as exc:
@@ -289,10 +292,10 @@ profile["business_name"] = profile["business_name"].fillna("Noise")
 prof_l, prof_r = st.columns([1, 1])
 with prof_l:
     with chart_section("Customers per cluster"):
-        st.plotly_chart(cluster_size_bar(profile), width="stretch")
+        st.plotly_chart(without_title(cluster_size_bar(profile)), width="stretch")
 with prof_r:
     with chart_section("Cluster profile (median, z-scored per feature)"):
-        st.plotly_chart(profile_heatmap(profile), width="stretch")
+        st.plotly_chart(without_title(profile_heatmap(profile)), width="stretch")
 with st.expander("Cluster profile table", expanded=False):
     st.dataframe(profile.drop(columns=["member_ids"], errors="ignore"), width="stretch")
 

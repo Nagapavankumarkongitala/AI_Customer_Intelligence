@@ -45,7 +45,7 @@ from visualization.rfm_charts import (
     revenue_by_segment_bar,
     segment_share_donut,
 )
-from visualization.theme import apply_chart_theme, inject_terminal_css
+from visualization.theme import apply_chart_theme, inject_terminal_css, without_title
 
 configure_logging()
 
@@ -94,8 +94,8 @@ def _retention_frame() -> pd.DataFrame | None:
 
 
 def _compact(fig):
-    """Reflow a factory figure to the compact overview height (idempotent)."""
-    return apply_chart_theme(fig, compact=True)
+    """Reflow a factory figure to the compact overview height, without its title."""
+    return without_title(apply_chart_theme(fig, compact=True), compact=True)
 
 
 page_header("Executive Dashboard")
@@ -348,10 +348,10 @@ with trends_tab:
     trend_left, trend_right = st.columns(2)
     with trend_left:
         with chart_section("Customer activity trend"):
-            st.plotly_chart(activity_trend_fig(trends["activity"]), width="stretch")
+            st.plotly_chart(without_title(activity_trend_fig(trends["activity"])), width="stretch")
     with trend_right:
         with chart_section("New vs returning customers"):
-            st.plotly_chart(new_returning_fig(trends["cohort"]), width="stretch")
+            st.plotly_chart(without_title(new_returning_fig(trends["cohort"])), width="stretch")
     with st.expander("Monthly revenue table", expanded=False):
         render_table(trends["revenue"], money_cols=("revenue",))
 
@@ -377,10 +377,16 @@ with segments_tab:
         seg_left, seg_right = st.columns(2)
         with seg_left:
             with chart_section("Customer vs revenue share by segment"):
-                st.plotly_chart(portfolio_bar_fig(portfolio, "rfm_segment"), width="stretch")
+                st.plotly_chart(
+                    without_title(portfolio_bar_fig(portfolio, "rfm_segment")),
+                    width="stretch",
+                )
         with seg_right:
             with chart_section("Revenue per segment"):
-                st.plotly_chart(revenue_by_segment_bar(portfolio, "rfm_segment"), width="stretch")
+                st.plotly_chart(
+                    without_title(revenue_by_segment_bar(portfolio, "rfm_segment")),
+                    width="stretch",
+                )
         with st.expander("Segment portfolio table", expanded=False):
             render_table(portfolio, money_cols=("revenue",))
 
@@ -409,7 +415,7 @@ with churn_tab:
             ]
         )
         with chart_section("Customers per risk band"):
-            st.plotly_chart(risk_band_bar(master_f), width="stretch")
+            st.plotly_chart(without_title(risk_band_bar(master_f)), width="stretch")
         with st.expander("High-value, high-risk (IDs masked)", expanded=False):
             if not hvhr.empty:
                 masked_hvhr = hvhr.copy()
@@ -453,12 +459,12 @@ with retention_tab:
         ret_left, ret_right = st.columns(2)
         with ret_left:
             with chart_section("Customers per recommended action"):
-                st.plotly_chart(strategy_distribution_bar(ret_f), width="stretch")
+                st.plotly_chart(without_title(strategy_distribution_bar(ret_f)), width="stretch")
         with ret_right:
             with chart_section("Revenue at risk per action"):
-                st.plotly_chart(revenue_at_risk_bar(ret_f), width="stretch")
+                st.plotly_chart(without_title(revenue_at_risk_bar(ret_f)), width="stretch")
         with chart_section("Priority score distribution"):
-            st.plotly_chart(priority_histogram(ret_f), width="stretch")
+            st.plotly_chart(without_title(priority_histogram(ret_f)), width="stretch")
         with st.expander("Ranked customers (top 200)", expanded=False):
             ranked = ret_f.sort_values("retention_priority_score", ascending=False).head(200)
             ranked = ranked.copy()

@@ -23,7 +23,7 @@ from services import state_service
 from services.export_service import to_csv_bytes, to_json_bytes
 from utils.logging_config import configure_logging
 from visualization.segmentation_charts import metric_comparison_bar, sankey_mapping
-from visualization.theme import inject_terminal_css
+from visualization.theme import inject_terminal_css, without_title
 
 configure_logging()
 state_service.initialize(st.session_state)
@@ -160,7 +160,7 @@ for i in range(0, len(metrics), 2):
         with col:
             with chart_section(title):
                 st.plotly_chart(
-                    metric_comparison_bar(table, metric, title),
+                    without_title(metric_comparison_bar(table, metric, title)),
                     width="stretch",
                     key=f"cmp_{metric}",
                 )
@@ -178,7 +178,7 @@ with agree_l:
     metric_row([Metric(f"Adjusted Rand Index ({ref} vs {target})", f"{ari:.3f}")])
 with agree_r:
     with chart_section(f"Customer flow ({ref} → {target})"):
-        st.plotly_chart(sankey_mapping(ct, ref, target), width="stretch")
+        st.plotly_chart(without_title(sankey_mapping(ct, ref, target)), width="stretch")
 with st.expander("Cross-tabulation (counts)", expanded=False):
     st.dataframe(ct, width="stretch")
 

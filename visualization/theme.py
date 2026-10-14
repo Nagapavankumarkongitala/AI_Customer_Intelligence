@@ -478,6 +478,18 @@ def style_plotly_fig(fig: Any, height: int = CHART_HEIGHT) -> Any:
     return apply_chart_theme(fig, height=height)
 
 
+def without_title(fig: Any, compact: bool = False) -> Any:
+    """Drop the in-figure title for charts framed by a section heading.
+
+    Keeps every themed attribute (fonts, axes, colors, height, legend) and
+    reclaims the title's top margin so the frame sits tight under its heading.
+    A light touch on purpose: no colour round-trips, safe to apply over an
+    already-themed figure.
+    """
+    fig.update_layout(title={"text": None}, margin_t=32 if compact else 40)
+    return fig
+
+
 def empty_figure(title: str, message: str = "No data for the current selection.") -> Any:
     """Stand-in figure factories return for empty inputs.
 

@@ -25,7 +25,7 @@ from visualization.retention_charts import (
     strategy_distribution_bar,
     value_risk_matrix,
 )
-from visualization.theme import inject_terminal_css
+from visualization.theme import inject_terminal_css, without_title
 
 configure_logging()
 state_service.initialize(st.session_state)
@@ -140,17 +140,17 @@ metric_row(
 ret_l, ret_r = st.columns([1, 1])
 with ret_l:
     with chart_section("Value–risk matrix"):
-        st.plotly_chart(value_risk_matrix(table), width="stretch")
+        st.plotly_chart(without_title(value_risk_matrix(table)), width="stretch")
 with ret_r:
     with chart_section("Revenue at risk per action"):
-        st.plotly_chart(revenue_at_risk_bar(table), width="stretch")
+        st.plotly_chart(without_title(revenue_at_risk_bar(table)), width="stretch")
 strat_l, strat_r = st.columns([1, 1])
 with strat_l:
     with chart_section("Customers per recommended action"):
-        st.plotly_chart(strategy_distribution_bar(table), width="stretch")
+        st.plotly_chart(without_title(strategy_distribution_bar(table)), width="stretch")
 with strat_r:
     with chart_section("Priority score distribution"):
-        st.plotly_chart(priority_histogram(table), width="stretch")
+        st.plotly_chart(without_title(priority_histogram(table)), width="stretch")
 
 with sidebar_filters("View Filters"):
     regions = sorted(table["region"].dropna().unique()) if "region" in table.columns else []

@@ -23,11 +23,12 @@ from visualization.demographic_charts import (
     age_histogram,
     gender_bar,
     geo_treemap,
+    plural_geo_level,
     revenue_geo_bar,
     stacked_composition_bar,
     top_geo_bar,
 )
-from visualization.theme import inject_terminal_css
+from visualization.theme import inject_terminal_css, without_title
 
 configure_logging()
 state_service.initialize(st.session_state)
@@ -97,17 +98,19 @@ if "age_summary" in profile.tables:
     age_l, age_r = st.columns([1, 1])
     with age_l:
         with chart_section("Age distribution"):
-            st.plotly_chart(age_histogram(features["age"]), width="stretch")
+            st.plotly_chart(without_title(age_histogram(features["age"])), width="stretch")
     with age_r:
         with chart_section("Customers per age band"):
-            st.plotly_chart(age_band_bar(profile.tables["age_bands"]), width="stretch")
+            st.plotly_chart(
+                without_title(age_band_bar(profile.tables["age_bands"])), width="stretch"
+            )
 
 if "gender" in profile.tables:
     section_header("Gender")
     gender_l, gender_r = st.columns([3, 2])
     with gender_l:
         with chart_section("Customers by gender"):
-            st.plotly_chart(gender_bar(profile.tables["gender"]), width="stretch")
+            st.plotly_chart(without_title(gender_bar(profile.tables["gender"])), width="stretch")
     with gender_r:
         with st.expander("Gender table", expanded=False):
             st.dataframe(profile.tables["gender"], width="stretch")
@@ -125,13 +128,17 @@ for tab, level in zip(geo_tab, geo_levels, strict=True):
         table = profile.tables[f"geo_{level}"]
         geo_l, geo_r = st.columns([1, 1])
         with geo_l:
-            with chart_section(f"Top {level}s by customers"):
-                st.plotly_chart(top_geo_bar(table, level), width="stretch", key=f"geo_top_{level}")
+            with chart_section(f"Top {plural_geo_level(level)} by customers"):
+                st.plotly_chart(
+                    without_title(top_geo_bar(table, level)),
+                    width="stretch",
+                    key=f"geo_top_{level}",
+                )
         with geo_r:
             if "revenue" in table.columns:
-                with chart_section(f"Top {level}s by revenue"):
+                with chart_section(f"Top {plural_geo_level(level)} by revenue"):
                     st.plotly_chart(
-                        revenue_geo_bar(table, level),
+                        without_title(revenue_geo_bar(table, level)),
                         width="stretch",
                         key=f"geo_rev_{level}",
                     )
@@ -169,7 +176,7 @@ if segments is not None and "segment_profiles" in profile.tables:
             with col:
                 with chart_section(f"{column} mix by segment"):
                     st.plotly_chart(
-                        stacked_composition_bar(comp, column),
+                        without_title(stacked_composition_bar(comp, column)),
                         width="stretch",
                         key=f"comp_{column}",
                     )

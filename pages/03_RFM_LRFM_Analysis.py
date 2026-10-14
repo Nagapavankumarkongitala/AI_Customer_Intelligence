@@ -29,12 +29,12 @@ from visualization.rfm_charts import (
     rfm_heatmap,
     segment_distribution_bar,
 )
-from visualization.theme import apply_chart_theme, inject_terminal_css
+from visualization.theme import apply_chart_theme, inject_terminal_css, without_title
 
 
 def _compact(fig):
-    """Reflow a factory figure to the compact tab height (idempotent re-theme)."""
-    return apply_chart_theme(fig, compact=True)
+    """Reflow a factory figure to the compact tab height, without its title."""
+    return without_title(apply_chart_theme(fig, compact=True), compact=True)
 
 
 configure_logging()

@@ -38,7 +38,7 @@ from visualization.churn_charts import (
     risk_band_bar,
     roc_curve_fig,
 )
-from visualization.theme import inject_terminal_css
+from visualization.theme import inject_terminal_css, without_title
 
 configure_logging()
 state_service.initialize(st.session_state)
@@ -213,23 +213,30 @@ if bundles:
     with eval_l:
         with chart_section("ROC curve"):
             st.plotly_chart(
-                roc_curve_fig(bundle["test_y"], bundle["test_proba"]),
+                without_title(roc_curve_fig(bundle["test_y"], bundle["test_proba"])),
                 width="stretch",
             )
     with eval_r:
         with chart_section("Calibration curve"):
             st.plotly_chart(
-                calibration_curve_fig(calibration_table(bundle["test_y"], bundle["test_proba"])),
+                without_title(
+                    calibration_curve_fig(calibration_table(bundle["test_y"], bundle["test_proba"]))
+                ),
                 width="stretch",
             )
     perf_l, perf_r = st.columns([1, 1])
     with perf_l:
         with chart_section("Confusion matrix"):
-            st.plotly_chart(confusion_fig(bundle["test_metrics"]["confusion"]), width="stretch")
+            st.plotly_chart(
+                without_title(confusion_fig(bundle["test_metrics"]["confusion"])),
+                width="stretch",
+            )
     with perf_r:
         with chart_section("Cumulative gain"):
             st.plotly_chart(
-                gain_chart_fig(lift_gain_table(bundle["test_y"], bundle["test_proba"])),
+                without_title(
+                    gain_chart_fig(lift_gain_table(bundle["test_y"], bundle["test_proba"]))
+                ),
                 width="stretch",
             )
     with st.expander("Threshold metrics", expanded=False):
@@ -239,7 +246,7 @@ if bundles:
 
     section_header("Explainability")
     with chart_section("Global feature importance"):
-        st.plotly_chart(importance_bar_fig(bundle["importance"]), width="stretch")
+        st.plotly_chart(without_title(importance_bar_fig(bundle["importance"])), width="stretch")
     if detail == "logreg":
         with st.expander("Coefficients & odds ratios", expanded=False):
             st.dataframe(logreg_effects(bundle["pipeline"]), width="stretch")
@@ -280,7 +287,7 @@ if scores is not None:
     risk_l, risk_r = st.columns([1, 2])
     with risk_l:
         with chart_section("Customers per risk band"):
-            st.plotly_chart(risk_band_bar(scores), width="stretch")
+            st.plotly_chart(without_title(risk_band_bar(scores)), width="stretch")
     with risk_r:
         with st.expander("Scored customers (top 200)", expanded=False):
             render_table(scores.head(200), risk_cols=("risk_band",))
