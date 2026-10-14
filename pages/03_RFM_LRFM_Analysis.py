@@ -26,6 +26,7 @@ from visualization.rfm_charts import (
     revenue_by_segment_bar,
     rfm_bubble,
     rfm_parallel_plot,
+    rfm_scatter_matrix,
     segment_distribution_bar,
 )
 from visualization.theme import apply_chart_theme, inject_terminal_css, without_title
@@ -155,12 +156,26 @@ for tab, key in ((tab_rfm, "rfm_results"), (tab_lrfm, "lrfm_results")):
             with chart_section("Customer counts by R × F score"):
                 st.plotly_chart(_compact(rfm_bubble(scored)), width="stretch", key=f"{key}_matrix")
         with rel_tab:
-            with chart_section("Recency, frequency and value"):
-                st.plotly_chart(
-                    _compact(rfm_parallel_plot(enriched)),
-                    width="stretch",
-                    key=f"{key}_parcoords",
-                )
+            rel_view = st.selectbox(
+                "Relationships view",
+                ["Scatter matrix", "Parallel coordinates"],
+                key=f"{key}_relview",
+            )
+            with chart_section(rel_view):
+                if rel_view == "Scatter matrix":
+                    st.plotly_chart(
+                        rfm_scatter_matrix(enriched),
+                        width="stretch",
+                        key=f"{key}_matrix",
+                    )
+                    if len(enriched) > 2000:
+                        st.caption("Scatter matrix shows a 2,000-customer sample.")
+                else:
+                    st.plotly_chart(
+                        _compact(rfm_parallel_plot(enriched)),
+                        width="stretch",
+                        key=f"{key}_parcoords",
+                    )
 
         with st.expander("Segment profile", expanded=False):
             render_table(profile, money_cols=("revenue",))

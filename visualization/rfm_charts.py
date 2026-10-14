@@ -106,6 +106,44 @@ def segment_share_donut(profile: pd.DataFrame, segment_col: str = "segment") -> 
     return fig
 
 
+@styled(height=480)
+def rfm_scatter_matrix(
+    features: pd.DataFrame, color_col: str = "segment", max_points: int = 2000
+) -> px.Figure:
+    """Pairwise R/F/M relationships as a scatter matrix, colored by segment.
+
+    Points are a deterministic random sample past ``max_points`` so 25k-row
+    frames stay interactive; the page captions the sampling when it applies.
+    """
+    dims = [c for c in ("recency_days", "frequency", "monetary_value") if c in features.columns]
+    if features.empty or not dims:
+        return empty_figure("Pairwise RFM relationships")
+    data = features.copy()
+    if len(data) > max_points:
+        data = data.sample(n=max_points, random_state=42).reset_index(drop=True)
+    color = color_col if color_col in data.columns else None
+    color_kwargs = (
+        _segment_map_or_sequence(data[color])
+        if color
+        else {"color_discrete_sequence": PRIMARY_DISCRETE}
+    )
+    hover = [c for c in ("customer_id",) if c in data.columns] or None
+    return px.scatter_matrix(
+        data,
+        dimensions=dims,
+        color=color,
+        **color_kwargs,
+        hover_data=hover,
+        opacity=0.6,
+        title="Pairwise RFM relationships",
+        labels={
+            "recency_days": "Recency (days)",
+            "frequency": "Frequency",
+            "monetary_value": "Monetary value",
+        },
+    )
+
+
 @styled
 def rfm_parallel_plot(features: pd.DataFrame) -> go.Figure:
     """Recency, frequency, and monetary value as parallel coordinates.

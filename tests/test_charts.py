@@ -240,6 +240,32 @@ def test_segment_share_donut() -> None:
     }
 
 
+def test_scatter_matrix_samples_and_maps_segments() -> None:
+    """Matrix renders segment hues and caps points deterministically."""
+    rng = np.random.default_rng(42)
+    big = pd.DataFrame(
+        {
+            "customer_id": [f"C{i}" for i in range(2500)],
+            "segment": ["Champions" if i % 2 else "Lost Customers" for i in range(2500)],
+            "recency_days": rng.integers(1, 300, 2500),
+            "frequency": rng.integers(1, 20, 2500),
+            "monetary_value": rng.uniform(10.0, 900.0, 2500).round(2),
+        }
+    )
+    fig = rfm_charts.rfm_scatter_matrix(big)
+    assert len(fig.data) > 0
+    assert fig.layout.title.text == "Pairwise RFM relationships"
+    assert fig.layout.height == 480
+    rendered = sum(len(trace.x) for trace in fig.data if getattr(trace, "x", None) is not None)
+    assert rendered <= 2000 * 9
+    names = {trace.name for trace in fig.data if trace.name}
+    assert names <= {"Champions", "Lost Customers"}
+
+    small = big.head(10)
+    assert len(rfm_charts.rfm_scatter_matrix(small).data) > 0
+    assert len(rfm_charts.rfm_scatter_matrix(pd.DataFrame()).data) == 0
+
+
 def test_unknown_categories_fall_back_to_neutral_sequence() -> None:
     """Unmapped labels never collapse to grey; they take the neutral sequence."""
     from visualization.theme import PRIMARY_DISCRETE
