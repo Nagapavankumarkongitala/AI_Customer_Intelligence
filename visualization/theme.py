@@ -93,6 +93,11 @@ html, body { touch-action: manipulation; }
 }
 h1, h2, h3 { color: $text; letter-spacing: -0.02em; }
 a { color: $primary; }
+/* Page-header divider sits tight under the title instead of floating. */
+[data-testid="stMain"] hr {
+    margin-top: 0.5rem;
+    margin-bottom: 1rem;
+}
 /* Narrower rail: more room for content. Scoped to the expanded state so the
    native collapse can still shrink the rail (an unscoped !important width
    would pin it open and the page would never reflow). The !important beats
