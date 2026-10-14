@@ -41,6 +41,7 @@ def segment_distribution_bar(profile: pd.DataFrame, segment_col: str = "segment"
     fig.update_traces(texttemplate="%{y:,}", textposition="outside")
     top = float(profile["customers"].max())
     fig.update_yaxes(visible=False, range=[0, top * 1.12 if top > 0 else 1])
+    fig.update_xaxes(title_text="")
     return fig
 
 
@@ -67,6 +68,7 @@ def revenue_by_segment_bar(profile: pd.DataFrame, segment_col: str = "segment") 
     fig.update_traces(texttemplate="%{y:,.0f}", textposition="outside")
     top = float(profile["revenue"].max())
     fig.update_yaxes(visible=False, range=[0, top * 1.12 if top > 0 else 1])
+    fig.update_xaxes(title_text="")
     return fig
 
 

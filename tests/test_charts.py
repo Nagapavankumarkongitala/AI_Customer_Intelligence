@@ -165,6 +165,9 @@ def test_segment_charts_use_stable_hues() -> None:
         "Champions": tokens.SEGMENT_COLORS["Champions"],
         "Lost Customers": tokens.SEGMENT_COLORS["Lost Customers"],
     }
+    dist = rfm_charts.segment_distribution_bar(profile)
+    assert dist.layout.xaxis.title.text == ""
+    assert dist.layout.yaxis.visible is False
     assert _trace_colors(rfm_charts.revenue_by_segment_bar(profile)) == {
         "Champions": tokens.SEGMENT_COLORS["Champions"],
         "Lost Customers": tokens.SEGMENT_COLORS["Lost Customers"],
