@@ -22,8 +22,9 @@ def _segment_map_or_sequence(values: object) -> dict:
 def segment_distribution_bar(profile: pd.DataFrame, segment_col: str = "segment") -> px.Figure:
     """Customer counts per segment, largest first, in segment hues.
 
-    Values ride on the bars, so the y-axis carries no information and stays
-    hidden; the shared theme still supplies fonts, grid, and margins.
+    Values ride on the bars and the legend names every segment, so both axes
+    stay clean: no y-axis, no x tick labels. The shared theme still supplies
+    fonts, grid, and margins.
     """
     if profile.empty:
         return empty_figure("Customers per segment")
@@ -41,7 +42,7 @@ def segment_distribution_bar(profile: pd.DataFrame, segment_col: str = "segment"
     fig.update_traces(texttemplate="%{y:,}", textposition="outside")
     top = float(profile["customers"].max())
     fig.update_yaxes(visible=False, range=[0, top * 1.12 if top > 0 else 1])
-    fig.update_xaxes(title_text="")
+    fig.update_xaxes(title_text="", showticklabels=False)
     return fig
 
 
@@ -49,8 +50,9 @@ def segment_distribution_bar(profile: pd.DataFrame, segment_col: str = "segment"
 def revenue_by_segment_bar(profile: pd.DataFrame, segment_col: str = "segment") -> px.Figure:
     """Revenue contribution per segment, in segment hues.
 
-    Values ride on the bars, so the y-axis carries no information and stays
-    hidden; the shared theme still supplies fonts, grid, and margins.
+    Values ride on the bars and the legend names every segment, so both axes
+    stay clean: no y-axis, no x tick labels. The shared theme still supplies
+    fonts, grid, and margins.
     """
     if profile.empty:
         return empty_figure("Revenue per segment")
@@ -68,7 +70,7 @@ def revenue_by_segment_bar(profile: pd.DataFrame, segment_col: str = "segment") 
     fig.update_traces(texttemplate="%{y:,.0f}", textposition="outside")
     top = float(profile["revenue"].max())
     fig.update_yaxes(visible=False, range=[0, top * 1.12 if top > 0 else 1])
-    fig.update_xaxes(title_text="")
+    fig.update_xaxes(title_text="", showticklabels=False)
     return fig
 
 

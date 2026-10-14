@@ -178,6 +178,12 @@ def test_segment_charts_use_stable_hues() -> None:
         "Champions": tokens.SEGMENT_COLORS["Champions"],
         "Lost Customers": tokens.SEGMENT_COLORS["Lost Customers"],
     }
+    for fig in (
+        rfm_charts.segment_distribution_bar(profile),
+        rfm_charts.revenue_by_segment_bar(profile),
+    ):
+        assert fig.layout.xaxis.showticklabels is False
+        assert fig.layout.xaxis.title.text == ""
 
 
 def test_segment_share_donut() -> None:
