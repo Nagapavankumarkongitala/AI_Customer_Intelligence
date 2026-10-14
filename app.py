@@ -98,21 +98,7 @@ def _compact(fig):
     return apply_chart_theme(fig, compact=True)
 
 
-page_header(
-    "Executive Dashboard",
-    "Filter-consistent performance, risk, and retention at a glance.",
-)
-if default_manifest:
-    st.success(
-        f"**{default_manifest['source']}** auto-loaded: "
-        f"{default_manifest['rows']:,} transactions, "
-        f"{default_manifest['customers']:,} customers "
-        f"(built {default_manifest['built_at']}). All cards below show its results."
-    )
-st.markdown(
-    "Every card below derives from the same sidebar Filters. "
-    "Customer IDs are masked except in the gated drill-down."
-)
+page_header("Executive Dashboard")
 
 clean_data = st.session_state.get("clean_data")
 if clean_data is None:
