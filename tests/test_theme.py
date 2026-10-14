@@ -261,7 +261,7 @@ def test_sidebar_width_follows_token() -> None:
     """The rail width ships in both sheets from the single token value."""
     for sheet in (LIGHT_CSS, DARK_CSS):
         assert tokens.SIDEBAR_WIDTH in sheet
-        assert 'body [data-testid="stSidebar"]' in sheet
+        assert 'body [data-testid="stSidebar"][aria-expanded="true"]' in sheet
     assert tokens.SIDEBAR_WIDTH == "15rem"
 
 

@@ -118,3 +118,5 @@ ormalize_dictionary_rows renders legacy caches as field/detail pairs instead of 
 - Compute caching (this change): new components/cached.py wraps expensive pure service/analytics calls in st.cache_data so page switches stop recomputing everything (in-page tabs never reran — verified live; sidebar page switches did). Wired into landing + pages 02/03/04/05/08 with parity tests.\
 \
 - Single chart titles (this change): new 	heme.without_title strips in-figure titles (reclaiming top margin) everywhere a section heading frames the chart; factories keep titles for standalone use. Live-verified: 15 figures title-free, legends intact.\
+\
+- Sidebar collapse fix (this change): the !important rail width overrode Streamlit's collapsed state, pinning a 240px gap with no reflow. Width rule now scoped to [aria-expanded=true]; live-verified collapse to 0px with +240px main reflow and clean expand-back.\

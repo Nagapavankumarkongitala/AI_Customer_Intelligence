@@ -93,10 +93,11 @@ html, body { touch-action: manipulation; }
 }
 h1, h2, h3 { color: $text; letter-spacing: -0.02em; }
 a { color: $primary; }
-/* Narrower rail: more room for content. The width must be !important to
-   beat Streamlit's inline width on the section (which also disables the
-   native drag-resize handle — accepted trade-off). */
-body [data-testid="stSidebar"] {
+/* Narrower rail: more room for content. Scoped to the expanded state so the
+   native collapse can still shrink the rail (an unscoped !important width
+   would pin it open and the page would never reflow). The !important beats
+   Streamlit's inline width, which also disables the drag-resize handle. */
+body [data-testid="stSidebar"][aria-expanded="true"] {
     width: $sidebar_width !important;
     min-width: $sidebar_width;
 }
