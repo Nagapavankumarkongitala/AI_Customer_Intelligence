@@ -200,6 +200,8 @@ def test_y_axis_titles_removed_ticks_kept() -> None:
     assert fig.layout.yaxis.title.text == ""
     assert fig.layout.xaxis.title.text == "a"
     assert fig.data[0].y is not None
+    assert fig.layout.margin.l < 52
+    assert fig.layout.yaxis.automargin is True
 
 
 def test_adopt_colorway_removes_leaked_defaults() -> None:

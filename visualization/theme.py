@@ -398,7 +398,7 @@ def apply_chart_theme(
     if height is None:
         height = CHART_HEIGHT
     margin = (
-        {"l": 44, "r": 16, "t": 52, "b": 36} if compact else {"l": 52, "r": 28, "t": 64, "b": 48}
+        {"l": 30, "r": 16, "t": 52, "b": 36} if compact else {"l": 36, "r": 28, "t": 64, "b": 48}
     )
     title_size = 13 if compact else 15
 
@@ -466,6 +466,7 @@ def apply_chart_theme(
         linecolor=ink["border"],
         tickfont={"color": ink["muted"]},
         title_text="",
+        automargin=True,
     )
 
     # Separate adjacent markers with a hairline in the surface tone.

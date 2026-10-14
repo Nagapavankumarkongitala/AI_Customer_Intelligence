@@ -126,3 +126,5 @@ ormalize_dictionary_rows renders legacy caches as field/detail pairs instead of 
 - Uniform compact charts (this change): CHART_HEIGHT is now 300px everywhere; compact flag keeps tighter margins/type for dense groups. COMPACT_HEIGHT removed.\
 \
 - Y-axis titles (this change): pply_chart_theme drops y-axis titles globally (ticks and x titles kept); section headings carry the meaning.\
+\
+- Y-gutter reclaim (this change): left margins tightened (52/44 to 36/30) with y automargin so ticks never clip; plot area expands into the removed title space.\
