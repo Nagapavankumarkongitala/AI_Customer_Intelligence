@@ -484,9 +484,10 @@ def without_title(fig: Any, compact: bool = False) -> Any:
     Keeps every themed attribute (fonts, axes, colors, height, legend) and
     reclaims the title's top margin so the frame sits tight under its heading.
     A light touch on purpose: no colour round-trips, safe to apply over an
-    already-themed figure.
+    already-themed figure. The text is an empty string (never None: Plotly
+    draws a missing title text as the literal word "undefined").
     """
-    fig.update_layout(title={"text": None}, margin_t=32 if compact else 40)
+    fig.update_layout(title={"text": ""}, margin_t=32 if compact else 40)
     return fig
 
 
