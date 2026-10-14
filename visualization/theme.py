@@ -311,17 +311,30 @@ def _apply_color_table(fig: Any, table: dict[str, str]) -> Any:
 
 
 def _remap_table(mode: str) -> dict[str, str]:
-    """Inactive-palette colour -> active-palette colour, keyed by colour value.
+    """Inactive colour -> active colour, keyed by colour value.
 
-    Safe because both palettes carry unique values under an identical key set.
+    Covers palette keys plus the segment hue tables. Safe because palettes
+    carry unique values under an identical key set and both segment tables
+    stay disjoint from both palettes (asserted by tests).
     """
     active = tokens.palette(mode)
     inactive = tokens.PALETTES[tokens.MODE_DARK if mode == tokens.MODE_LIGHT else tokens.MODE_LIGHT]
-    return {
+    table = {
         inactive[key].upper(): active[key]
         for key in tokens.COLOR_KEYS
         if inactive[key] != active[key]
     }
+    segment_tables = (
+        (tokens.SEGMENT_COLORS, tokens.SEGMENT_COLORS_DARK)
+        if mode == tokens.MODE_DARK
+        else (tokens.SEGMENT_COLORS_DARK, tokens.SEGMENT_COLORS)
+    )
+    inactive_segments, active_segments = segment_tables
+    for name, inactive_hex in inactive_segments.items():
+        active_hex = active_segments[name]
+        if active_hex != inactive_hex:
+            table[inactive_hex.upper()] = active_hex
+    return table
 
 
 def _remap_tree(node: Any, table: dict[str, str]) -> Any:

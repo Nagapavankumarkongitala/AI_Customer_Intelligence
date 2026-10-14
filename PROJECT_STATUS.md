@@ -112,3 +112,5 @@ ormalize_dictionary_rows renders legacy caches as field/detail pairs instead of 
 - Tabbed dashboard landing (this change): Business Overview (5 KPIs, area+segment+risk row, bubble+region+demographics row, top-opps+insights row), Customer Trends, Segments, Churn Risk, Retention tabs; segment bars take segment_col; evenue_area_fig and horizontal geo bars added. Pies declined: 10 RFM segments violate the no-pies-over-5 project rule.\
 \
 - Overview refinements (this change): segment donut (share + hole total, stable hues) replaces bars in Business Overview; demographics Age/Gender moved into inner tabs; top-opps table scroll-capped at 320px via new render height; segment_col support on segment bars; horizontal mode on revenue geo bars.\
+\
+- Dark rebuild (this change): dark palette redesigned from measurements (bright critical, lifted heatmap floor, stronger muted-soft) plus per-mode segment hues preserving hue families; re-map extended; dark contrast floor tests. Live-verified per-trace in dark mode.\

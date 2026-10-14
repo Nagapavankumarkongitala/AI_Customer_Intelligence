@@ -60,6 +60,13 @@ def test_palettes_share_keys_with_unique_values() -> None:
         "segment hues must stay disjoint from palette values so the dark-mode "
         "re-map never rewrites a segment identity"
     )
+    dark_segments = {v.upper() for v in tokens.SEGMENT_COLORS_DARK.values()}
+    assert set(tokens.SEGMENT_COLORS_DARK) == set(tokens.SEGMENT_COLORS)
+    assert len(dark_segments) == len(tokens.SEGMENT_COLORS_DARK), "dark hues collide"
+    assert not (dark_segments & {v.upper() for v in (*light_colors, *dark_colors)}), (
+        "dark segment hues must stay disjoint from palette values so the "
+        "reverse re-map stays a well-defined lookup"
+    )
     for mode, palette in tokens.PALETTES.items():
         colors = [v for k, v in palette.items() if not k.startswith("shadow_")]
         assert len(set(colors)) == len(colors), f"{mode} reuses a colour value"
@@ -125,6 +132,15 @@ def test_segment_color_handles_collision_suffix_and_unknown() -> None:
     assert tokens.segment_color("Premium Active B") == tokens.SEGMENT_COLORS["Premium Active"]
     assert tokens.segment_color("  Champions  ") == tokens.SEGMENT_COLORS["Champions"]
     assert tokens.segment_color("Not A Real Segment") == tokens.LIGHT["muted_soft"]
+    assert tokens.segment_color("Champions", tokens.MODE_DARK) == (
+        tokens.SEGMENT_COLORS_DARK["Champions"]
+    )
+    assert tokens.segment_color("Premium Active B", tokens.MODE_DARK) == (
+        tokens.SEGMENT_COLORS_DARK["Premium Active"]
+    )
+    assert tokens.segment_color("Champions", tokens.MODE_LIGHT) == (
+        tokens.SEGMENT_COLORS["Champions"]
+    )
 
 
 def test_segment_and_action_maps_are_all_or_nothing() -> None:
@@ -143,6 +159,11 @@ def test_segment_and_action_maps_are_all_or_nothing() -> None:
     assert tokens.action_map(["Monitor"]) == {"Monitor": tokens.color("muted_soft")}
     assert tokens.action_map(["Monitor", "Nope"]) is None
     assert tokens.action_map([]) is None
+    dark_map = tokens.segment_map(["Champions", "Lost Customers"], tokens.MODE_DARK)
+    assert dark_map == {
+        "Champions": tokens.SEGMENT_COLORS_DARK["Champions"],
+        "Lost Customers": tokens.SEGMENT_COLORS_DARK["Lost Customers"],
+    }
     assert tokens.segment_map(5) is None
     assert tokens.action_map("Monitor") == {"Monitor": tokens.color("muted_soft")}
 
@@ -225,6 +246,42 @@ def test_light_contrast_meets_floor() -> None:
         if tokens.contrast_ratio(hex_color, surface) < 3.0
     }
     assert not weak, f"segment hues too faint on the light surface: {weak}"
+
+
+def test_dark_contrast_meets_floor() -> None:
+    """The dark skin clears the same bars against its own surface."""
+    surface = tokens.DARK["surface"]
+    assert tokens.contrast_ratio(tokens.DARK["text"], surface) >= 7.0
+    assert tokens.contrast_ratio(tokens.DARK["muted"], surface) >= 4.5
+    assert tokens.contrast_ratio(tokens.DARK["muted_soft"], surface) >= 4.5
+    assert tokens.contrast_ratio(tokens.DARK["primary"], surface) >= 4.5
+    assert tokens.contrast_ratio(tokens.DARK["critical"], surface) >= 4.5
+
+    weak = {
+        name: round(tokens.contrast_ratio(hex_color, surface), 2)
+        for name, hex_color in tokens.SEGMENT_COLORS_DARK.items()
+        if tokens.contrast_ratio(hex_color, surface) < 3.0
+    }
+    assert not weak, f"segment hues too faint on the dark surface: {weak}"
+
+
+def test_segment_remap_covers_every_name_both_ways() -> None:
+    """The mode re-map carries each segment hue to its counterpart and back."""
+    from visualization import theme
+
+    forward = theme._remap_table(tokens.MODE_DARK)
+    for name, light_hex in tokens.SEGMENT_COLORS.items():
+        dark_hex = tokens.SEGMENT_COLORS_DARK[name]
+        if light_hex == dark_hex:
+            continue
+        assert forward[light_hex.upper()] == dark_hex, name
+
+    backward = theme._remap_table(tokens.MODE_LIGHT)
+    for name, dark_hex in tokens.SEGMENT_COLORS_DARK.items():
+        light_hex = tokens.SEGMENT_COLORS[name]
+        if light_hex == dark_hex:
+            continue
+        assert backward[dark_hex.upper()] == light_hex, name
 
 
 def test_risk_badges_are_legible() -> None:

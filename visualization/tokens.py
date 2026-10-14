@@ -13,10 +13,12 @@ Rules this module exists to enforce:
    to exactly one semantic name (asserted by ``tests/test_tokens.py``).
 2. Semantic maps reference palette *keys*, so a risk band or retention action
    follows the active accent system instead of being re-picked per page.
-3. ``SEGMENT_COLORS`` is a literal, mode-invariant hue table covering **every**
-   segment name the pipeline can emit — RFM/LRFM share one vocabulary
+3. ``SEGMENT_COLORS`` / ``SEGMENT_COLORS_DARK`` are literal hue tables covering
+   **every** segment name the pipeline can emit — RFM/LRFM share one vocabulary
    (``analytics/rfm.py``) and AI clusters another (``segmentation/segment_naming.py``)
-   — so a "Champions" segment is the same colour on every page and in every mode.
+   — so a "Champions" segment is the same colour on every page. The dark table
+   carries the same hue families lightened onto navy (identities survive the
+   re-skin; per-mode hues are the documented exception to literal invariance).
 4. Nothing here imports Streamlit. The active mode is module-level state, which
    keeps figure factories free of session state (spec §17).
 """
@@ -70,10 +72,11 @@ LIGHT: Final[dict[str, str]] = {
 }
 
 DARK: Final[dict[str, str]] = {
-    # Accent system (the original navy/cyan console).
+    # Accent system: deliberately brighter than the light accents, because
+    # dark surfaces need more luminance for the same contrast ratios.
     "primary": "#22D3EE",
-    "primary_100": "#0B2137",
-    "primary_300": "#164E63",
+    "primary_100": "#1E537F",
+    "primary_300": "#2A6A9C",
     "primary_500": "#0891B2",
     "primary_700": "#38BDF8",
     "primary_900": "#A5F3FC",
@@ -82,13 +85,13 @@ DARK: Final[dict[str, str]] = {
     "positive": "#3DDC84",
     "warning": "#E8A838",
     "danger": "#FF4D4D",
-    "critical": "#B91C1C",
+    "critical": "#F25555",
     "purple": "#A78BFA",
     "teal": "#2DD4BF",
     # Ink.
     "text": "#E8EEF6",
     "muted": "#8B98AD",
-    "muted_soft": "#5B6B82",
+    "muted_soft": "#7588A3",
     # Surfaces and chrome.
     "background": "#070B14",
     "surface": "#0D1930",
@@ -185,6 +188,33 @@ SEGMENT_COLORS: Final[dict[str, str]] = {
     "Light Steady": "#B453EA",
     "Light Dormant": "#B968F0",
     # Fallback for rows the pipeline could not assign.
+    "Unsegmented": "#7C8AA0",
+}
+
+#: Segment hues for the dark surface: the same hue families lightened onto
+#: navy, tier ordering preserved (Premium darkest, Light lightest). Every
+#: entry clears 3:1 against the dark surface; the identical key set keeps the
+#: light→dark re-map well-defined.
+SEGMENT_COLORS_DARK: Final[dict[str, str]] = {
+    "Champions": "#556FC2",
+    "Loyal Customers": "#2C6FDB",
+    "Potential Loyalists": "#2F7DE1",
+    "New Customers": "#0B8AC0",
+    "Promising": "#127E8E",
+    "Needs Attention": "#8A4EEF",
+    "At Risk": "#C026D3",
+    "Cannot Lose Them": "#B242BD",
+    "Hibernating": "#657487",
+    "Lost Customers": "#687483",
+    "Premium Active": "#8363B6",
+    "Premium Steady": "#875CC9",
+    "Premium Dormant": "#8A53E1",
+    "Core Active": "#984ED8",
+    "Core Steady": "#9B43EC",
+    "Core Dormant": "#A13FE9",
+    "Light Active": "#A855F7",
+    "Light Steady": "#B453EA",
+    "Light Dormant": "#B968F0",
     "Unsegmented": "#7C8AA0",
 }
 
@@ -327,19 +357,25 @@ def shadow(name: str = "card", mode: str | None = None) -> str:
 # --------------------------------------------------------------------------- #
 
 
+def _segment_table(mode: str | None) -> dict[str, str]:
+    """Hue table for the mode (dark variants keep identities legible on navy)."""
+    return SEGMENT_COLORS_DARK if _resolve_mode(mode) == MODE_DARK else SEGMENT_COLORS
+
+
 def segment_color(name: str, mode: str | None = None) -> str:
-    """Colour for any segment label.
+    """Colour for any segment label, in the active mode's hue table.
 
     Handles the letter suffixes ``propose_names`` appends on collisions
     ("Premium Active B") and falls back to the neutral swatch for labels the
     pipeline did not produce, so an unexpected value degrades instead of crashing.
     """
+    table = _segment_table(mode)
     label = str(name).strip()
-    if label in SEGMENT_COLORS:
-        return SEGMENT_COLORS[label]
+    if label in table:
+        return table[label]
     stripped = _COLLISION_SUFFIX.sub("", label)
-    if stripped in SEGMENT_COLORS:
-        return SEGMENT_COLORS[stripped]
+    if stripped in table:
+        return table[stripped]
     return color("muted_soft", mode)
 
 
@@ -369,7 +405,7 @@ def action_color(action: str, mode: str | None = None) -> str:
     return color(key, mode) if key else color("muted_soft", mode)
 
 
-def segment_map(values: object) -> dict[str, str] | None:
+def segment_map(values: object, mode: str | None = None) -> dict[str, str] | None:
     """Discrete colour map when every value is known segment vocabulary.
 
     Returns ``None`` unless the whole set resolves (collision suffixes
@@ -377,17 +413,18 @@ def segment_map(values: object) -> dict[str, str] | None:
     third palette, which is exactly the drift this module exists to prevent.
     Callers fall back to the neutral categorical sequence on ``None``.
     """
+    table = _segment_table(mode)
     unique = {str(value).strip() for value in _as_values(values)}
     if not unique:
         return None
     mapped: dict[str, str] = {}
     for label in unique:
-        if label in SEGMENT_COLORS:
-            mapped[label] = SEGMENT_COLORS[label]
+        if label in table:
+            mapped[label] = table[label]
             continue
         stripped = _COLLISION_SUFFIX.sub("", label)
-        if stripped in SEGMENT_COLORS:
-            mapped[label] = SEGMENT_COLORS[stripped]
+        if stripped in table:
+            mapped[label] = table[stripped]
             continue
         return None
     return mapped
