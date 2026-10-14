@@ -27,7 +27,8 @@ def page_header_html(title: str, subtitle: str | None = None, badge: str | None 
             f"{html.escape(badge)}</div>"
         )
     parts.append(
-        "<h1 style='margin:0 0 0.25rem 0;letter-spacing:-0.02em;'>" f"{html.escape(title)}</h1>"
+        "<h1 style='margin:0 0 0.25rem 0;font-size:1.4rem;letter-spacing:-0.02em;'>"
+        f"{html.escape(title)}</h1>"
     )
     if subtitle:
         parts.append(

@@ -77,6 +77,7 @@ def test_page_header_hierarchy_and_escaping() -> None:
     out = page_header_html("Churn <b>Prediction</b>", "Subtitle & more", badge="Step 7 of 9")
     assert "<h1" in out and "Churn &lt;b&gt;Prediction&lt;/b&gt;" in out
     assert "Subtitle &amp; more" in out and "Step 7 of 9" in out
+    assert "font-size:1.4rem" in out
     minimal = page_header_html("Title")
     assert "<h1" in minimal and "Subtitle" not in minimal
 
