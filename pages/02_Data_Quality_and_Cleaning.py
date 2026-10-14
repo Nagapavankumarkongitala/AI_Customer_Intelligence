@@ -6,6 +6,7 @@ import pandas as pd
 import streamlit as st
 import yaml
 
+from components.cached import cached_build_dictionary, cached_compute_quality
 from components.empty_state import empty_state
 from components.filters import control_group, controls_expander
 from components.metric_card import Metric, metric_row
@@ -13,9 +14,8 @@ from components.page_header import page_header, section_header
 from components.sidebar import render_sidebar_footer, render_sidebar_nav
 from services import state_service
 from services.cleaning_service import CleaningConfig, clean
-from services.data_dictionary_service import build_dictionary, normalize_dictionary_rows
+from services.data_dictionary_service import normalize_dictionary_rows
 from services.export_service import to_csv_bytes, to_excel_bytes, to_json_bytes
-from services.profiling_service import compute_quality
 from utils import formatting
 from utils.exceptions import CustomerIntelligenceError
 from utils.logging_config import configure_logging
@@ -44,7 +44,7 @@ if raw is None or not mapping:
 cfg = yaml.safe_load(Path("config.yaml").read_text(encoding="utf-8"))
 
 try:
-    quality = compute_quality(
+    quality = cached_compute_quality(
         raw,
         mapping,
         age_min=cfg["quality"]["age_min"],
@@ -147,7 +147,7 @@ if st.button("Apply cleaning", type="primary"):
         st.session_state["clean_data"] = clean_data
         st.session_state["cleaning_config"] = cleaning_config.as_dict()
         st.session_state["cleaning_audit"] = audit
-        st.session_state["data_dictionary"] = build_dictionary(clean_data, mapping).to_dict(
+        st.session_state["data_dictionary"] = cached_build_dictionary(clean_data, mapping).to_dict(
             orient="records"
         )
         st.success(

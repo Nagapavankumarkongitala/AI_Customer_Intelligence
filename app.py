@@ -3,6 +3,15 @@
 import pandas as pd
 import streamlit as st
 
+from components.cached import (
+    cached_apply_filters,
+    cached_build_master,
+    cached_compute_kpis,
+    cached_high_value_high_risk,
+    cached_prepare_transactions,
+    cached_segment_portfolio,
+    cached_trend_tables,
+)
 from components.empty_state import chart_section, empty_state
 from components.export_buttons import csv_download_button
 from components.filters import date_range_filter, multiselect_filter
@@ -13,16 +22,7 @@ from components.panels import download_panel
 from components.sidebar import render_sidebar_footer, render_sidebar_nav, sidebar_filters
 from components.table import render_table
 from services import state_service
-from services.dashboard_service import (
-    apply_filters,
-    build_master,
-    compute_kpis,
-    high_value_high_risk,
-    mask_customer_id,
-    prepare_transactions,
-    segment_portfolio,
-    trend_tables,
-)
+from services.dashboard_service import mask_customer_id
 from utils import formatting
 from utils.config import load_config
 from utils.exceptions import ConfigurationError
@@ -123,8 +123,8 @@ if clean_data is None:
     st.stop()
 
 features = st.session_state.get("customer_features")
-txns = prepare_transactions(clean_data)
-master = build_master(
+txns = cached_prepare_transactions(clean_data)
+master = cached_build_master(
     features if features is not None else _fallback_features(txns),
     rfm=st.session_state.get("rfm_results"),
     segmented=st.session_state.get("segmented_customers"),
@@ -155,15 +155,15 @@ with sidebar_filters():
             key.replace("_", " ").title(), [str(o) for o in opts], key=f"f_{key}"
         )
 
-txns_f, master_f = apply_filters(txns, master, filters)
+txns_f, master_f = cached_apply_filters(txns, master, filters)
 if master_f.empty:
     empty_state(
         "No customers match the current filters",
         "Widen a filter to continue.",
     )
     st.stop()
-kpis = compute_kpis(txns_f, master_f)
-trends = trend_tables(txns_f, master_f)
+kpis = cached_compute_kpis(txns_f, master_f)
+trends = cached_trend_tables(txns_f, master_f)
 
 retention = _retention_frame()
 ret_f = (
@@ -172,9 +172,9 @@ ret_f = (
     else None
 )
 portfolio = (
-    segment_portfolio(master_f, "rfm_segment") if "rfm_segment" in master_f.columns else None
+    cached_segment_portfolio(master_f, "rfm_segment") if "rfm_segment" in master_f.columns else None
 )
-hvhr = high_value_high_risk(master_f)
+hvhr = cached_high_value_high_risk(master_f)
 
 overview_tab, trends_tab, segments_tab, churn_tab, retention_tab = st.tabs(
     ["Business Overview", "Customer Trends", "Segments", "Churn Risk", "Retention"]

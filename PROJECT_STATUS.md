@@ -114,3 +114,5 @@ ormalize_dictionary_rows renders legacy caches as field/detail pairs instead of 
 - Overview refinements (this change): segment donut (share + hole total, stable hues) replaces bars in Business Overview; demographics Age/Gender moved into inner tabs; top-opps table scroll-capped at 320px via new render height; segment_col support on segment bars; horizontal mode on revenue geo bars.\
 \
 - Dark rebuild (this change): dark palette redesigned from measurements (bright critical, lifted heatmap floor, stronger muted-soft) plus per-mode segment hues preserving hue families; re-map extended; dark contrast floor tests. Live-verified per-trace in dark mode.\
+\
+- Compute caching (this change): new components/cached.py wraps expensive pure service/analytics calls in st.cache_data so page switches stop recomputing everything (in-page tabs never reran — verified live; sidebar page switches did). Wired into landing + pages 02/03/04/05/08 with parity tests.\

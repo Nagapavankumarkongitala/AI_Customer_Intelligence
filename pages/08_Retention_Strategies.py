@@ -2,6 +2,7 @@
 
 import streamlit as st
 
+from components.cached import cached_build_retention_table, cached_export_campaign
 from components.empty_state import chart_section, empty_state
 from components.filters import controls_expander, multiselect_filter
 from components.metric_card import Metric, metric_row
@@ -12,9 +13,7 @@ from retention_engine.offer_recommender import describe_offer
 from services import state_service
 from services.export_service import to_csv_bytes
 from services.retention_service import (
-    build_retention_table,
     default_matrix_report,
-    export_campaign,
     retention_summary,
 )
 from utils import formatting
@@ -98,7 +97,7 @@ if report["uncovered"]:
 
 try:
     with st.spinner("Scoring retention priorities…"):
-        table = build_retention_table(
+        table = cached_build_retention_table(
             scores,
             features,
             matrix,
@@ -186,7 +185,7 @@ with controls_expander("Campaign Settings"):
         "Campaign size (top priority)", min_value=10, max_value=5000, value=200, step=10
     )
     min_priority = st.number_input("Minimum priority score", min_value=0.0, value=0.0, step=0.05)
-campaign, channel_summary = export_campaign(
+campaign, channel_summary = cached_export_campaign(
     view, top_n=int(top_n), min_priority=float(min_priority)
 )
 with st.expander("Campaign export", expanded=False):

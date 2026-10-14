@@ -3,12 +3,12 @@
 import pandas as pd
 import streamlit as st
 
-from analytics.demographics import (
-    GEO_LEVELS,
-    build_demographic_profile,
-    segment_composition,
+from analytics.demographics import GEO_LEVELS
+from components.cached import (
+    cached_build_demographic_profile,
+    cached_run_segment_tests,
+    cached_segment_composition,
 )
-from analytics.statistical_tests import run_segment_tests
 from components.empty_state import chart_section, empty_state
 from components.metric_card import Metric, metric_row
 from components.page_header import page_header, section_header
@@ -64,7 +64,7 @@ if segment_source in ("RFM", "LRFM"):
     segments = scored[["customer_id", "segment"]]
 
 try:
-    profile = build_demographic_profile(features, segments, age_band_spec=bands_spec or None)
+    profile = cached_build_demographic_profile(features, segments, age_band_spec=bands_spec or None)
 except (CustomerIntelligenceError, KeyError, ValueError) as exc:
     st.error(str(exc))
     st.stop()
@@ -158,7 +158,7 @@ if segments is not None and "segment_profiles" in profile.tables:
     with st.expander("Population vs segment", expanded=False):
         st.dataframe(profile.tables["segment_comparison"], width="stretch")
     comp_charts = [
-        (column, segment_composition(features, segments, column))
+        (column, cached_segment_composition(features, segments, column))
         for column in ("gender", "region")
         if column in features.columns
     ]
@@ -199,7 +199,7 @@ if segments is not None and "segment_profiles" in profile.tables:
         .fillna("Unsegmented")
     )
     with st.spinner("Running statistical tests…"):
-        test_results = run_segment_tests(features, seg_series, continuous, categorical)
+        test_results = cached_run_segment_tests(features, seg_series, continuous, categorical)
     with st.expander("Segment significance tests", expanded=False):
         st.dataframe(test_results, width="stretch")
 

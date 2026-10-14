@@ -6,6 +6,7 @@ import pandas as pd
 import streamlit as st
 import yaml
 
+from components.cached import cached_segment_profile
 from components.empty_state import chart_section, empty_state
 from components.metric_card import Metric, metric_row
 from components.page_header import page_header, section_header
@@ -17,7 +18,6 @@ from services.feature_service import (
     compute_customer_features,
     run_lrfm,
     run_rfm,
-    segment_profile,
 )
 from utils import formatting
 from utils.exceptions import CustomerIntelligenceError
@@ -134,7 +134,7 @@ for tab, key in ((tab_rfm, "rfm_results"), (tab_lrfm, "lrfm_results")):
         continue
     with tab:
         enriched = features.merge(scored, on="customer_id", suffixes=("", "_seg"))
-        profile = segment_profile(enriched, monetary_col="monetary_value")
+        profile = cached_segment_profile(enriched, monetary_col="monetary_value")
         dist_tab, heat_tab, rel_tab = st.tabs(["Distribution", "Heatmap", "Relationships"])
         with dist_tab:
             seg_l, seg_r = st.columns([1, 1])

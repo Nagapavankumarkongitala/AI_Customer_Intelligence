@@ -5,6 +5,7 @@ from pathlib import Path
 import streamlit as st
 import yaml
 
+from components.cached import cached_build_cluster_profile
 from components.empty_state import chart_section, empty_state
 from components.filters import control_group, controls_expander
 from components.metric_card import Metric, metric_row
@@ -13,7 +14,6 @@ from components.sidebar import render_sidebar_footer, render_sidebar_nav
 from segmentation.common import labels_to_series
 from segmentation.evaluation import evaluate_clustering
 from segmentation.segment_naming import propose_names
-from segmentation.segment_profiling import build_cluster_profile
 from services import state_service
 from services.export_service import to_csv_bytes
 from services.segmentation_service import (
@@ -277,7 +277,7 @@ if run["model"] == "autoencoder":
         st.write({k: v[-5:] for k, v in run["fitted"]["history"].items()})
 
 section_header("Profile & name clusters")
-profile = build_cluster_profile(
+profile = cached_build_cluster_profile(
     features,
     run["labels"],
     run["feature_names"],
