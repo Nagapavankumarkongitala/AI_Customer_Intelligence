@@ -6,7 +6,7 @@ import pandas as pd
 import streamlit as st
 import yaml
 
-from components.cached import cached_segment_profile
+from components.cached import cached_run_segment_history, cached_segment_profile
 from components.empty_state import chart_section, empty_state
 from components.metric_card import Metric, metric_row
 from components.page_header import page_header, section_header
@@ -24,10 +24,10 @@ from utils.exceptions import CustomerIntelligenceError
 from utils.logging_config import configure_logging
 from visualization.rfm_charts import (
     revenue_by_segment_bar,
-    rfm_bubble,
     rfm_parallel_plot,
     rfm_scatter_matrix,
     segment_distribution_bar,
+    segment_trend_ribbon,
 )
 from visualization.theme import apply_chart_theme, inject_terminal_css, without_title
 
@@ -74,7 +74,13 @@ with sidebar_filters("Scoring"):
         help="Defaults to one day after the last transaction.",
     )
     recent_days = st.number_input("Recent window (days)", min_value=1, value=90, step=7)
+    trend_granularity = st.selectbox(
+        "Trend granularity",
+        ["Quarterly (last 8)", "Monthly (last 12)"],
+        help="Segment history is scored per period end; monthly takes longer.",
+    )
     build_clicked = st.button("Build features & score", type="primary")
+    trend_clicked = st.button("Build segment trends")
 
 if build_clicked:
     try:
@@ -106,6 +112,23 @@ if build_clicked:
     except (CustomerIntelligenceError, KeyError, ValueError) as exc:
         st.error(str(exc))
 
+if trend_clicked:
+    try:
+        granularity = "monthly" if trend_granularity.startswith("Monthly") else "quarterly"
+        with st.spinner("Scoring segments per period — minutes on large data…"):
+            history = cached_run_segment_history(clean_data, granularity, int(quantiles))
+        st.session_state["segment_history"] = {
+            "table": history.to_dict(orient="records"),
+            "granularity": granularity,
+            "quantiles": int(quantiles),
+        }
+        st.success(
+            f"Scored {history['period'].nunique()} {granularity} periods "
+            "into RFM and LRFM segments."
+        )
+    except (CustomerIntelligenceError, KeyError, ValueError) as exc:
+        st.error(str(exc))
+
 features = st.session_state.get("customer_features")
 if features is None:
     empty_state("No features yet", "Configure and run scoring to see segments.")
@@ -128,6 +151,7 @@ with st.expander("Customer feature preview (top 20)", expanded=False):
     st.dataframe(features.head(20), width="stretch")
 
 tab_rfm, tab_lrfm = st.tabs(["RFM", "LRFM"])
+model_labels = {"rfm_results": "RFM", "lrfm_results": "LRFM"}
 for tab, key in ((tab_rfm, "rfm_results"), (tab_lrfm, "lrfm_results")):
     scored = st.session_state.get(key)
     if scored is None:
@@ -135,7 +159,7 @@ for tab, key in ((tab_rfm, "rfm_results"), (tab_lrfm, "lrfm_results")):
     with tab:
         enriched = features.merge(scored, on="customer_id", suffixes=("", "_seg"))
         profile = cached_segment_profile(enriched, monetary_col="monetary_value")
-        dist_tab, matrix_tab, rel_tab = st.tabs(["Distribution", "Matrix", "Relationships"])
+        dist_tab, trends_tab, rel_tab = st.tabs(["Distribution", "Trends", "Relationships"])
         with dist_tab:
             seg_l, seg_r = st.columns([1, 1])
             with seg_l:
@@ -152,9 +176,27 @@ for tab, key in ((tab_rfm, "rfm_results"), (tab_lrfm, "lrfm_results")):
                         width="stretch",
                         key=f"{key}_revenue",
                     )
-        with matrix_tab:
-            with chart_section("Customer counts by R × F score"):
-                st.plotly_chart(_compact(rfm_bubble(scored)), width="stretch", key=f"{key}_matrix")
+        with trends_tab:
+            with chart_section("Customer segments over time"):
+                hist_state = st.session_state.get("segment_history") or {}
+                rows = hist_state.get("table") if isinstance(hist_state, dict) else None
+                history = pd.DataFrame(rows) if rows else None
+                if history is None or history.empty:
+                    empty_state(
+                        "No segment history yet",
+                        "Build segment trends from the sidebar.",
+                    )
+                else:
+                    model_hist = history[history["model"] == model_labels[key]]
+                    st.plotly_chart(
+                        _compact(segment_trend_ribbon(model_hist)),
+                        width="stretch",
+                        key=f"{key}_trends",
+                    )
+                    st.caption(
+                        "Segments are quantile-relative per period, so definitions "
+                        "drift as the population changes."
+                    )
         with rel_tab:
             rel_view = st.selectbox(
                 "Relationships view",

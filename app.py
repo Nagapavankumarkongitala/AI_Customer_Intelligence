@@ -44,6 +44,7 @@ from visualization.retention_charts import (
 from visualization.rfm_charts import (
     revenue_by_segment_bar,
     segment_share_donut,
+    segment_trend_ribbon,
 )
 from visualization.theme import apply_chart_theme, inject_terminal_css, without_title
 
@@ -192,6 +193,18 @@ with overview_tab:
             ),
         ]
     )
+    with chart_section("Customer segments over time"):
+        hist_state = st.session_state.get("segment_history") or {}
+        rows = hist_state.get("table") if isinstance(hist_state, dict) else None
+        history = pd.DataFrame(rows) if rows else None
+        if history is None or history.empty:
+            empty_state(
+                "No segment history yet",
+                "Build segment trends on page 03 to see segments move over time.",
+            )
+        else:
+            rfm_hist = history[history["model"] == "RFM"]
+            st.plotly_chart(segment_trend_ribbon(rfm_hist), width="stretch")
     row1_a, row1_b, row1_c = st.columns(3)
     with row1_a:
         with chart_section("Revenue trend"):

@@ -35,11 +35,19 @@ def test_rfm_charts_render() -> None:
     """RFM factories produce figures with data traces."""
     seg = _seg()
     profile = pd.DataFrame({"segment": ["A", "B"], "customers": [2, 2], "revenue": [220.0, 620.0]})
+    history = pd.DataFrame(
+        {
+            "period": ["2024-Q1", "2024-Q1", "2024-Q2", "2024-Q2"],
+            "model": ["RFM"] * 4,
+            "segment": ["Champions", "Lost Customers", "Champions", "Lost Customers"],
+            "customers": [10, 5, 12, 4],
+        }
+    )
     for fig in (
         rfm_charts.segment_distribution_bar(profile),
         rfm_charts.revenue_by_segment_bar(profile),
         rfm_charts.rfm_parallel_plot(seg),
-        rfm_charts.rfm_bubble(seg),
+        rfm_charts.segment_trend_ribbon(history),
     ):
         assert len(fig.data) > 0
 
@@ -357,7 +365,7 @@ def test_empty_inputs_return_titled_placeholders() -> None:
         (rfm_charts.segment_distribution_bar(pd.DataFrame()), "Customers per segment"),
         (rfm_charts.revenue_by_segment_bar(pd.DataFrame()), "Revenue per segment"),
         (rfm_charts.rfm_parallel_plot(pd.DataFrame()), "Recency, frequency and value"),
-        (rfm_charts.rfm_bubble(pd.DataFrame()), "Customer counts by R × F score"),
+        (rfm_charts.segment_trend_ribbon(pd.DataFrame()), "Customer segments over time"),
         (churn_charts.roc_curve_fig(np.array([]), np.array([])), "ROC curve"),
         (churn_charts.calibration_curve_fig(pd.DataFrame()), "Calibration curve"),
         (churn_charts.confusion_fig({}), "Confusion matrix"),

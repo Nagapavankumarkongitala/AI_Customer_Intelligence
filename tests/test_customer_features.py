@@ -3,6 +3,7 @@
 import pandas as pd
 
 from analytics.customer_features import build_customer_features
+from services.feature_service import run_segment_history
 
 
 def _txns() -> pd.DataFrame:
@@ -95,3 +96,48 @@ def test_invalid_dates_dropped_and_counted() -> None:
     result = build_customer_features(df)
     assert result.dropped_invalid_dates == 1
     assert "C3" not in set(result.features["customer_id"])
+
+
+def _history_txns() -> pd.DataFrame:
+    """Two cohorts: six customers Jan–Jun, six more starting only in June."""
+    rows = []
+    for i in range(6):
+        for month in range(1, 7):
+            rows.append((f"E{i:02d}", f"2024-{month:02d}-10", 100.0 + 10 * i + month))
+    for i in range(6, 12):
+        rows.append((f"L{i:02d}", "2024-06-15", 200.0))
+    return pd.DataFrame(rows, columns=["customer_id", "transaction_date", "amount_spent"])
+
+
+def test_segment_history_shape_and_order() -> None:
+    """Long period/model/segment counts with chronological periods."""
+    history = run_segment_history(_history_txns(), granularity="monthly", quantiles=3)
+    assert list(history.columns) == ["period", "model", "segment", "customers"]
+    assert set(history["model"]) <= {"RFM", "LRFM"}
+    periods = list(history["period"].unique())
+    assert periods == sorted(periods)
+    assert all(len(str(p)) == 7 for p in periods)  # YYYY-MM labels
+    assert (history["customers"] > 0).all()
+
+
+def test_segment_history_never_leaks_future() -> None:
+    """June-only customers are absent from every earlier period's counts."""
+    history = run_segment_history(_history_txns(), granularity="monthly", quantiles=3)
+    rfm_only = history[history["model"] == "RFM"]
+    totals = rfm_only.groupby("period", observed=True)["customers"].sum()
+    assert len(totals) == 5, f"want Jan–May periods, got {list(totals.index)}"
+    assert (totals == 6).all(), f"late cohort leaked: {totals.to_dict()}"
+
+
+def test_segment_history_rejects_bad_args() -> None:
+    """Bad granularity and quantiles fail loudly, not silently."""
+    frame = _history_txns()
+    for call in (
+        lambda: run_segment_history(frame, granularity="fortnightly"),
+        lambda: run_segment_history(frame, granularity="monthly", quantiles=7),
+    ):
+        try:
+            call()
+        except ValueError:
+            continue
+        raise AssertionError("bad history args did not raise")

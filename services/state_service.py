@@ -32,6 +32,7 @@ _DEFAULTS: dict[str, Any] = {
     "churn_model_metadata": {},
     "churn_scores": None,
     "retention_results": {},
+    "segment_history": {},
     "global_filters": {},
 }
 

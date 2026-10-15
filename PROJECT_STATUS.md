@@ -136,3 +136,5 @@ ormalize_dictionary_rows renders legacy caches as field/detail pairs instead of 
 - Relationships matrix (this change): new fm_scatter_matrix (sampled SPLOM, segment hues) with a Matrix/Parcoords view switch in the Relationships tab; old scatter factories deleted.\
 \
 - Duplicate-key guard (this change): fixed RFM elmatrix/matrix key clash; new 	est_element_keys fails on repeated key expressions per view (proven against the bug).\
+\
+- Segment trends (this change): un_segment_history scores RFM/LRFM per period-end on leakage-safe pre-filtered frames; segment_trend_ribbon stacked area; Trends tab replaces Matrix on page 03; ribbon below landing KPIs. Session key is now 20.\

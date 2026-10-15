@@ -34,7 +34,7 @@ from services.dashboard_service import (
     trend_tables,
 )
 from services.data_dictionary_service import build_dictionary
-from services.feature_service import segment_profile
+from services.feature_service import run_segment_history, segment_profile
 from services.profiling_service import compute_quality
 from services.retention_service import build_retention_table, export_campaign
 
@@ -87,6 +87,14 @@ def cached_segment_portfolio(master: pd.DataFrame, segment_col: str) -> pd.DataF
 def cached_high_value_high_risk(master: pd.DataFrame) -> pd.DataFrame:
     """Masked high-tier + high/critical-band customers by revenue at risk."""
     return high_value_high_risk(master)
+
+
+@st.cache_data(show_spinner=False)
+def cached_run_segment_history(
+    clean_data: pd.DataFrame, granularity: str, quantiles: int
+) -> pd.DataFrame:
+    """Period × model × segment customer counts for trend ribbons."""
+    return run_segment_history(clean_data, granularity=granularity, quantiles=quantiles)
 
 
 @st.cache_data(show_spinner=False)

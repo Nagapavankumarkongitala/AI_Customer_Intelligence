@@ -60,5 +60,6 @@ SESSION_KEYS = (
     "churn_model_metadata",
     "churn_scores",
     "retention_results",
+    "segment_history",
     "global_filters",
 )

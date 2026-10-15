@@ -149,6 +149,23 @@ def rfm_scatter_matrix(
 
 
 @styled
+def segment_trend_ribbon(history: pd.DataFrame, segment_col: str = "segment") -> px.Figure:
+    """Stacked customer counts per segment over periods, in segment hues."""
+    if history.empty:
+        return empty_figure("Customer segments over time")
+    col = segment_col if segment_col in history.columns else history.columns[0]
+    return px.area(
+        history,
+        x="period",
+        y="customers",
+        color=col,
+        **_segment_map_or_sequence(history[col]),
+        title="Customer segments over time",
+        labels={"period": "Period", "customers": "Customers", col: "Segment"},
+    )
+
+
+@styled
 def rfm_parallel_plot(features: pd.DataFrame) -> go.Figure:
     """Recency, frequency, and monetary value as parallel coordinates.
 
@@ -176,36 +193,4 @@ def rfm_parallel_plot(features: pd.DataFrame) -> go.Figure:
         )
     )
     fig.update_layout(title="Recency, frequency and value")
-    return fig
-
-
-@styled
-def rfm_bubble(scored: pd.DataFrame) -> px.Figure:
-    """Customer counts across R × F as bubbles sized and colored by count."""
-    if scored.empty:
-        return empty_figure("Customer counts by R × F score")
-    matrix = pd.crosstab(scored["R"], scored["F"])
-    long = matrix.reset_index().melt(id_vars="R", var_name="F", value_name="customers")
-    long = long[long["customers"] > 0]
-    if long.empty:
-        return empty_figure("Customer counts by R × F score")
-    fig = px.scatter(
-        long,
-        x="F",
-        y="R",
-        size="customers",
-        color="customers",
-        color_continuous_scale=PRIMARY_SCALE,
-        size_max=36,
-        title="Customer counts by R × F score",
-        labels={"F": "F score", "R": "R score", "customers": "Customers"},
-        hover_data={"F": True, "R": True, "customers": True},
-    )
-    ticks = sorted(set(long["F"].tolist()) | set(long["R"].tolist()))
-    fig.update_xaxes(dtick=1)
-    fig.update_yaxes(dtick=1)
-    if ticks:
-        lo, hi = min(ticks) - 0.6, max(ticks) + 0.6
-        fig.update_xaxes(range=[lo, hi])
-        fig.update_yaxes(range=[lo, hi])
     return fig

@@ -30,7 +30,7 @@ def test_canonical_schema_and_aliases() -> None:
     assert set(REQUIRED_FIELDS) <= set(CANONICAL_FIELDS)
     for field in CANONICAL_FIELDS:
         assert field in COLUMN_ALIASES and field in COLUMN_ALIASES[field]
-    assert len(SESSION_KEYS) == 19
+    assert len(SESSION_KEYS) == 20
 
 
 def test_sample_data_present_and_shaped() -> None:
