@@ -97,6 +97,32 @@ def test_baseline_models_separate_cleanly() -> None:
         assert len(bundle["importance"]) > 0
 
 
+def test_histgb_pipeline_accepts_categorical_columns() -> None:
+    """HGB rejects sparse input, so its preprocessor must emit a dense block.
+
+    The default run trains HGB on real geo data (city/state/country/region),
+    where the one-hot block is sparse — the exact shape that previously crashed
+    this baseline. The fixture dataset has no categorical columns, so this is
+    the only test that would catch a regression.
+    """
+    from scipy import sparse
+
+    from churn.baseline_models import build_model_pipeline
+
+    rng = np.random.default_rng(42)
+    frame = pd.DataFrame(
+        {
+            "spend": rng.normal(100, 15, 60),
+            "city": [f"town-{i % 12}" for i in range(60)],
+        }
+    )
+    labels = np.array([0, 1] * 30)
+    pipeline = build_model_pipeline("histgb", ["spend"], ["city"], random_state=42)
+    pipeline.fit(frame, labels)
+    assert not sparse.issparse(pipeline.named_steps["preprocess"].transform(frame))
+    assert pipeline.predict_proba(frame).shape == (60, 2)
+
+
 def test_calibration_and_oversample_paths() -> None:
     """Calibration learns on validation; oversample balances training only."""
     dataset = _dataset()
@@ -137,6 +163,7 @@ def test_shap_absence_guides() -> None:
 
 def test_shap_routes_linear_models_to_linear_explainer() -> None:
     """Logreg SHAP values come from LinearExplainer over the encoded frame."""
+    pytest.importorskip("shap")
     dataset = _dataset()
     bundle = train_churn_model(dataset, "logreg", calibrate=False)
     frame = shap_values(bundle["pipeline"], dataset.frame[bundle["feature_cols"]])
@@ -147,6 +174,7 @@ def test_shap_routes_linear_models_to_linear_explainer() -> None:
 
 def test_shap_keeps_tree_explainer_for_forests() -> None:
     """Tree ensembles keep the TreeExplainer path with matching frame shape."""
+    pytest.importorskip("shap")
     dataset = _dataset()
     bundle = train_churn_model(dataset, "random_forest", calibrate=False)
     frame = shap_values(bundle["pipeline"], dataset.frame[bundle["feature_cols"]])
@@ -154,8 +182,39 @@ def test_shap_keeps_tree_explainer_for_forests() -> None:
     assert len(frame) == len(dataset.frame)
 
 
+def test_shap_densifies_sparse_tree_background() -> None:
+    """High-cardinality categoricals make the preprocessor emit sparse output.
+
+    TreeExplainer validates with np.isnan, which rejects sparse/object
+    matrices — the default-run scoring crash on real geo data. The tree path
+    must densify like the linear path.
+    """
+    from scipy import sparse
+
+    from churn.train_rf import build_rf_pipeline
+
+    pytest.importorskip("shap")
+    rng = np.random.default_rng(42)
+    frame = pd.DataFrame(
+        {
+            "spend": rng.normal(100, 15, 60),
+            "city": [f"town-{i % 30}" for i in range(60)],
+        }
+    )
+    labels = pd.Series((frame["spend"] > 100).astype(int))
+    pipeline = build_rf_pipeline(["spend"], ["city"], n_estimators=10)
+    pipeline.fit(frame, labels)
+    transformed = pipeline.named_steps["preprocess"].transform(frame)
+    assert sparse.issparse(transformed), "setup must reproduce sparse output"
+    values = shap_values(pipeline, frame)
+    assert list(values.columns) == feature_names_of(pipeline)
+    assert len(values) == len(frame)
+    assert np.isfinite(values.to_numpy(dtype=float)).all()
+
+
 def test_scoring_falls_back_beyond_shap_cap() -> None:
     """Rows past the SHAP sample cap get median drivers, not an IndexError."""
+    pytest.importorskip("shap")
     dataset = _dataset()
     bundle = train_churn_model(dataset, "logreg", calibrate=False)
     frame = pd.concat([dataset.frame] * 4, ignore_index=True)  # 800 rows > 500 cap
@@ -172,6 +231,41 @@ def test_scoring_falls_back_beyond_shap_cap() -> None:
     assert scores["primary_risk_drivers"].str.len().gt(0).all()
     assert "SHAP" in scores["primary_risk_drivers"].iloc[0]
     assert "SHAP" not in scores["primary_risk_drivers"].iloc[600]
+
+
+def test_tree_shap_budget_skips_huge_forests() -> None:
+    """500 rows × 300 trees × wide one-hot trips the budget instead of wedging.
+
+    Scoring then falls back to median drivers with the schema intact.
+    """
+    from churn.explainability import ShapBudgetExceeded
+    from churn.train_rf import build_rf_pipeline
+
+    pytest.importorskip("shap")
+    rng = np.random.default_rng(7)
+    frame = pd.DataFrame(
+        {
+            "spend": rng.normal(100, 15, 500),
+            "city": [f"town-{i % 30}" for i in range(500)],
+        }
+    )
+    labels = pd.Series((frame["spend"] > 100).astype(int))
+    pipeline = build_rf_pipeline(["spend"], ["city"], n_estimators=300)
+    pipeline.fit(frame, labels)
+    with pytest.raises(ShapBudgetExceeded):
+        shap_values(pipeline, frame)
+    importance = pd.DataFrame({"feature": ["spend", "city"], "importance": [0.5, 0.1]})
+    scores = score_customers(
+        pipeline,
+        frame,
+        pd.Series([f"C{i:05d}" for i in range(len(frame))]),
+        importance,
+        "random_forest",
+        threshold=0.5,
+    )
+    assert list(scores.columns) == EXPECTED_SCORE_COLS
+    assert len(scores) == len(frame)
+    assert "SHAP" not in scores["primary_risk_drivers"].iloc[0]
 
 
 def test_metrics_tables_sane() -> None:

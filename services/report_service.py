@@ -1,0 +1,928 @@
+"""Report generator backend: context, narratives, and multi-format exports.
+
+Pure functions over session-state contents (presentation lives in
+``pages/09_Report_Generator.py``). Every narrative is factual and
+decision-support only: historical monetary value is labeled a historical
+proxy, never CLV, and no causal retention impact is claimed.
+"""
+
+from __future__ import annotations
+
+import html
+from collections.abc import Mapping
+from datetime import UTC, datetime
+from io import BytesIO
+from typing import Any, Final
+
+import pandas as pd
+
+from analytics.demographics import DEFAULT_AGE_BANDS, assign_age_band
+from services import report_narrative
+from services.dashboard_service import (
+    build_master,
+    compute_kpis,
+    high_value_high_risk,
+    mask_customer_id,
+    prepare_transactions,
+    trend_tables,
+)
+from services.data_dictionary_service import normalize_dictionary_rows
+from utils.exceptions import CustomerIntelligenceError
+
+#: Report sections in display order. Pages toggle these per export.
+REPORT_SECTIONS: tuple[str, ...] = (
+    "summary",
+    "overview",
+    "segments",
+    "churn",
+    "retention",
+    "recommendations",
+    "appendix",
+)
+
+#: Human-readable section labels, shared by the page toggle and the HTML headings.
+SECTION_LABELS: dict[str, str] = {
+    "summary": "Executive summary",
+    "overview": "Business & customer trends",
+    "segments": "Segments & demographics",
+    "churn": "Churn risk",
+    "retention": "Retention plan",
+    "recommendations": "Recommendations & next steps",
+    "appendix": "Appendix & data foundation",
+}
+
+#: One plain-English explainer per embedded chart. ``action`` never promises
+#: causal impact; value is always historical, never CLV.
+CHART_EXPLANATIONS: dict[str, dict[str, str]] = {
+    "segment_distribution": {
+        "title": "Customers per segment",
+        "what": "How many customers fall into each RFM segment.",
+        "how_to_read": "Taller bars are bigger cohorts. Compare against the "
+        "revenue chart before acting: a large bar with a short revenue bar "
+        "is volume without value.",
+        "action": "Size follow-ups to the cohort, not the headline: small "
+        "high-value bars suit personal outreach, large low-value bars suit "
+        "low-cost nurture.",
+    },
+    "revenue_by_segment": {
+        "title": "Revenue per segment",
+        "what": "Historical revenue contributed by each RFM segment.",
+        "how_to_read": "Taller bars hold more past revenue. A segment that is "
+        "small in customers but tall here concentrates value.",
+        "action": "Protect tall bars first when planning retention capacity; "
+        "they carry the most historical value at stake.",
+    },
+    "segment_trends": {
+        "title": "Segment trends over time",
+        "what": "Customer counts per RFM segment across period ends (quarterly/monthly).",
+        "how_to_read": "Stacked area shows how cohorts shift over time; period definitions are quantile-relative.",
+        "action": "Watch surges/declines by segment to time targeted plays before peaks shift.",
+    },
+    "risk_bands": {
+        "title": "Customers per risk band",
+        "what": "Scored customers grouped into low / medium / high / critical "
+        "churn-risk bands from the trained churn model.",
+        "how_to_read": "Bands come from predicted churn probability and the "
+        "configured threshold. High and critical bars are the modeled "
+        "at-risk pool, not confirmed leavers.",
+        "action": "Work the high and critical bars top-down by priority "
+        "score; low bars stay on routine monitoring.",
+    },
+    "value_risk_matrix": {
+        "title": "Value–risk matrix",
+        "what": "Each customer plotted by churn probability (x) against "
+        "historical value proxy (y); bubble size is revenue at risk.",
+        "how_to_read": "Top-right bubbles are high historical value with high "
+        "modeled risk. Value here is past spend, not predicted future CLV.",
+        "action": "Start with large top-right bubbles for VIP-style "
+        "intervention; bottom-left bubbles stay on automated nurture.",
+    },
+    "revenue_at_risk": {
+        "title": "Revenue at risk per action",
+        "what": "Historical value × modeled churn probability, summed per "
+        "recommended retention action.",
+        "how_to_read": "Taller bars name where the most modeled value sits, "
+        "per traceable strategy rule. It is exposure under the model, not a "
+        "guaranteed loss.",
+        "action": "Staff and budget the tallest bars first; re-check after " "each campaign wave.",
+    },
+    "strategy_distribution": {
+        "title": "Customers per recommended action",
+        "what": "How many customers map to each traceable retention action.",
+        "how_to_read": "Tall bars are the most-assigned playbooks. Every row "
+        "names its strategy rule in action_reason.",
+        "action": "Operationalize the tallest bars (templates, channels, "
+        "owners) before the long tail.",
+    },
+    "priority_histogram": {
+        "title": "Priority score distribution",
+        "what": "Spread of retention priority scores (normalized historical "
+        "value × churn probability × strategic weight).",
+        "how_to_read": "Right-tail customers outrank the middle. The score "
+        "ranks effort order; it does not promise a save.",
+        "action": "Cut the campaign at the right tail (e.g. top 200 or a "
+        "minimum score) rather than working the whole list.",
+    },
+    "revenue_trend": {
+        "title": "Revenue trend",
+        "what": "Monthly revenue over the filtered transaction window.",
+        "how_to_read": "Slope is momentum; dips invite a drill into segments "
+        "and cohorts for that month.",
+        "action": "Read alongside segment and cohort mix before concluding "
+        "anything about a single month.",
+    },
+    "activity_trend": {
+        "title": "Customer activity trend",
+        "what": "Distinct customers transacting in each month of the window.",
+        "how_to_read": "It is engagement over time, not loyalty: the same "
+        "customer can count in several months.",
+        "action": "A falling line with flat revenue means fewer, larger "
+        "buyers — check the cohort mix before reacting.",
+    },
+    "new_returning": {
+        "title": "New vs returning customers",
+        "what": "Each month's active customers split by whether the month is "
+        "their first transaction.",
+        "how_to_read": "The new share shows acquisition intensity; the "
+        "returning share shows repeat activity in the existing base.",
+        "action": "Acquisition-led months need onboarding; repeating-led "
+        "months reward retention capacity instead.",
+    },
+    "demographics_age": {
+        "title": "Customers per age band",
+        "what": "Customer counts per age band, using the configured bands.",
+        "how_to_read": "Bands are counts, not value: an older cohort is not "
+        "automatically more valuable.",
+        "action": "Read beside the revenue-by-segment charts before designing "
+        "an age-targeted message.",
+    },
+    "demographics_gender": {
+        "title": "Customers by gender",
+        "what": "Customer counts per gender value, with blanks folded into " "'Unknown'.",
+        "how_to_read": "It is a composition view only; it does not imply a "
+        "difference in behavior.",
+        "action": "Use it for representativeness checks, never for pricing or "
+        "targeting decisions on its own.",
+    },
+    "demographics_region": {
+        "title": "Top regions by customers",
+        "what": "The largest customer regions in the base.",
+        "how_to_read": "Geography is an optional attribute; missing values stay "
+        "visible as 'Unknown'.",
+        "action": "Compare regional headcount against regional revenue before " "shifting spend.",
+    },
+}
+
+
+def _as_frame(value: Any) -> pd.DataFrame | None:
+    """Return value when it is a non-empty DataFrame, else None."""
+    if isinstance(value, pd.DataFrame) and not value.empty:
+        return value
+    return None
+
+
+def _retention_frame(stored: Any) -> pd.DataFrame | None:
+    """Retention table from state (records orient) or None."""
+    if isinstance(stored, dict):
+        rows = stored.get("table")
+        if rows:
+            return pd.DataFrame(rows)
+    return _as_frame(stored)
+
+
+def _mask_frame(frame: pd.DataFrame) -> pd.DataFrame:
+    """Mask customer_id for exports/previews shown without authorization."""
+    out = frame.copy()
+    if "customer_id" in out.columns:
+        out["customer_id"] = out["customer_id"].map(mask_customer_id)
+    return out
+
+
+def _label_portfolio(
+    features: pd.DataFrame | None,
+    labels: pd.DataFrame | None,
+    label_col: str,
+    out_col: str,
+) -> pd.DataFrame | None:
+    """Customers + historical revenue per segment label (RFM/LRFM/AI shared path)."""
+    if features is None or labels is None or label_col not in labels.columns:
+        return None
+    if "monetary_value" not in features.columns:
+        return None
+    merged = features.merge(labels[["customer_id", label_col]], on="customer_id", how="inner")
+    table = (
+        merged.groupby(label_col)
+        .agg(customers=("customer_id", "size"), revenue=("monetary_value", "sum"))
+        .reset_index()
+        .rename(columns={label_col: out_col})
+    )
+    total = float(table["revenue"].sum())
+    table["customer_share"] = (table["customers"] / table["customers"].sum() * 100).round(2)
+    table["revenue_share"] = (table["revenue"] / total * 100 if total else 0.0).round(2)
+    return table.sort_values("customers", ascending=False).reset_index(drop=True)
+
+
+def _demographics(features: pd.DataFrame | None) -> dict[str, pd.DataFrame | None]:
+    """Gender, age-band, and region composition over the customer feature table."""
+    out: dict[str, pd.DataFrame | None] = {"gender": None, "age_bands": None, "region": None}
+    if features is None:
+        return out
+    if "gender" in features.columns:
+        gender = features["gender"].fillna("Unknown").astype(str).str.strip().replace("", "Unknown")
+        table = gender.value_counts().rename_axis("gender").reset_index(name="customers")
+        table["pct"] = (table["customers"] / table["customers"].sum() * 100).round(2)
+        out["gender"] = table
+    if "age" in features.columns:
+        banded = assign_age_band(features["age"], DEFAULT_AGE_BANDS)
+        table = banded.value_counts().rename_axis("age_band").reset_index(name="customers")
+        table["pct"] = (table["customers"] / table["customers"].sum() * 100).round(2)
+        out["age_bands"] = table
+    if "region" in features.columns:
+        region = features["region"].fillna("Unknown").astype(str).str.strip().replace("", "Unknown")
+        table = region.value_counts().rename_axis("region").reset_index(name="customers")
+        table["pct"] = (table["customers"] / table["customers"].sum() * 100).round(2)
+        out["region"] = table.head(10)
+    return out
+
+
+def _data_profile(
+    clean: pd.DataFrame | None, features: pd.DataFrame | None, audit: Mapping[str, Any]
+) -> dict[str, Any]:
+    """Source-level foundation numbers for the appendix (rows, span, completeness)."""
+    rows = int(len(clean)) if clean is not None else 0
+    columns = int(len(clean.columns)) if clean is not None else 0
+    cells = rows * columns
+    missing = int(clean.isna().sum().sum()) if clean is not None else 0
+    span: tuple[str, str] | None = None
+    if clean is not None and "transaction_date" in clean.columns:
+        dates = pd.to_datetime(clean["transaction_date"], errors="coerce").dropna()
+        if len(dates):
+            span = (dates.min().date().isoformat(), dates.max().date().isoformat())
+    return {
+        "rows": rows,
+        "customers": int(len(features)) if features is not None else 0,
+        "columns": columns,
+        "missing_pct": round(missing / cells * 100, 2) if cells else 0.0,
+        "date_span": span,
+        "rows_in": int(audit.get("input_rows") or 0) or None,
+        "rows_removed": int(audit.get("rows_removed") or 0),
+        "source_filename": str(audit.get("source_filename") or "(in-session dataset)"),
+    }
+
+
+def _treatments(audit: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """Cleaning treatments applied, in the recorded order."""
+    rules = audit.get("rules") or {}
+    out: list[dict[str, Any]] = []
+    if not isinstance(rules, Mapping):
+        return out
+    for name, detail in rules.items():
+        if not isinstance(detail, Mapping):
+            continue
+        out.append(
+            {
+                "treatment": str(name).replace("_", " ").capitalize(),
+                "action": str(detail.get("action", "")),
+                "records_affected": int(detail.get("records_affected", 0) or 0),
+            }
+        )
+    return out
+
+
+def build_report_context(state: Mapping[str, Any]) -> dict[str, Any]:
+    """Collect every report input from session state into one dict.
+
+    Never raises on missing upstream results; readiness flags tell the page
+    which sections have data and which need earlier pages first.
+    """
+    clean = _as_frame(state.get("clean_data"))
+    features = _as_frame(state.get("customer_features"))
+    rfm = _as_frame(state.get("rfm_results"))
+    lrfm = _as_frame(state.get("lrfm_results"))
+    segmented = _as_frame(state.get("segmented_customers"))
+    scores = _as_frame(state.get("churn_scores"))
+    retention = _retention_frame(state.get("retention_results"))
+    metadata = state.get("churn_model_metadata") or {}
+    audit = state.get("cleaning_audit") or {}
+    mapping = state.get("column_mapping") or {}
+
+    readiness = {
+        "clean_data": clean is not None,
+        "features": features is not None,
+        "rfm": rfm is not None,
+        "lrfm": lrfm is not None,
+        "ai_segments": segmented is not None,
+        "churn": scores is not None,
+        "retention": retention is not None,
+    }
+
+    txns = None
+    if clean is not None:
+        try:
+            txns = prepare_transactions(clean)
+        except (KeyError, ValueError):
+            txns = None
+
+    kpis: dict[str, Any] = {}
+    trends: dict[str, pd.DataFrame] = {}
+    master = None
+    if txns is not None and features is not None:
+        try:
+            master = build_master(
+                features, rfm=rfm, segmented=segmented, scores=scores, retention=retention
+            )
+            kpis = compute_kpis(txns, master)
+        except (KeyError, ValueError):
+            master = None
+        if master is not None:
+            try:
+                trends = trend_tables(txns, master)
+            except (KeyError, ValueError):
+                trends = {}
+
+    ai_col = None
+    if segmented is not None:
+        if "business_name" in segmented.columns:
+            ai_col = "business_name"
+        elif "cluster_id" in segmented.columns:
+            ai_col = "cluster_id"
+
+    segment_portfolio = _label_portfolio(features, rfm, "segment", "rfm_segment")
+    lrfm_portfolio = _label_portfolio(features, lrfm, "segment", "lrfm_segment")
+    ai_portfolio = _label_portfolio(features, segmented, ai_col, "ai_segment") if ai_col else None
+
+    risk_mix: dict[str, int] = {}
+    if scores is not None and "risk_band" in scores.columns:
+        risk_mix = {str(k): int(v) for k, v in scores["risk_band"].value_counts().items()}
+
+    hvhr = None
+    if master is not None:
+        try:
+            hvhr = high_value_high_risk(master)
+        except (KeyError, ValueError):
+            hvhr = None
+
+    retention_summary: dict[str, Any] = {}
+    if retention is not None:
+        stored = state.get("retention_results")
+        if (
+            isinstance(stored, dict)
+            and isinstance(stored.get("summary"), dict)
+            and stored["summary"]
+        ):
+            retention_summary = dict(stored["summary"])
+        else:
+            retention_summary = {
+                "customers": len(retention),
+                "total_revenue_at_risk": (
+                    round(float(retention["revenue_at_risk"].sum()), 2)
+                    if "revenue_at_risk" in retention.columns
+                    else 0.0
+                ),
+                "strategy_mix": (
+                    retention["recommended_action"].value_counts().to_dict()
+                    if "recommended_action" in retention.columns
+                    else {}
+                ),
+                "band_mix": (
+                    retention["risk_band"].value_counts().to_dict()
+                    if "risk_band" in retention.columns
+                    else {}
+                ),
+            }
+
+    history = None
+    hist_state = state.get("segment_history") or {}
+    if isinstance(hist_state, dict) and hist_state.get("table"):
+        history = pd.DataFrame(hist_state["table"])
+
+    return {
+        "generated_at": datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC"),
+        "readiness": readiness,
+        "kpis": kpis,
+        "trends": trends,
+        "features": features,
+        "rfm": rfm,
+        "lrfm": lrfm,
+        "segmented": segmented,
+        "scores": scores,
+        "retention": retention,
+        "segment_portfolio": segment_portfolio,
+        "lrfm_portfolio": lrfm_portfolio,
+        "ai_portfolio": ai_portfolio,
+        "demographics": _demographics(features),
+        "risk_mix": risk_mix,
+        "hvhr": hvhr,
+        "history": history,
+        "retention_summary": retention_summary,
+        "churn_metadata": dict(metadata) if isinstance(metadata, dict) else {},
+        "cleaning_audit": dict(audit) if isinstance(audit, dict) else {},
+        "column_mapping": dict(mapping) if isinstance(mapping, dict) else {},
+        "treatments": _treatments(audit if isinstance(audit, Mapping) else {}),
+        "data_dictionary": normalize_dictionary_rows(state.get("data_dictionary")),
+        "data_profile": _data_profile(clean, features, audit if isinstance(audit, Mapping) else {}),
+        "n_customers": len(features) if features is not None else 0,
+        "n_transactions": len(clean) if clean is not None else 0,
+    }
+
+
+def context_tables(
+    context: dict[str, Any], mask_ids: bool = True, top_n: int = 200
+) -> dict[str, pd.DataFrame]:
+    """Named tables for the Excel workbook and the HTML appendix."""
+    tables: dict[str, pd.DataFrame] = {}
+    kpis = context.get("kpis") or {}
+    if kpis:
+        tables["KPIs"] = pd.DataFrame([{"metric": k, "value": v} for k, v in kpis.items()])
+    portfolio = context.get("segment_portfolio")
+    if portfolio is not None and not portfolio.empty:
+        tables["RFM_Portfolio"] = portfolio.copy()
+    lrfm_portfolio = context.get("lrfm_portfolio")
+    if lrfm_portfolio is not None and not lrfm_portfolio.empty:
+        tables["LRFM_Portfolio"] = lrfm_portfolio.copy()
+    ai_portfolio = context.get("ai_portfolio")
+    if ai_portfolio is not None and not ai_portfolio.empty:
+        tables["AI_Portfolio"] = ai_portfolio.copy()
+    trends = context.get("trends") or {}
+    revenue_trend = trends.get("revenue")
+    if isinstance(revenue_trend, pd.DataFrame) and not revenue_trend.empty:
+        monthly = revenue_trend.copy()
+        cohort = trends.get("cohort")
+        if isinstance(cohort, pd.DataFrame) and not cohort.empty:
+            monthly = monthly.merge(cohort, on="month", how="left")
+        activity = trends.get("activity")
+        if isinstance(activity, pd.DataFrame) and not activity.empty:
+            monthly = monthly.merge(activity, on="month", how="left")
+        tables["Monthly_Trends"] = monthly
+    demographics = context.get("demographics") or {}
+    for name, key in (("Demographics_Gender", "gender"), ("Demographics_Age", "age_bands")):
+        frame = demographics.get(key)
+        if isinstance(frame, pd.DataFrame) and not frame.empty:
+            tables[name] = frame.copy()
+    risk_mix = context.get("risk_mix") or {}
+    if risk_mix:
+        tables["Risk_Bands"] = pd.DataFrame(
+            [{"risk_band": band, "customers": count} for band, count in risk_mix.items()]
+        )
+    retention = context.get("retention")
+    if retention is not None and not retention.empty:
+        ranked = (
+            retention.sort_values("retention_priority_score", ascending=False).head(top_n)
+            if "retention_priority_score" in retention.columns
+            else retention.head(top_n)
+        )
+        tables["Retention_Top"] = _mask_frame(ranked) if mask_ids else ranked.copy()
+    scores = context.get("scores")
+    if scores is not None and not scores.empty:
+        cols = [c for c in ("customer_id", "churn_probability", "risk_band") if c in scores.columns]
+        top_risk = scores.sort_values("churn_probability", ascending=False).head(top_n)[cols]
+        tables["Churn_Top_Risk"] = _mask_frame(top_risk) if mask_ids else top_risk.copy()
+    summary = context.get("retention_summary") or {}
+    if summary.get("strategy_mix"):
+        tables["Strategy_Mix"] = pd.DataFrame(
+            [
+                {"action": action, "customers": count}
+                for action, count in summary["strategy_mix"].items()
+            ]
+        )
+    dictionary = context.get("data_dictionary") or []
+    if dictionary:
+        keep = [
+            "canonical_field",
+            "source_column",
+            "data_type",
+            "non_null_count",
+            "missing_count",
+            "missing_pct",
+            "unique_count",
+            "examples",
+        ]
+        frame = pd.DataFrame(dictionary)
+        tables["Data_Source"] = frame[[c for c in keep if c in frame.columns]]
+    treatments = context.get("treatments") or []
+    if treatments:
+        tables["Cleaning_Treatments"] = pd.DataFrame(treatments)
+    return tables
+
+
+def context_to_excel_bytes(
+    context: dict[str, Any], mask_ids: bool = True, top_n: int = 200
+) -> bytes:
+    """Multi-sheet Excel workbook for the report tables."""
+    tables = context_tables(context, mask_ids=mask_ids, top_n=top_n)
+    if not tables:
+        raise CustomerIntelligenceError(
+            "Nothing to export yet. Build features on RFM & LRFM Analysis first."
+        )
+    buffer = BytesIO()
+    try:
+        import openpyxl  # noqa: F401
+    except ImportError as exc:
+        raise CustomerIntelligenceError(
+            "Excel export needs the 'openpyxl' package. Install it with "
+            "'pip install openpyxl' and try again."
+        ) from exc
+    with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+        for sheet, frame in tables.items():
+            frame.to_excel(writer, index=False, sheet_name=sheet[:31])
+    return buffer.getvalue()
+
+
+#: Standalone-report skins. The light skin is the print default; the dark skin
+#: mirrors the charcoal-and-lime console for on-screen reading. PDF stays
+#: print-light by decision (paper, not screen).
+_REPORT_SKINS: Final = {
+    "light": {
+        "page_bg": "#ffffff",
+        "body_ink": "#1a2333",
+        "rule": "#e2e8f0",
+        "muted": "#64748b",
+        "kpi_border": "#e2e8f0",
+        "explain_bg": "#f1f5f9",
+        "explain_edge": "#2563eb",
+        "th_bg": "#f8fafc",
+        "cell_border": "#e2e8f0",
+    },
+    "dark": {
+        "page_bg": "#0c0f14",
+        "body_ink": "#f2f5f9",
+        "rule": "#2a3342",
+        "muted": "#9aa7b8",
+        "kpi_border": "#2a3342",
+        "explain_bg": "#1b222d",
+        "explain_edge": "#bef264",
+        "th_bg": "#1b222d",
+        "cell_border": "#2a3342",
+    },
+}
+
+
+def render_html_report(
+    context: dict[str, Any],
+    figures_html: dict[str, str] | None = None,
+    sections: tuple[str, ...] = REPORT_SECTIONS,
+    mask_ids: bool = True,
+    mode: str = "light",
+) -> str:
+    """Self-contained HTML report with narratives, charts, and tables.
+
+    ``mode`` selects the print-light skin (default) or the dark console skin;
+    unknown values fall back to light.
+    """
+    skin = _REPORT_SKINS.get(mode, _REPORT_SKINS["light"])
+    figures_html = figures_html or {}
+    kpis = context.get("kpis") or {}
+    readiness = context.get("readiness") or {}
+    metadata = context.get("churn_metadata") or {}
+    masked_note = (
+        "Customer IDs are masked in this report."
+        if mask_ids
+        else ("Customer IDs are shown in full (authorized export).")
+    )
+
+    def _fig(key: str) -> str:
+        snippet = figures_html.get(key, "")
+        if snippet:
+            return f"<div class='fig'>{snippet}</div>"
+        return "<p class='muted'>Chart unavailable — complete the source page first.</p>"
+
+    def _explain(key: str) -> str:
+        exp = CHART_EXPLANATIONS.get(key, {})
+        if not exp:
+            return ""
+        return (
+            "<div class='explain'><strong>How to read this chart. </strong>"
+            f"{html.escape(exp.get('how_to_read', ''))} "
+            f"<strong>What to do. </strong>{html.escape(exp.get('action', ''))}</div>"
+        )
+
+    kpi_cards = (
+        "".join(
+            f"<div class='kpi'><div class='kpi-label'>{html.escape(str(k))}</div>"
+            f"<div class='kpi-value'>{html.escape(str(v))}</div></div>"
+            for k, v in kpis.items()
+        )
+        or "<p class='muted'>KPIs appear after RFM scoring.</p>"
+    )
+
+    tables = context_tables(context, mask_ids=mask_ids)
+    tables_html = (
+        "".join(
+            f"<h3>{html.escape(sheet)}</h3>{frame.head(50).to_html(index=False, border=0, classes='tbl')}"
+            for sheet, frame in tables.items()
+        )
+        or "<p class='muted'>No tables yet.</p>"
+    )
+
+    def _insights(section: str) -> str:
+        items = report_narrative.section_insights(context, section)
+        return "".join(
+            "<div class='insight'><strong>"
+            f"{html.escape(item.title)}</strong> <span>{html.escape(item.detail)}</span></div>"
+            for item in items
+        )
+
+    built: list[str] = []
+    if "summary" in sections:
+        insights_html = "".join(
+            "<div class='insight'><strong>"
+            f"{html.escape(item.title)}</strong> <span>{html.escape(item.detail)}</span></div>"
+            for item in report_narrative.summary_insights(context)
+        )
+        built.append(
+            "<section><h2>1 · Executive summary</h2>"
+            f"<div class='kpi-row'>{kpi_cards}</div>"
+            f"{insights_html}</section>"
+        )
+    if "overview" in sections:
+        built.append(
+            "<section><h2>2 · Business &amp; customer trends</h2>"
+            f"{_insights('overview')}"
+            f"{_fig('revenue_trend')}{_explain('revenue_trend')}"
+            f"{_fig('activity_trend')}{_explain('activity_trend')}"
+            f"{_fig('new_returning')}{_explain('new_returning')}</section>"
+        )
+    if "segments" in sections:
+        built.append(
+            "<section><h2>3 · Segments produced</h2>"
+            f"{_insights('segments')}"
+            f"{_fig('segment_distribution')}{_explain('segment_distribution')}"
+            f"{_fig('revenue_by_segment')}{_explain('revenue_by_segment')}"
+            f"{_fig('segment_trends')}{_explain('segment_trends')}"
+            f"{_fig('demographics_age')}{_explain('demographics_age')}"
+            f"{_fig('demographics_gender')}{_explain('demographics_gender')}"
+            f"{_fig('demographics_region')}{_explain('demographics_region')}</section>"
+        )
+    if "churn" in sections:
+        model_line = ""
+        if metadata:
+            model_line = (
+                f"<p>Model: <strong>{html.escape(str(metadata.get('model', '–')))}</strong> · "
+                f"threshold {html.escape(str(metadata.get('threshold', '–')))} · "
+                f"cutoff {html.escape(str(metadata.get('cutoff', '–')))}. Predictors use "
+                "transactions on or before the cutoff only; the label is activity after the "
+                "cutoff (leakage-safe by construction).</p>"
+            )
+        built.append(
+            "<section><h2>4 · Churn risk calculated</h2>"
+            f"{model_line}{_insights('churn')}"
+            f"{_fig('risk_bands')}{_explain('risk_bands')}</section>"
+        )
+    if "retention" in sections:
+        built.append(
+            "<section><h2>5 · Retention strategies covered</h2>"
+            f"{_insights('retention')}"
+            f"{_fig('value_risk_matrix')}{_explain('value_risk_matrix')}"
+            f"{_fig('revenue_at_risk')}{_explain('revenue_at_risk')}"
+            f"{_fig('strategy_distribution')}{_explain('strategy_distribution')}"
+            f"{_fig('priority_histogram')}{_explain('priority_histogram')}</section>"
+        )
+    if "recommendations" in sections:
+        recs = report_narrative.recommendations(context)
+        rec_html = (
+            "".join(
+                f"<div class='rec'><span class='pill'>{html.escape(r.priority)}</span> "
+                f"<strong>{html.escape(r.title)}</strong>"
+                f"<div class='muted'>{html.escape(r.rationale)}</div>"
+                f"<div class='evidence'>{html.escape(r.evidence)}</div></div>"
+                for r in recs
+            )
+            or "<p class='muted'>Recommendations appear once retention results exist.</p>"
+        )
+        built.append(
+            "<section><h2>6 · Recommendations &amp; next steps</h2>"
+            f"{rec_html}"
+            "<p class='muted'>Priority order is decision support over the computed results; it "
+            "does not claim causal impact.</p></section>"
+        )
+    if "appendix" in sections:
+        ready = ", ".join(f"{k}: {'yes' if v else 'pending'}" for k, v in readiness.items())
+        profile = context.get("data_profile") or {}
+        treatments = context.get("treatments") or []
+        treat_html = (
+            "".join(
+                f"<li>{html.escape(str(t['treatment']))}: {html.escape(str(t['action']))} "
+                f"({int(t['records_affected']):,} records)</li>"
+                for t in treatments
+            )
+            or "<li>No cleaning treatments recorded for this dataset.</li>"
+        )
+        built.append(
+            "<section><h2>7 · Appendix — data &amp; method</h2>"
+            f"{_insights('appendix')}"
+            f"<p>Source: <strong>{html.escape(str(profile.get('source_filename', '–')))}</strong> · "
+            f"{int(profile.get('rows', 0)):,} clean rows × {int(profile.get('columns', 0))} columns · "
+            f"{int(profile.get('customers', 0)):,} customers · "
+            f"{float(profile.get('missing_pct', 0)):.2f}% cells missing.</p>"
+            "<h3>Cleaning treatments</h3><ul>" + treat_html + "</ul>"
+            "<p class='muted'>Method: churn is leakage-safe by construction (predictors ≤ cutoff, "
+            "label from the outcome window; cohort-ordered splits). RFM = 100R+10F+M; cluster IDs "
+            "are arbitrary until profiled against population medians.</p>"
+            f"<p class='muted'>Coverage — {html.escape(ready)}. {html.escape(masked_note)}</p>"
+            f"{tables_html}</section>"
+        )
+    body = "\n".join(built)
+
+    return f"""<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<title>Customer Intelligence Report — {html.escape(str(context.get('generated_at', '')))}</title>
+<style>
+body{{font-family:Arial,Helvetica,sans-serif;max-width:1000px;margin:0 auto;padding:24px;background:{skin['page_bg']};color:{skin['body_ink']};}}
+h1{{font-size:1.6rem;margin-bottom:0;}}h2{{font-size:1.2rem;margin-top:2rem;border-bottom:2px solid {skin['rule']};padding-bottom:4px;}}
+.muted{{color:{skin['muted']};}}.kpi-row{{display:flex;flex-wrap:wrap;gap:12px;margin:12px 0;}}
+.kpi{{border:1px solid {skin['kpi_border']};border-radius:8px;padding:10px 14px;min-width:150px;}}
+.kpi-label{{font-size:.75rem;color:{skin['muted']};text-transform:uppercase;letter-spacing:.05em;}}
+.kpi-value{{font-size:1.15rem;font-weight:700;}}
+.explain{{background:{skin['explain_bg']};border-left:4px solid {skin['explain_edge']};padding:8px 12px;margin:8px 0 20px;font-size:.9rem;}}
+.insight{{background:{skin['explain_bg']};border-left:4px solid {skin['explain_edge']};padding:8px 12px;margin:8px 0;font-size:.9rem;}}
+.rec{{border:1px solid {skin['kpi_border']};border-radius:8px;padding:10px 14px;margin:8px 0;}}
+.rec .pill{{display:inline-block;border-radius:999px;padding:2px 10px;font-size:.72rem;font-weight:700;background:{skin['explain_bg']};color:{skin['explain_edge']};}}
+.rec .muted{{font-size:.88rem;margin-top:4px;}}.rec .evidence{{font-size:.82rem;margin-top:4px;font-weight:600;}}
+.fig{{margin:12px 0;}}table.tbl{{border-collapse:collapse;width:100%;font-size:.82rem;margin:8px 0 20px;}}
+table.tbl th,table.tbl td{{border:1px solid {skin['cell_border']};padding:6px 8px;text-align:left;}}
+table.tbl th{{background:{skin['th_bg']};}}
+</style></head>
+<body>
+<h1>Customer Intelligence Report</h1>
+<p class="muted">Generated {html.escape(str(context.get('generated_at', '')))} · {html.escape(masked_note)} ·
+Historical monetary value is a value proxy, never CLV. Retention reasons never claim causal impact.</p>
+{body}
+</body></html>"""
+
+
+def build_pdf_bytes(context: dict[str, Any], mask_ids: bool = True) -> bytes:
+    """Print-ready PDF with KPIs, narratives, and tables (reportlab).
+
+    Charts are intentionally tabular in PDF: Plotly interactivity lives in the
+    HTML export, and image rendering would need the optional kaleido package.
+    """
+    try:
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib.styles import getSampleStyleSheet
+        from reportlab.lib.units import cm
+        from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+    except ImportError as exc:
+        raise CustomerIntelligenceError(
+            "PDF export needs the 'reportlab' package. Install it with "
+            "'pip install reportlab' and try again."
+        ) from exc
+    from reportlab.lib import colors
+
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4, topMargin=1.5 * cm, bottomMargin=1.5 * cm)
+    styles = getSampleStyleSheet()
+    story: list[Any] = [
+        Paragraph("Customer Intelligence Report", styles["Title"]),
+        Paragraph(
+            f"Generated {html.escape(str(context.get('generated_at', '')))}. "
+            "Historical value is a proxy, never CLV. Actions are decision support only.",
+            styles["Normal"],
+        ),
+        Spacer(1, 12),
+    ]
+
+    def _table(frame: pd.DataFrame, title: str, max_rows: int = 25) -> None:
+        story.append(Paragraph(title, styles["Heading2"]))
+        if frame.empty:
+            story.append(Paragraph("No data for this section yet.", styles["Normal"]))
+            return
+        view = frame.head(max_rows).astype(str)
+        data = [list(view.columns)] + view.values.tolist()
+        table = Table(data, repeatRows=1)
+        table.setStyle(
+            TableStyle(
+                [
+                    ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#f1f5f9")),
+                    ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e1")),
+                    ("FONTSIZE", (0, 0), (-1, -1), 7),
+                ]
+            )
+        )
+        story.append(table)
+        story.append(Spacer(1, 8))
+
+    kpis = context.get("kpis") or {}
+    if kpis:
+        _table(pd.DataFrame([{"metric": k, "value": v} for k, v in kpis.items()]), "KPIs")
+
+    story.append(Paragraph("Executive summary", styles["Heading2"]))
+    for item in report_narrative.summary_insights(context):
+        story.append(
+            Paragraph(
+                f"<strong>{html.escape(item.title)}</strong> {html.escape(item.detail)}",
+                styles["Normal"],
+            )
+        )
+        story.append(Spacer(1, 3))
+
+    for section, title, keys in (
+        (
+            "overview",
+            "Business & customer trends",
+            ("revenue_trend", "activity_trend", "new_returning"),
+        ),
+        (
+            "segments",
+            "Segments & demographics",
+            (
+                "segment_distribution",
+                "revenue_by_segment",
+                "segment_trends",
+                "demographics_age",
+                "demographics_gender",
+                "demographics_region",
+            ),
+        ),
+        ("churn", "Churn risk", ("risk_bands",)),
+        (
+            "retention",
+            "Retention plan",
+            ("value_risk_matrix", "revenue_at_risk", "strategy_distribution", "priority_histogram"),
+        ),
+    ):
+        story.append(Paragraph(title, styles["Heading2"]))
+        for item in report_narrative.section_insights(context, section):
+            story.append(
+                Paragraph(
+                    f"<strong>{html.escape(item.title)}</strong> {html.escape(item.detail)}",
+                    styles["Normal"],
+                )
+            )
+            story.append(Spacer(1, 3))
+        for key in keys:
+            exp = CHART_EXPLANATIONS.get(key, {})
+            story.append(Paragraph(exp.get("title", key), styles["Heading3"]))
+            story.append(
+                Paragraph(
+                    f"{exp.get('what', '')} How to read: {exp.get('how_to_read', '')} "
+                    f"What to do: {exp.get('action', '')}",
+                    styles["Normal"],
+                )
+            )
+            story.append(Spacer(1, 6))
+
+    recs = report_narrative.recommendations(context)
+    if recs:
+        story.append(Paragraph("Recommendations & next steps", styles["Heading2"]))
+        for rec in recs:
+            story.append(
+                Paragraph(
+                    f"<strong>{html.escape(rec.priority)} — {html.escape(rec.title)}</strong> "
+                    f"{html.escape(rec.rationale)} <i>{html.escape(rec.evidence)}</i>",
+                    styles["Normal"],
+                )
+            )
+            story.append(Spacer(1, 4))
+
+    for sheet, frame in context_tables(context, mask_ids=mask_ids).items():
+        _table(frame, f"Table — {sheet}")
+
+    doc.build(story)
+    return buffer.getvalue()
+
+
+def available_pdf_engine() -> str | None:
+    """None when reportlab is installed, else an install-guidance message."""
+    try:
+        import reportlab  # noqa: F401
+    except ImportError:
+        return "PDF export needs the 'reportlab' package. Install it with 'pip install reportlab'."
+    return None
+
+
+def report_readiness_lines(context: dict[str, Any]) -> list[tuple[str, bool, str]]:
+    """Checklist rows of (label, ready, hint) for the page."""
+    readiness = context.get("readiness") or {}
+    return [
+        ("Clean data", bool(readiness.get("clean_data")), "Finish Data Quality & Cleaning."),
+        (
+            "Customer features + RFM",
+            bool(readiness.get("features") and readiness.get("rfm")),
+            "Run scoring on RFM & LRFM Analysis.",
+        ),
+        (
+            "AI segments (optional)",
+            bool(readiness.get("ai_segments")),
+            "Run Advanced Segmentation.",
+        ),
+        ("Churn scores", bool(readiness.get("churn")), "Train and score on Churn Prediction."),
+        (
+            "Retention actions",
+            bool(readiness.get("retention")),
+            "Build the table on Retention Strategies.",
+        ),
+    ]
+
+
+__all__ = [
+    "CHART_EXPLANATIONS",
+    "REPORT_SECTIONS",
+    "SECTION_LABELS",
+    "available_pdf_engine",
+    "build_pdf_bytes",
+    "build_report_context",
+    "context_tables",
+    "context_to_excel_bytes",
+    "render_html_report",
+    "report_readiness_lines",
+]

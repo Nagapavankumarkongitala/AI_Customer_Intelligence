@@ -7,6 +7,7 @@ is assertable without a Streamlit session.
 from __future__ import annotations
 
 import pandas as pd
+import pytest
 
 from components.empty_state import chart_section_html, empty_state_html
 from components.insight_box import insight_box_html
@@ -187,9 +188,15 @@ def test_format_frame_and_risk_cells() -> None:
     assert _risk_cell_style("whatever") == ""
 
     styler = style_table(df, risk_cols=("risk_band",), money_cols=("value",))
-    from pandas.io.formats.style import Styler
+    import components.table as table_module
 
-    assert isinstance(styler, Styler)
+    if table_module._HAS_JINJA2:
+        from pandas.io.formats.style import Styler
+
+        assert isinstance(styler, Styler)
+    else:
+        # jinja2 present but below pandas' floor: the formatted frame is the fallback.
+        assert isinstance(styler, pd.DataFrame)
 
 
 def test_style_table_falls_back_without_jinja2(monkeypatch) -> None:
@@ -204,12 +211,11 @@ def test_style_table_falls_back_without_jinja2(monkeypatch) -> None:
 
 
 def test_jinja2_usability_checks_version_not_presence(monkeypatch) -> None:
-    """A present-but-old jinja2 (e.g. 3.1.4) still takes the fallback path."""
-    import components.table as table_module
-
-    assert table_module._jinja2_usable() is True
-
+    """Version, not presence, decides: 3.1.4 falls back, 3.1.5 is usable."""
+    pytest.importorskip("jinja2")
     import importlib.metadata
+
+    import components.table as table_module
 
     monkeypatch.setattr(importlib.metadata, "version", lambda name: "3.1.4")
     assert table_module._jinja2_usable() is False
@@ -260,3 +266,112 @@ def test_builders_emit_active_mode_ink() -> None:
     finally:
         tokens.set_active_mode(original)
     assert tokens.LIGHT["text"] in metric_card_html(Metric("K", "1"))
+
+
+# --------------------------------------------------------------------------- #
+# Strategy playbook cards.
+# --------------------------------------------------------------------------- #
+
+
+def _strategy_matrix():
+    """Three-rule matrix mirroring the YAML schema (one rule owns no customers)."""
+    from retention_engine.strategy_mapper import StrategyMatrix, StrategyRule
+
+    return StrategyMatrix(
+        rules=[
+            StrategyRule(
+                name="vip_save",
+                value_tiers=["High"],
+                risk_bands=["high", "critical"],
+                action="Personal outreach",
+                channel="Phone & email",
+                offer_type="Loyalty recovery",
+                reason="High value ({value}) with {band} risk (p={probability}).",
+            ),
+            StrategyRule(
+                name="nurture",
+                value_tiers=["Low"],
+                risk_bands=["low"],
+                action="Routine nurture",
+                channel="Email",
+                offer_type="None",
+                reason="Low value ({value}) with low risk.",
+            ),
+            StrategyRule(
+                name="idle",
+                value_tiers=["Medium"],
+                risk_bands=["medium"],
+                action="Limited nudge",
+                channel="Email",
+                offer_type="Limited incentive",
+                reason="Medium value ({value}) with medium risk.",
+            ),
+        ]
+    )
+
+
+def test_strategy_cards_aggregate_rule_footprints() -> None:
+    """Each card carries its own customer count, revenue at risk, and means."""
+    from components.strategy_cards import build_strategy_cards
+
+    table = pd.DataFrame(
+        {
+            "customer_id": ["a", "b", "c"],
+            "strategy_rule": ["vip_save", "vip_save", "nurture"],
+            "revenue_at_risk": [100.0, 300.0, 50.0],
+            "churn_probability": [0.8, 0.6, 0.1],
+            "expected_value_proxy_historical": [1000.0, 2000.0, 100.0],
+        }
+    )
+    cards = build_strategy_cards(table, _strategy_matrix())
+
+    assert [c.name for c in cards] == ["vip_save", "nurture", "idle"]
+    vip, nurture, idle = cards
+    assert (vip.customers, nurture.customers) == (2, 1)
+    assert vip.revenue_at_risk == pytest.approx(400.0)
+    assert idle.customers == 0 and idle.revenue_at_risk == 0.0
+    # Reason is rendered from the rule's own averages, not one sample customer.
+    assert "0.700" in vip.reason and formatting.fmt_money(1500.0) in vip.reason
+    # A rule with no customers cannot invent a value or a probability.
+    assert "0.000" not in idle.reason and "—" in idle.reason
+
+
+def test_strategy_cards_handle_empty_and_unlabelled_tables() -> None:
+    """No table and no rule column both degrade cleanly instead of raising."""
+    from components.strategy_cards import build_strategy_cards
+
+    assert build_strategy_cards(pd.DataFrame(), _strategy_matrix()) == []
+
+    table = pd.DataFrame(
+        {
+            "customer_id": ["a"],
+            "recommended_action": ["Routine nurture"],
+            "revenue_at_risk": [10.0],
+        }
+    )
+    cards = build_strategy_cards(table, _strategy_matrix())
+    assert [c.customers for c in cards] == [0, 1, 0]
+
+
+def test_strategy_card_html_escapes_and_uses_action_accent() -> None:
+    """Card markup escapes user content and paints the action's own hue."""
+    from components.strategy_cards import StrategyCard, strategy_card_html
+
+    card = StrategyCard(
+        name="x",
+        action="Personal <b>outreach</b>",
+        value_tiers=("High",),
+        risk_bands=("high", "critical"),
+        channel="Phone & email",
+        offer_type="Loyalty recovery",
+        reason="High value (₹1) with high risk.",
+        customers=1234,
+        revenue_at_risk=12_345.0,
+    )
+    out = strategy_card_html(card)
+
+    assert "Personal &lt;b&gt;outreach&lt;/b&gt;" in out
+    assert "Phone &amp; email" in out
+    assert "High value · high / critical risk" in out
+    assert tokens.action_color("Personal <b>outreach</b>") in out
+    assert formatting.fmt_int(1234) in out and formatting.fmt_compact(12_345.0) in out

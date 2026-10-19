@@ -66,7 +66,6 @@ def test_demographic_charts_render() -> None:
         demographic_charts.gender_bar(gender),
         demographic_charts.top_geo_bar(geo, "city"),
         demographic_charts.revenue_geo_bar(geo, "city"),
-        demographic_charts.geo_treemap(geo, "city"),
         demographic_charts.stacked_composition_bar(comp, "gender"),
     ):
         assert len(fig.data) > 0
@@ -394,7 +393,6 @@ def test_empty_inputs_return_titled_placeholders() -> None:
         (demographic_charts.gender_bar(pd.DataFrame()), "Customers by gender"),
         (demographic_charts.top_geo_bar(pd.DataFrame(), "city"), "Top cities by customers"),
         (demographic_charts.revenue_geo_bar(pd.DataFrame(), "city"), "Top cities by revenue"),
-        (demographic_charts.geo_treemap(pd.DataFrame(), "city"), "Customer share by city"),
         (
             demographic_charts.stacked_composition_bar(pd.DataFrame(), "gender"),
             "gender mix by segment",
@@ -418,8 +416,14 @@ def test_empty_inputs_return_titled_placeholders() -> None:
             ),
             "Silhouette",
         ),
+        (rfm_charts.segment_trend_share(pd.DataFrame()), "Segment share over time"),
+        (
+            rfm_charts.segment_trend_facets(pd.DataFrame()),
+            "Segment trends (one panel per segment)",
+        ),
+        (rfm_charts.segment_trend_heatmap(pd.DataFrame()), "Segment activity by period"),
     ]
-    assert len(cases) == 30
+    assert len(cases) == 32
     for fig, title in cases:
         assert len(fig.data) == 0, title
         assert fig.layout.title.text == title, title
@@ -428,3 +432,207 @@ def test_empty_inputs_return_titled_placeholders() -> None:
     direct = empty_figure("Direct", "Custom message.")
     assert direct.layout.title.text == "Direct"
     assert direct.layout.annotations[0].text == "Custom message."
+
+
+def _retention_table() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "customer_id": ["C1", "C2", "C3"],
+            "churn_probability": [0.9, 0.2, 0.7],
+            "expected_value_proxy_historical": [5000.0, 300.0, 2000.0],
+            "revenue_at_risk": [4500.0, 60.0, 1400.0],
+            "recommended_action": ["VIP", "Nurture", "Reactivation"],
+            "retention_priority_score": [0.8, 0.05, 0.5],
+        }
+    )
+
+
+def test_revenue_at_risk_bar_sorted_descending() -> None:
+    """Actions order largest-first so the biggest exposure leads the chart."""
+    fig = retention_charts.revenue_at_risk_bar(_retention_table())
+    names = [trace.name for trace in fig.data]
+    # Nurture 60, Reactivation 1400, VIP 4500 -> ascending input, descending output.
+    assert names == ["VIP", "Reactivation", "Nurture"]
+
+
+def test_value_risk_matrix_has_priority_quadrant() -> None:
+    """Matrix draws churn/value reference lines framing the 'act first' zone."""
+    fig = retention_charts.value_risk_matrix(_retention_table(), churn_threshold=0.6)
+    assert len(fig.layout.shapes) == 2  # one vertical, one horizontal
+    assert any("Act first" in (a.text or "") for a in fig.layout.annotations)
+
+
+def test_value_risk_heatmap_aggregates_quadrants() -> None:
+    """Heatmap bins customers into four quadrants with count + revenue labels."""
+    table = _retention_table()
+    fig = retention_charts.value_risk_heatmap(table, churn_threshold=0.6)
+    heatmap = next(trace for trace in fig.data if trace.type == "heatmap")
+    z = _trace_values(heatmap.z)
+    # Rows: Low risk, High risk. Cols: Low value, High value (median value 2,000).
+    # Act first holds C1 (0.9 / 5,000) and C3 (0.7 / 2,000); Maintain holds C2.
+    assert z.tolist() == [[1, 0], [0, 2]]
+    annotations = [a.text for a in fig.layout.annotations]
+    assert any("Act first" in (text or "") for text in annotations)
+    assert any("Maintain" in (text or "") for text in annotations)
+    hover = [str(value) for value in np.asarray(heatmap.customdata).ravel()]
+    assert any("at risk" in value for value in hover)
+    assert len(retention_charts.value_risk_heatmap(pd.DataFrame()).data) == 0
+
+
+def _trace_values(node) -> np.ndarray:
+    """Numeric values from a trace field, decoding Plotly's binary form if used."""
+    if isinstance(node, dict) and "bdata" in node:
+        import base64
+
+        return np.frombuffer(base64.b64decode(node["bdata"]), dtype=np.dtype(node["dtype"]))
+    return np.asarray(node)
+
+
+def test_priority_histogram_adds_cumulative_share() -> None:
+    """Histogram pairs per-bin bars with a cumulative (Pareto) share line."""
+    fig = retention_charts.priority_histogram(_retention_table())
+    assert len(fig.data) == 2
+    assert fig.data[0].type == "bar"
+    assert fig.data[1].mode == "lines"
+    assert fig.data[1].name == "Cumulative %"
+    # Cumulative share tops out at 100 on the secondary axis.
+    assert _trace_values(fig.data[1].y).max() == pytest.approx(100.0)
+    assert list(fig.layout.yaxis2.range) == [0, 100]
+
+
+def test_segment_share_donut_stays_a_donut_with_labels() -> None:
+    """Every segment count keeps the donut; names ride on the slices."""
+    few = pd.DataFrame(
+        {"segment": ["Champions", "Lost Customers"], "customers": [3, 1], "revenue": [9.0, 1.0]}
+    )
+    assert rfm_charts.segment_share_donut(few).data[0].type == "pie"
+
+    many = pd.DataFrame(
+        {
+            "segment": [f"S{i}" for i in range(7)],
+            "customers": list(range(1, 8)),
+            "revenue": [float(i) for i in range(1, 8)],
+        }
+    )
+    fig = rfm_charts.segment_share_donut(many)
+    assert fig.data[0].type == "pie"
+    assert fig.data[0].hole == 0.45
+    # Slice labels carry the names, so the wrapping legend is suppressed;
+    # otherwise ten long names crush the ring into unreadable slivers.
+    assert fig.data[0].textinfo == "label+percent"
+    assert fig.layout.showlegend is False
+
+
+def test_segment_trend_lines_renders_with_segment_hues() -> None:
+    """Multi-line alternative to the stacked ribbon, colored by segment."""
+    from visualization import tokens
+
+    history = pd.DataFrame(
+        {
+            "period": ["2024-Q1", "2024-Q1", "2024-Q2", "2024-Q2"],
+            "segment": ["Champions", "Lost Customers", "Champions", "Lost Customers"],
+            "customers": [10, 5, 12, 4],
+        }
+    )
+    fig = rfm_charts.segment_trend_lines(history)
+    assert fig.layout.title.text == "Segment trends"
+    line_colors = {t.name: t.line.color for t in fig.data}
+    assert line_colors == {
+        "Champions": tokens.SEGMENT_COLORS["Champions"],
+        "Lost Customers": tokens.SEGMENT_COLORS["Lost Customers"],
+    }
+    assert len(rfm_charts.segment_trend_lines(pd.DataFrame()).data) == 0
+
+
+def test_segment_trend_views_answer_different_questions() -> None:
+    """Share, small multiples, and heatmap each reframe the same history."""
+    history = pd.DataFrame(
+        {
+            "period": ["2024-Q1", "2024-Q1", "2024-Q2", "2024-Q2"],
+            "segment": ["Champions", "Lost Customers", "Champions", "Lost Customers"],
+            "customers": [10, 5, 12, 4],
+        }
+    )
+
+    share = rfm_charts.segment_trend_share(history)
+    assert share.layout.title.text == "Segment share over time"
+    assert share.layout.yaxis.ticksuffix == "%"
+    champions, lost = (_trace_values(trace.y) for trace in share.data)
+    assert list(champions) == pytest.approx([200 / 3, 75.0])
+    assert list(lost) == pytest.approx([100 / 3, 25.0])
+
+    facets = rfm_charts.segment_trend_facets(history)
+    assert [a.text for a in facets.layout.annotations] == ["Champions", "Lost Customers"]
+    assert facets.layout.showlegend is False
+    assert facets.layout.yaxis2.matches is None  # each panel keeps its own scale
+
+    heat = rfm_charts.segment_trend_heatmap(history)
+    assert list(heat.data[0].x) == ["2024-Q1", "2024-Q2"]
+    assert list(heat.data[0].y) == ["Champions", "Lost Customers"]  # biggest on top
+    assert list(_trace_values(heat.data[0].z).ravel()) == [10, 12, 5, 4]
+    assert heat.data[0].texttemplate == "%{z}"
+
+
+def test_rfm_scatter_3d_renders_samples_and_falls_back() -> None:
+    """3D scatter colors by segment, samples deterministically, guards empty/short input."""
+    from visualization import tokens
+
+    rng = np.random.default_rng(42)
+    big = pd.DataFrame(
+        {
+            "customer_id": [f"C{i}" for i in range(2500)],
+            "segment": ["Champions" if i % 2 else "Lost Customers" for i in range(2500)],
+            "recency_days": rng.integers(1, 300, 2500),
+            "frequency": rng.integers(1, 20, 2500),
+            "monetary_value": rng.uniform(10.0, 900.0, 2500),
+        }
+    )
+    fig = rfm_charts.rfm_scatter_3d(big)
+    assert fig.data[0].type == "scatter3d"
+    assert _trace_colors(fig) == {
+        "Champions": tokens.SEGMENT_COLORS["Champions"],
+        "Lost Customers": tokens.SEGMENT_COLORS["Lost Customers"],
+    }
+    assert len(rfm_charts.rfm_scatter_3d(pd.DataFrame()).data) == 0
+    # Fewer than three RFM dims cannot form a 3D scatter.
+    two_dims = big[["customer_id", "segment", "frequency", "monetary_value"]]
+    assert len(rfm_charts.rfm_scatter_3d(two_dims).data) == 0
+
+
+def test_geo_treemap_nests_levels_and_guards_short_paths() -> None:
+    """Treemap builds a hierarchy from two levels; a single level falls back."""
+    features = pd.DataFrame(
+        {
+            "country": ["India", "India", "US"],
+            "city": ["Pune", "Delhi", "Austin"],
+        }
+    )
+    fig = demographic_charts.geo_treemap(features, ["country", "city"])
+    assert fig.data[0].type == "treemap"
+    assert "country" in fig.layout.title.text and "city" in fig.layout.title.text
+
+    single = demographic_charts.geo_treemap(features, ["country"])
+    assert len(single.data) == 0
+    assert "country" in single.layout.title.text
+
+
+def test_geo_treemap_caps_near_unique_levels() -> None:
+    """A near-unique level folds into Other instead of emitting thousands of tiles.
+
+    Real uploads carry one city name per customer (the demo set has 15,516 cities
+    for 24,911 customers). Uncapped, that built a ~24,000-tile figure and locked
+    the browser tab; the cap keeps every customer counted exactly once.
+    """
+    n = 4000
+    features = pd.DataFrame(
+        {
+            "region": ["R1"] * n,
+            "city": [f"city-{i}" for i in range(n)],
+        }
+    )
+    fig = demographic_charts.geo_treemap(features, ["region", "city"])
+    labels = list(fig.data[0].labels)
+    assert labels.count(demographic_charts.TREEMAP_OTHER) == 1
+    # R1 + the kept cities + Other, far below one tile per customer.
+    assert len(fig.data[0].ids) <= demographic_charts.TREEMAP_MAX_VALUES_PER_LEVEL + 2
+    assert len(fig.data[0].ids) < n / 100
