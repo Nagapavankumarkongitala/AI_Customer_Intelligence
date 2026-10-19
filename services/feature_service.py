@@ -200,7 +200,7 @@ def run_segment_trends_with_labels(
     moves: list[dict] = []
     for model in ("RFM", "LRFM"):
         periods = [label for label in order if (model, label) in labels_by_period]
-        pairs = [(left, right, "consecutive") for left, right in zip(periods, periods[1:])]
+        pairs = [(left, right, "consecutive") for left, right in zip(periods, periods[1:], strict=False)]
         if len(periods) > 2:
             pairs.append((periods[0], periods[-1], "window"))
         elif len(periods) == 2:
