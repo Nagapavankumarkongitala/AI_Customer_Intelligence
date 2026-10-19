@@ -77,7 +77,7 @@ def render_sidebar_nav(active: str) -> None:
             st.page_link(path, label=label)
         st.divider()
         theme_toggle()
-        st.caption("Dark is the heritage console skin; native controls stay light.")
+        st.caption("Dark is the charcoal-and-lime console, widgets included.")
 
 
 @contextmanager

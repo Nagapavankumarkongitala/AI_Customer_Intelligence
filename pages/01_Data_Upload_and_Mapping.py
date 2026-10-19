@@ -56,9 +56,12 @@ with controls_expander():
 
 if use_demo:
     try:
-        with open("data/sample/sample_customer_transactions.csv", "rb") as fh:
-            data, name = fh.read(), "sample_customer_transactions.csv"
-        preview = load_upload_bytes(data, name)
+        with st.status("Loading synthetic demo data...", expanded=True) as status:
+            with open("data/sample/sample_customer_transactions.csv", "rb") as fh:
+                data, name = fh.read(), "sample_customer_transactions.csv"
+            status.update(label="Parsing and profiling...", state="running")
+            preview = load_upload_bytes(data, name)
+            status.update(label="Demo data loaded", state="complete", expanded=False)
         st.session_state["raw_data"] = preview.frame
         st.session_state["source_filename"] = name
         st.session_state["column_mapping"] = dict(preview.proposal.mapping)
@@ -68,27 +71,49 @@ if use_default:
     try:
         from services import bootstrap_service
 
-        state_service.reset(st.session_state)
-        manifest = bootstrap_service.load_default_into_state(st.session_state)
-        if manifest is None:
-            st.error(
-                "Default cache not built yet. Run `python scripts/build_default_run.py` "
-                "once, then retry."
-            )
-        else:
-            st.success(
-                f"Default dataset {manifest['source']} loaded with pre-trained runs: "
-                f"{manifest['customers']:,} customers, "
-                f"churn {manifest['selected_churn_model']} AUC {manifest['churn_auc']:.3f}."
-            )
+        with st.status("Loading default dataset (cached)...", expanded=True) as status:
+            state_service.reset(st.session_state)
+            status.update(label="Restoring cached runs from disk...", state="running")
+            manifest = bootstrap_service.load_default_into_state(st.session_state)
+            if manifest is None:
+                status.update(label="Default cache not built yet", state="error", expanded=True)
+                st.error(
+                    "Default cache not built yet. Run `python scripts/build_default_run.py` "
+                    "once, then retry."
+                )
+            else:
+                status.update(label="Default dataset loaded", state="complete", expanded=False)
+                st.success(
+                    f"Default dataset {manifest['source']} loaded with pre-trained runs: "
+                    f"{manifest['customers']:,} customers, "
+                    f"{len(manifest['segmentation_models'])} segmentation models, "
+                    f"churn {manifest['selected_churn_model']} AUC {manifest['churn_auc']:.3f}."
+                )
     except CustomerIntelligenceError as exc:
         st.error(str(exc))
 if uploaded is not None:
     try:
-        preview = load_upload_bytes(uploaded.getvalue(), uploaded.name)
+        with st.status(f"Reading {uploaded.name}...", expanded=True) as status:
+            data = uploaded.getvalue()
+            # Size-aware hint
+            if len(data) > 100 * 1024 * 1024:
+                status.update(
+                    label=f"Large file detected ({len(data) / 1e6:.1f} MB) — parsing may take longer...",
+                    state="running",
+                )
+            status.update(label="Parsing and profiling columns...", state="running")
+            preview = load_upload_bytes(data, uploaded.name)
+            status.update(label="File parsed successfully", state="complete", expanded=False)
         st.session_state["raw_data"] = preview.frame
         st.session_state["source_filename"] = uploaded.name
         st.session_state["column_mapping"] = dict(preview.proposal.mapping)
+        rows = len(preview.frame)
+        mb = preview.memory_mb
+        if rows > 500_000 or mb > 200:
+            st.info(
+                f"Large dataset detected ({rows:,} rows, {mb:.1f} MB). For best UX, consider "
+                f"Quarterly trends and default settings; heavy steps may take several minutes."
+            )
     except CustomerIntelligenceError as exc:
         st.error(str(exc))
 

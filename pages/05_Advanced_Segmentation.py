@@ -6,6 +6,15 @@ import streamlit as st
 import yaml
 
 from components.cached import cached_build_cluster_profile
+from components.control_guides import (
+    INTRO,
+    RUN_HELP,
+    SWEEP_HELP,
+    TRAIN_ALL_HELP,
+    USAGE_CAPTION,
+    control_help,
+    control_usage_rows,
+)
 from components.empty_state import chart_section, empty_state
 from components.filters import control_group, controls_expander
 from components.metric_card import Metric, metric_row
@@ -117,21 +126,48 @@ with st.expander("Pipeline review", expanded=False):
 
 with controls_expander("Model Controls"):
     with control_group("Model Setup"):
+        st.caption(INTRO)
         availability = model_availability()
         model_names = ["kmeans", "gmm", "hierarchical", "hdbscan", "autoencoder", "ensemble"]
-        model = st.selectbox("Model", model_names)
-        n_clusters = st.slider("Clusters (k)", 2, 10, 5, disabled=(model == "hdbscan"))
-        seed = st.number_input("Random seed", value=42, step=1)
-        min_cluster_size = st.number_input(
-            "HDBSCAN min cluster size", min_value=5, value=15, step=5
+        model = st.selectbox("Model", model_names, help=control_help("Model"))
+        n_clusters = st.slider(
+            "Clusters (k)",
+            2,
+            10,
+            5,
+            disabled=(model == "hdbscan"),
+            help=control_help("Clusters (k)"),
         )
-        latent_dim = st.number_input("AE latent dims", min_value=2, max_value=32, value=8)
-        epochs = st.number_input("AE max epochs", min_value=5, max_value=500, value=100)
+        seed = st.number_input("Random seed", value=42, step=1, help=control_help("Random seed"))
+        min_cluster_size = st.number_input(
+            "HDBSCAN min cluster size",
+            min_value=5,
+            value=15,
+            step=5,
+            help=control_help("HDBSCAN min cluster size"),
+        )
+        latent_dim = st.number_input(
+            "AE latent dims",
+            min_value=2,
+            max_value=32,
+            value=8,
+            help=control_help("AE latent dims"),
+        )
+        epochs = st.number_input(
+            "AE max epochs",
+            min_value=5,
+            max_value=500,
+            value=100,
+            help=control_help("AE max epochs"),
+        )
+    with control_group("Which controls each model reads"):
+        st.dataframe(control_usage_rows(), width="stretch")
+        st.caption(USAGE_CAPTION)
 if availability.get(model):
     st.warning(availability[model])
 
 k_min, k_max = cfg["segmentation"]["cluster_range"]
-if model != "hdbscan" and st.button(f"Sweep k = {k_min}…{k_max}"):
+if model != "hdbscan" and st.button(f"Sweep k = {k_min}…{k_max}", help=SWEEP_HELP):
     try:
         with st.spinner("Sweeping cluster counts…"):
             sweep = sweep_clusters(
@@ -149,13 +185,9 @@ if model != "hdbscan" and st.button(f"Sweep k = {k_min}…{k_max}"):
 labels = None
 run_col, batch_col = st.columns(2)
 with run_col:
-    run_clicked = st.button("Run segmentation", type="primary")
+    run_clicked = st.button("Run segmentation", type="primary", help=RUN_HELP)
 with batch_col:
-    batch_clicked = st.button(
-        "Train all models",
-        help="Trains every model with the sidebar settings; failures record as "
-        "skipped. The autoencoder makes this take minutes.",
-    )
+    batch_clicked = st.button("Train all models", help=TRAIN_ALL_HELP)
 if batch_clicked:
     progress = st.progress(0.0, text="Training all models…")
     with st.spinner("Training every model (autoencoder trains a neural net)…"):

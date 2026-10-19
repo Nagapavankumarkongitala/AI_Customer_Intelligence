@@ -19,7 +19,12 @@ from segmentation.evaluation import evaluate_clustering
 from segmentation.segment_naming import propose_names
 from segmentation.segment_profiling import build_cluster_profile
 from segmentation.stability import bootstrap_stability, seed_stability
-from services.segmentation_service import run_model, sweep_clusters, train_all_models
+from services.segmentation_service import (
+    labeling_series,
+    run_model,
+    sweep_clusters,
+    train_all_models,
+)
 from utils.exceptions import CustomerIntelligenceError
 from utils.model_utils import load_model, save_model
 
@@ -213,3 +218,17 @@ def test_train_all_models_records_and_skips() -> None:
     except ImportError:
         skipped = [r for r in runs if r.get("status") == "skipped"]
         assert any(r["model"] == "hdbscan" and "reason" in r for r in skipped)
+
+
+def test_labeling_series_uses_run_names_and_noise_label() -> None:
+    """Saved runs map to business names, falling back to IDs and to "Noise"."""
+    run = {
+        "model": "kmeans",
+        "customer_ids": ["a", "b", "c"],
+        "labels": [0, 7, -1],
+        "names": {"0": "Core Active"},
+    }
+    series = labeling_series(run)
+    assert series.name == "segment"
+    assert series.tolist() == ["Core Active", "7", "Noise"]
+    assert labeling_series({"customer_ids": ["a"], "labels": [3]}).tolist() == ["3"]

@@ -251,6 +251,117 @@ def test_dark_stylesheet_retains_the_glass_console() -> None:
     assert tokens.DARK["background"] in DARK_CSS
 
 
+def test_dark_parity_sweep_leaves_no_light_values() -> None:
+    """Every chart family re-skins: no light-palette value survives dark theming."""
+    from visualization.demographic_charts import geo_treemap
+    from visualization.retention_charts import value_risk_matrix
+    from visualization.rfm_charts import (
+        rfm_parallel_plot,
+        segment_distribution_bar,
+        segment_trend_facets,
+        segment_trend_heatmap,
+        segment_trend_share,
+    )
+    from visualization.segmentation_charts import profile_heatmap, sankey_mapping
+
+    tokens.set_active_mode(tokens.MODE_DARK)
+    light_values = {v.upper() for v in tokens.LIGHT.values() if v.startswith("#")}
+    profile = pd.DataFrame(
+        {
+            "segment": ["Champions", "Lost Customers"],
+            "customers": [10, 5],
+            "revenue": [900.0, 100.0],
+        }
+    )
+    trend = pd.DataFrame(
+        {
+            "period": ["2024-Q1", "2024-Q1", "2024-Q2", "2024-Q2"],
+            "segment": ["Champions", "Lost Customers", "Champions", "Lost Customers"],
+            "customers": [10, 5, 12, 4],
+        }
+    )
+    figs = {
+        "segment bar": segment_distribution_bar(profile, "segment"),
+        "trend share": segment_trend_share(trend),
+        "trend facets": segment_trend_facets(trend),
+        "trend heatmap": segment_trend_heatmap(trend),
+        "treemap": geo_treemap(
+            pd.DataFrame({"region": ["North", "North", "South"], "city": ["A", "B", "C"]}),
+            ["region", "city"],
+        ),
+        "sankey": sankey_mapping(
+            pd.DataFrame([[8, 2], [1, 4]], index=["A", "B"], columns=["X", "Y"]), "RFM", "AI"
+        ),
+        "heatmap": profile_heatmap(
+            pd.DataFrame(
+                {
+                    "business_name": ["Core Active", "Light Dormant"],
+                    "median_frequency": [5.0, 1.0],
+                    "median_monetary_value": [400.0, 50.0],
+                }
+            )
+        ),
+        "parallel coordinates": rfm_parallel_plot(
+            pd.DataFrame(
+                {
+                    "recency_days": [5, 90, 30],
+                    "frequency": [8, 1, 3],
+                    "monetary_value": [900.0, 100.0, 400.0],
+                }
+            )
+        ),
+        "value-risk matrix": value_risk_matrix(
+            pd.DataFrame(
+                {
+                    "customer_id": ["C00001", "C00002"],
+                    "churn_probability": [0.9, 0.2],
+                    "expected_value_proxy_historical": [900.0, 100.0],
+                    "revenue_at_risk": [810.0, 20.0],
+                    "recommended_action": ["Monitor", "Monitor"],
+                }
+            )
+        ),
+    }
+    for name, fig in figs.items():
+        hits = sorted({v.upper() for v in HEX.findall(fig.to_json())} & light_values)
+        assert hits == [], f"{name} leaks light values: {hits}"
+
+
+def test_dark_native_pack_skins_server_widgets() -> None:
+    """Dark-only CSS covers the native controls the server theme leaves light.
+
+    Hooks are the data-testid / data-baseweb names verified in the pinned
+    Streamlit bundle — never obfuscated classes — and the pack ships in the
+    dark sheet only, so the light default is untouched.
+    """
+    dark_only = (
+        '[data-testid="stTabs"]',
+        '[data-testid="stExpander"]',
+        '[data-testid="stAlert"]',
+        '[data-testid="stButton"]',
+        '[data-testid="stDownloadButton"]',
+        '[data-testid="stRadioCaption"]',
+        'input[type="radio"]',
+        '[data-testid="stPageLink"]',
+        '[data-testid="stToast"]',
+        '[data-testid="stSpinner"]',
+        '[data-testid="stCaptionContainer"]',
+        '[data-testid="stWidgetLabel"]',
+        '[data-testid="stFileUploaderDropzone"]',
+        'div[data-baseweb="input"]',
+        'div[data-baseweb="menu"]',
+        'button[kind="primary"]',
+        "accent-color",
+    )
+    for hook in dark_only:
+        assert hook in DARK_CSS, f"dark sheet misses {hook}"
+        assert hook not in LIGHT_CSS, f"light sheet leaked {hook}"
+    # The base sheet already normalises native selects in both modes (explicit
+    # colours are required on Windows); the dark pack extends them.
+    assert 'div[data-baseweb="select"]' in DARK_CSS
+    assert tokens.DARK["primary"] in DARK_CSS
+
+
 def test_sheets_carry_no_colour_outside_tokens() -> None:
     """Every hex in either stylesheet is a palette value (no drifting literals)."""
     palette_values = {v.upper() for v in (*tokens.LIGHT.values(), *tokens.DARK.values())}

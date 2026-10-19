@@ -8,6 +8,7 @@ from components.filters import controls_expander, multiselect_filter
 from components.metric_card import Metric, metric_row
 from components.page_header import page_header, section_header
 from components.sidebar import render_sidebar_footer, render_sidebar_nav, sidebar_filters
+from components.strategy_cards import render_strategy_playbook
 from components.table import render_table
 from retention_engine.offer_recommender import describe_offer
 from services import state_service
@@ -113,8 +114,32 @@ st.session_state["retention_results"] = {
     "table": table.to_dict(orient="records"),
     "summary": retention_summary(table),
 }
-summary = retention_summary(table)
 st.info(matrix.disclaimer)
+
+with sidebar_filters("View Filters"):
+    regions = sorted(table["region"].dropna().unique()) if "region" in table.columns else []
+    region = multiselect_filter("Region", [str(r) for r in regions], key="ret_region")
+    segs = sorted(table["segment"].dropna().unique()) if "segment" in table.columns else []
+    seg_pick = multiselect_filter("Segment", [str(s) for s in segs], key="ret_seg")
+    bands = sorted(table["risk_band"].unique())
+    band_pick = multiselect_filter("Risk band", [str(b) for b in bands], key="ret_band")
+view = table.copy()
+if regions:
+    view = view[view["region"].isin(region)]
+if segs:
+    view = view[view["segment"].isin(seg_pick)]
+view = view[view["risk_band"].isin(band_pick)]
+if view.empty:
+    empty_state(
+        "No customers in these filters",
+        "Widen a region, segment, or risk band to see retention actions.",
+    )
+    st.stop()
+st.caption(
+    f"View filters select {len(view):,} of {len(table):,} scored customers; every "
+    "card and chart below follows them."
+)
+summary = retention_summary(view)
 
 section_header("At a glance")
 critical_count = int(summary["band_mix"].get("critical", 0))
@@ -137,34 +162,26 @@ metric_row(
     ]
 )
 
+section_header(
+    "Strategy playbook", "One card per strategy rule, with the customers it currently owns."
+)
+render_strategy_playbook(view, matrix)
+
 ret_l, ret_r = st.columns([1, 1])
 with ret_l:
     with chart_section("Value–risk matrix"):
-        st.plotly_chart(without_title(value_risk_matrix(table)), width="stretch")
+        st.plotly_chart(without_title(value_risk_matrix(view)), width="stretch")
 with ret_r:
     with chart_section("Revenue at risk per action"):
-        st.plotly_chart(without_title(revenue_at_risk_bar(table)), width="stretch")
+        st.plotly_chart(without_title(revenue_at_risk_bar(view)), width="stretch")
 strat_l, strat_r = st.columns([1, 1])
 with strat_l:
     with chart_section("Customers per recommended action"):
-        st.plotly_chart(without_title(strategy_distribution_bar(table)), width="stretch")
+        st.plotly_chart(without_title(strategy_distribution_bar(view)), width="stretch")
 with strat_r:
     with chart_section("Priority score distribution"):
-        st.plotly_chart(without_title(priority_histogram(table)), width="stretch")
+        st.plotly_chart(without_title(priority_histogram(view)), width="stretch")
 
-with sidebar_filters("View Filters"):
-    regions = sorted(table["region"].dropna().unique()) if "region" in table.columns else []
-    region = multiselect_filter("Region", [str(r) for r in regions], key="ret_region")
-    segs = sorted(table["segment"].dropna().unique()) if "segment" in table.columns else []
-    seg_pick = multiselect_filter("Segment", [str(s) for s in segs], key="ret_seg")
-    bands = sorted(table["risk_band"].unique())
-    band_pick = multiselect_filter("Risk band", [str(b) for b in bands], key="ret_band")
-view = table.copy()
-if regions:
-    view = view[view["region"].isin(region)]
-if segs:
-    view = view[view["segment"].isin(seg_pick)]
-view = view[view["risk_band"].isin(band_pick)]
 with st.expander("Ranked customers (top 200 of filter)", expanded=False):
     render_table(
         view.head(200),

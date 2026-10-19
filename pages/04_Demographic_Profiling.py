@@ -124,6 +124,23 @@ if not geo_levels:
         "No geography available",
         "No geographic fields (city/state/country/region) are present in this dataset.",
     )
+
+# Geography share view: one drill-down treemap covering every level present.
+# The tabs below keep the ranked bars and the full table for each level.
+geo_path = [lvl for lvl in ("region", "country", "state", "city") if lvl in features.columns]
+if len(geo_path) >= 2:
+    with chart_section("Customer hierarchy (" + " → ".join(geo_path) + ")"):
+        st.plotly_chart(
+            without_title(geo_treemap(features, geo_path)),
+            width="stretch",
+            key="geo_treemap",
+        )
+        st.caption(
+            "Bigger tiles are broader (region/country); each tile drills down to city. "
+            "Missing places group as Unknown; each level keeps its largest values and "
+            "groups the rest as Other."
+        )
+
 geo_tab = st.tabs([lvl.capitalize() for lvl in geo_levels]) if geo_levels else []
 for tab, level in zip(geo_tab, geo_levels, strict=True):
     with tab:
@@ -144,12 +161,6 @@ for tab, level in zip(geo_tab, geo_levels, strict=True):
                         width="stretch",
                         key=f"geo_rev_{level}",
                     )
-        with chart_section(f"Customer share by {level}"):
-            st.plotly_chart(
-                without_title(geo_treemap(table.head(30), level)),
-                width="stretch",
-                key=f"geo_tree_{level}",
-            )
         with st.expander(f"{level.capitalize()} table (top 50)", expanded=False):
             st.dataframe(table.head(50), width="stretch", key=f"geo_table_{level}")
 

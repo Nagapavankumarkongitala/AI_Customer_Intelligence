@@ -4,7 +4,7 @@ Two palettes ship side by side so the console can be re-skinned without editing 
 page or a figure factory:
 
 * ``LIGHT`` — the default professional analytics surface (spec §3).
-* ``DARK`` — the retained navy/cyan console, kept selectable.
+* ``DARK`` — the charcoal-and-lime console, kept selectable.
 
 Rules this module exists to enforce:
 
@@ -17,7 +17,7 @@ Rules this module exists to enforce:
    **every** segment name the pipeline can emit — RFM/LRFM share one vocabulary
    (``analytics/rfm.py``) and AI clusters another (``segmentation/segment_naming.py``)
    — so a "Champions" segment is the same colour on every page. The dark table
-   carries the same hue families lightened onto navy (identities survive the
+   carries the same hue families lifted for charcoal (identities survive the
    re-skin; per-mode hues are the documented exception to literal invariance).
 4. Nothing here imports Streamlit. The active mode is module-level state, which
    keeps figure factories free of session state (spec §17).
@@ -72,16 +72,18 @@ LIGHT: Final[dict[str, str]] = {
 }
 
 DARK: Final[dict[str, str]] = {
-    # Accent system: deliberately brighter than the light accents, because
-    # dark surfaces need more luminance for the same contrast ratios.
-    "primary": "#22D3EE",
-    "primary_100": "#1E537F",
-    "primary_300": "#2A6A9C",
-    "primary_500": "#0891B2",
-    "primary_700": "#38BDF8",
-    "primary_900": "#A5F3FC",
-    "secondary": "#7DD3FC",
-    "secondary_dim": "#0284C7",
+    # Accent system: charcoal console with a lime accent. Lime is very
+    # luminous, so it clears text contrast on dark surfaces by construction;
+    # it is reserved for accents and calls to action, never for success or
+    # warning states (those keep their semantic hues).
+    "primary": "#BEF264",
+    "primary_100": "#26310F",
+    "primary_300": "#5C7326",
+    "primary_500": "#8AA627",
+    "primary_700": "#D9F99D",
+    "primary_900": "#F2FBCF",
+    "secondary": "#8EA2FF",
+    "secondary_dim": "#5B6FD6",
     "positive": "#3DDC84",
     "warning": "#E8A838",
     "danger": "#FF4D4D",
@@ -89,21 +91,21 @@ DARK: Final[dict[str, str]] = {
     "purple": "#A78BFA",
     "teal": "#2DD4BF",
     # Ink.
-    "text": "#E8EEF6",
-    "muted": "#8B98AD",
-    "muted_soft": "#7588A3",
+    "text": "#F2F5F9",
+    "muted": "#9AA7B8",
+    "muted_soft": "#828FA3",
     # Surfaces and chrome.
-    "background": "#070B14",
-    "surface": "#0D1930",
-    "surface_alt": "#0B1426",
-    "sidebar": "#08101F",
-    "hover": "#12203A",
-    "border": "#1F2A44",
-    "grid": "#16213A",
+    "background": "#0C0F14",
+    "surface": "#151A22",
+    "surface_alt": "#1B222D",
+    "sidebar": "#090C11",
+    "hover": "#232C3A",
+    "border": "#2A3342",
+    "grid": "#222B39",
     # Depth.
-    "shadow_card": "0 8px 32px rgba(0, 0, 0, 0.45)",
-    "shadow_raised": "0 12px 40px rgba(0, 0, 0, 0.55)",
-    "shadow_hover": "0 14px 44px rgba(0, 0, 0, 0.60)",
+    "shadow_card": "0 8px 28px rgba(0, 0, 0, 0.50)",
+    "shadow_raised": "0 12px 36px rgba(0, 0, 0, 0.60)",
+    "shadow_hover": "0 14px 40px rgba(0, 0, 0, 0.65)",
 }
 
 PALETTES: Final[dict[str, dict[str, str]]] = {MODE_LIGHT: LIGHT, MODE_DARK: DARK}
@@ -189,8 +191,8 @@ SEGMENT_COLORS: Final[dict[str, str]] = {
     "Unsegmented": "#7C8AA0",
 }
 
-#: Segment hues for the dark surface: the same hue families lightened onto
-#: navy, tier ordering preserved (Premium darkest, Light lightest). Every
+#: Segment hues for the dark surface: the same hue families lifted for
+#: charcoal, tier ordering preserved (Premium darkest, Light lightest). Every
 #: entry clears 3:1 against the dark surface; the identical key set keeps the
 #: light→dark re-map well-defined.
 SEGMENT_COLORS_DARK: Final[dict[str, str]] = {
@@ -295,7 +297,7 @@ TONE_BADGE: Final[dict[str, dict[str, tuple[str, str]]]] = {
         "critical": ("#FEF2F2", "#991B1B"),
     },
     MODE_DARK: {
-        "info": ("#0B2137", "#7DD3FC"),
+        "info": ("#232B0E", "#D9F99D"),
         "positive": ("#052E22", "#6EE7B7"),
         "warning": ("#3A2A08", "#FCD34D"),
         "critical": ("#3F1212", "#FCA5A5"),
@@ -356,7 +358,7 @@ def shadow(name: str = "card", mode: str | None = None) -> str:
 
 
 def _segment_table(mode: str | None) -> dict[str, str]:
-    """Hue table for the mode (dark variants keep identities legible on navy)."""
+    """Hue table for the mode (dark variants keep identities legible on charcoal)."""
     return SEGMENT_COLORS_DARK if _resolve_mode(mode) == MODE_DARK else SEGMENT_COLORS
 
 

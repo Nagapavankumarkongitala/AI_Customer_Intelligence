@@ -16,4 +16,5 @@ NAV_PAGES: list[tuple[str, str]] = [
     ("Compare", "pages/06_Segmentation_Comparison.py"),
     ("Churn", "pages/07_Churn_Prediction.py"),
     ("Retention", "pages/08_Retention_Strategies.py"),
+    ("Reports", "pages/09_Report_Generator.py"),
 ]

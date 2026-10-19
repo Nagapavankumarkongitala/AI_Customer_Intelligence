@@ -34,6 +34,11 @@ def test_load_populates_contract_keys() -> None:
         assert state[key] is not None, key
     assert state["retention_results"]["summary"]
     assert state["churn_model_metadata"]["model"] == manifest["selected_churn_model"]
+    history_state = state["segment_history"]
+    assert history_state["table"], "default run preloads quarterly segment history"
+    assert history_state["granularity"] == "quarterly"
+    assert isinstance(history_state["transitions"], list)
+    assert history_state["transitions"], "default run preloads customer transitions"
 
 
 @needs_cache
@@ -66,5 +71,8 @@ def test_manifest_shape() -> None:
         "churn_auc",
         "churn_rate",
         "retention_customers",
+        "cache_version",
+        "segment_history_granularity",
+        "segment_history_periods",
     ):
         assert key in manifest, key

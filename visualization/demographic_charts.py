@@ -109,18 +109,57 @@ def revenue_geo_bar(
     )
 
 
+#: Values kept per level before the tail is folded into ``Other``. Near-unique
+#: levels are common (a demo city column can hold one name per customer), and an
+#: uncapped level emits tens of thousands of tiles that lock the browser tab.
+TREEMAP_MAX_VALUES_PER_LEVEL = 12
+
+#: Label for the folded tail of a capped level.
+TREEMAP_OTHER = "Other"
+
+
+def _cap_level(values: pd.Series, keep: int = TREEMAP_MAX_VALUES_PER_LEVEL) -> pd.Series:
+    """Keep the ``keep`` most common values of one level; fold the tail into Other.
+
+    Folding (rather than dropping rows) keeps every customer counted exactly
+    once, so parent tiles stay true totals.
+    """
+    if values.nunique() <= keep:
+        return values
+    top = set(values.value_counts().head(keep - 1).index)
+    return values.where(values.isin(top), TREEMAP_OTHER)
+
+
 @styled
-def geo_treemap(geo: pd.DataFrame, level: str) -> px.Figure:
-    """Treemap of customer share for one geographic level."""
-    if geo.empty:
-        return empty_figure(f"Customer share by {level}")
+def geo_treemap(features: pd.DataFrame, path_cols: list[str]) -> px.Figure:
+    """Nested customer share across geographic levels (outer → inner tile).
+
+    One drill-down treemap showing how customers concentrate from
+    region/country down to city. Needs at least two present levels; missing
+    values are grouped as "Unknown" so sparse uploads still render. Tiles color
+    by customer count.
+
+    Each level keeps at most ``TREEMAP_MAX_VALUES_PER_LEVEL`` values and folds
+    its tail into "Other", so a near-unique city column cannot emit tens of
+    thousands of tiles.
+    """
+    cols = [c for c in path_cols if c in features.columns]
+    title = "Customer hierarchy" + (f" ({' → '.join(cols)})" if cols else "")
+    if len(cols) < 2 or features.empty:
+        return empty_figure(title)
+    data = pd.DataFrame(
+        {col: _cap_level(features[col].astype("string").fillna("Unknown")) for col in cols}
+    )
+    grouped = data.groupby(cols, observed=True).size().reset_index(name="customers")
+    if grouped.empty:
+        return empty_figure(title)
     return px.treemap(
-        geo,
-        path=[level],
+        grouped,
+        path=cols,
         values="customers",
         color="customers",
         color_continuous_scale=PRIMARY_SCALE,
-        title=f"Customer share by {level}",
+        title=title,
     )
 
 

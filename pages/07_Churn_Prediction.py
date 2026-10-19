@@ -13,7 +13,7 @@ from churn.evaluation import (
     classification_metrics,
     lift_gain_table,
 )
-from churn.explainability import logreg_effects, shap_values
+from churn.explainability import ShapBudgetExceeded, logreg_effects, shap_values
 from components.empty_state import chart_section, empty_state
 from components.filters import control_group, controls_expander
 from components.metric_card import Metric, metric_row
@@ -254,7 +254,7 @@ if bundles:
         shap_frame = shap_values(bundle["pipeline"], dataset.frame[bundle["feature_cols"]])
         st.markdown("Mean |SHAP| (global, sample):")
         st.bar_chart(shap_frame.abs().mean().sort_values(ascending=False).head(15))
-    except ImportError as exc:
+    except (ImportError, ShapBudgetExceeded) as exc:
         st.info(str(exc))
 
     section_header("Score all customers")

@@ -45,11 +45,11 @@ PRIMARY_SCALE = tokens.sequential_scale(tokens.MODE_LIGHT)
 PRIMARY_DISCRETE = tokens.discrete_colors(tokens.MODE_LIGHT)
 
 # Frosted-glass tokens: the dark console's card recipe, retained for the DARK skin.
-GLASS_BG = "rgba(13,25,48,0.55)"
+GLASS_BG = "rgba(21,26,34,0.62)"
 GLASS_BORDER = "rgba(255,255,255,0.12)"
 GLASS_BLUR = "blur(12px)"
 GLASS_RADIUS = tokens.RADIUS["lg"]
-GLASS_SHADOW = "0 8px 32px rgba(0,0,0,0.45), 0 0 24px rgba(34,211,238,0.07)"
+GLASS_SHADOW = "0 8px 32px rgba(0,0,0,0.50), 0 0 24px rgba(190,242,100,0.06)"
 
 CHART_HEIGHT = tokens.CHART_HEIGHT
 
@@ -181,10 +181,10 @@ div[data-testid="stPlotlyChart"] {
 
 _DARK_CSS = Template("""
 <style>
-/* Dark console: frosted cards over a layered volt-glow canvas. */
+/* Dark console: frosted cards over a layered lime-glow canvas. */
 [data-testid="stAppViewContainer"] {
     background:
-        radial-gradient(1200px 600px at 15% -5%, rgba(34,211,238,0.07), transparent),
+        radial-gradient(1200px 600px at 15% -5%, rgba(190,242,100,0.06), transparent),
         radial-gradient(1000px 700px at 90% 110%, rgba(61,220,132,0.05), transparent),
         $background;
 }
@@ -204,6 +204,105 @@ div[data-testid="stPlotlyChart"] { background: transparent; box-shadow: none; }
 </style>
 """)
 
+#: Dark-only skin for Streamlit's native controls. The server theme stays
+#: ``base = "light"`` (it cannot change at runtime), so without this block
+#: every native widget renders light inside the charcoal console. Selectors
+#: key only on ``data-testid`` / ``data-baseweb`` hooks verified in the
+#: pinned Streamlit bundle — never on obfuscated class names — so an upgrade
+#: degrades to unstyled rather than broken. Colours resolve from tokens, so
+#: the stray-colour scan keeps covering this block.
+_DARK_NATIVE_CSS = Template("""
+<style>
+/* Inherit console ink instead of the light server theme. */
+[data-testid="stMain"] { color: $text; }
+[data-testid="stSidebar"] { color: $text; }
+[data-testid="stWidgetLabel"] { color: $muted; }
+[data-testid="stCaptionContainer"] { color: $muted; }
+[data-testid="stRadioCaption"] { color: $muted; }
+/* Tabs: quiet labels, lime active underline. */
+[data-testid="stTabs"] [data-baseweb="tab"] { color: $muted; }
+[data-testid="stTabs"] [data-baseweb="tab"][aria-selected="true"] { color: $primary; }
+[data-testid="stTabs"] [data-baseweb="tab-highlight"] { background-color: $primary; }
+[data-testid="stTabs"] [data-baseweb="tab-border"] { background-color: $border; }
+/* Expanders read as console cards. */
+[data-testid="stExpander"] {
+    background-color: $surface;
+    border-color: $border;
+}
+[data-testid="stExpander"] summary { color: $text; }
+/* Alerts: one dark surface for every kind; the kind icon keeps its
+   native hue so severity still reads on colour plus text. */
+[data-testid="stAlert"] {
+    background-color: $surface;
+    border: 1px solid $border;
+    color: $text;
+}
+[data-testid="stAlert"] p { color: $text; }
+/* Text/number/date inputs and selects. */
+div[data-baseweb="input"] {
+    background-color: $surface;
+    border-color: $border;
+    color: $text;
+}
+div[data-baseweb="input"] input { color: $text; }
+div[data-baseweb="select"] > div {
+    background-color: $surface;
+    border-color: $border;
+    color: $text;
+}
+div[data-baseweb="menu"] {
+    background-color: $surface_alt;
+    color: $text;
+}
+/* File dropzone. */
+[data-testid="stFileUploaderDropzone"] {
+    background-color: $surface;
+    border-color: $border;
+    color: $text;
+}
+[data-testid="stFileUploaderDropzone"] button {
+    background-color: $surface_alt;
+    color: $text;
+    border-color: $border;
+}
+/* Buttons: console surface by default, lime for primary actions. */
+[data-testid="stButton"] button, [data-testid="stDownloadButton"] button {
+    background-color: $surface;
+    color: $text;
+    border: 1px solid $border;
+}
+[data-testid="stButton"] button:hover, [data-testid="stDownloadButton"] button:hover {
+    border-color: $primary;
+    color: $primary;
+}
+[data-testid="stButton"] button[kind="primary"],
+[data-testid="stDownloadButton"] button[kind="primary"] {
+    background-color: $primary;
+    border-color: $primary;
+    color: $background;
+}
+/* Native radio/checkbox dots follow the accent. */
+input[type="radio"], input[type="checkbox"] { accent-color: $primary; }
+/* Sidebar page links: quiet until current. */
+[data-testid="stPageLink"] { color: $muted; }
+[data-testid="stPageLink"][aria-current="page"] {
+    color: $primary;
+    background-color: $hover;
+}
+/* Toasts, spinners, dividers. */
+[data-testid="stToast"] {
+    background-color: $surface;
+    border: 1px solid $border;
+    color: $text;
+}
+[data-testid="stSpinner"] { color: $text; }
+[data-testid="stMain"] hr { border-color: $border; }
+/* Dataframe shell. The Glide canvas inside follows the light server theme
+   (Streamlit gives widgets no dark hook) — documented, not overridden. */
+[data-testid="stDataFrame"] { background-color: $surface; }
+</style>
+""")
+
 
 def build_css(mode: str | None = None) -> str:
     """Stylesheet for ``mode``, with every colour resolved from tokens."""
@@ -218,6 +317,7 @@ def build_css(mode: str | None = None) -> str:
             glass_blur=GLASS_BLUR,
             glass_shadow=GLASS_SHADOW,
         )
+        css += _DARK_NATIVE_CSS.substitute(**base)
     return css
 
 

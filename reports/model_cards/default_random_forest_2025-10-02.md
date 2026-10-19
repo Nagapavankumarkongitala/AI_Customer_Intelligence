@@ -1,6 +1,6 @@
 # Model Card — default_random_forest_2025-10-02
 
-Date: 2026-10-12
+Date: 2026-10-17
 
 ## Purpose
 Leakage-safe churn classification with random_forest.

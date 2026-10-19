@@ -8,9 +8,12 @@ consistent. Sections degrade gracefully when upstream state is absent.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 import pandas as pd
 
 from analytics.demographics import DEFAULT_AGE_BANDS, assign_age_band
+from services.feature_service import TRANSITION_COLUMNS, period_bounds
 from utils.validators import require_min_rows
 
 ACTIVE_DAYS = 90
@@ -199,6 +202,153 @@ def segment_portfolio(
     total = table["revenue"].sum()
     table["revenue_share"] = (table["revenue"] / total * 100).round(2) if total else 0.0
     return table.sort_values("customers", ascending=False).reset_index(drop=True)
+
+
+@dataclass(frozen=True)
+class SegmentTrendView:
+    """One model's segment trend re-sliced to the current filters.
+
+    ``customer_filtered`` is False when per-period labels were unavailable and
+    only the stored period totals could be narrowed, so the page can caption
+    that customer filters did not reach the chart.
+    """
+
+    history: pd.DataFrame
+    transitions: pd.DataFrame
+    customer_filtered: bool
+
+
+def _periods_in_range(
+    periods: list[str], date_start: object = None, date_end: object = None
+) -> list[str]:
+    """Period labels whose span overlaps the selected dates (chronological)."""
+    kept = []
+    for period in sorted(set(periods)):
+        start, end = period_bounds(period)
+        if date_start is not None and end < pd.Timestamp(date_start):
+            continue
+        if date_end is not None and start > pd.Timestamp(date_end):
+            continue
+        kept.append(period)
+    return kept
+
+
+def _transitions_from_labels(labels: pd.DataFrame, periods: list[str], model: str) -> pd.DataFrame:
+    """Customer moves between consecutive periods, from per-customer labels."""
+    moves: list[dict] = []
+    by_period = {period: labels[labels["period"] == period] for period in periods}
+    for period_from, period_to in zip(periods, periods[1:], strict=False):
+        left = by_period[period_from].set_index("customer_id")["segment"].rename("segment_from")
+        right = by_period[period_to].set_index("customer_id")["segment"].rename("segment_to")
+        shared = left.index.intersection(right.index)
+        if shared.empty:
+            continue
+        paired = (
+            left.reindex(shared)
+            .to_frame()
+            .join(right.reindex(shared))
+            .value_counts()
+            .rename("customers")
+            .reset_index()
+        )
+        for record in paired.to_dict(orient="records"):
+            moves.append(
+                {
+                    "model": model,
+                    "period_from": period_from,
+                    "period_to": period_to,
+                    "segment_from": record["segment_from"],
+                    "segment_to": record["segment_to"],
+                    "customers": int(record["customers"]),
+                }
+            )
+    return pd.DataFrame(moves, columns=TRANSITION_COLUMNS)
+
+
+def filter_segment_trends(
+    labels: pd.DataFrame | None,
+    *,
+    history: pd.DataFrame,
+    transitions: pd.DataFrame,
+    model: str,
+    customer_ids: set | None = None,
+    date_start: object = None,
+    date_end: object = None,
+) -> SegmentTrendView:
+    """Re-slice a stored segment trend to the current customer and date filters.
+
+    Aggregate counts cannot be narrowed after the fact, so when per-period
+    ``labels`` (period × model × customer × segment) are available both the
+    history and the transitions are recomputed from them for exactly the
+    customers in ``customer_ids``. Without labels only the date window can be
+    honoured — periods are dropped, and moves between remaining consecutive
+    periods are kept — and the result says so via ``customer_filtered``.
+
+    Segment names keep the meaning they had in the stored scoring run: filtering
+    selects who is counted, it does not re-fit quantiles, so a segment stays
+    comparable across filter settings (and matches page 03).
+    """
+    period_col = "period"
+    stored = history.copy()
+    if stored.empty:
+        return SegmentTrendView(stored, transitions.iloc[0:0], False)
+    stored[period_col] = stored[period_col].astype(str)
+    if model and "model" in stored.columns:
+        stored = stored[stored["model"] == model]
+
+    usable = (
+        labels is not None
+        and not labels.empty
+        and {"period", "model", "customer_id", "segment"}.issubset(labels.columns)
+    )
+    if usable:
+        selected = labels[labels["model"] == model].copy()
+        selected["period"] = selected["period"].astype(str)
+        if customer_ids is not None:
+            wanted = {str(value) for value in customer_ids}
+            selected = selected[selected["customer_id"].astype(str).isin(wanted)]
+        periods = _periods_in_range(
+            selected["period"].tolist(), date_start=date_start, date_end=date_end
+        )
+        selected = selected[selected["period"].isin(periods)]
+        if selected.empty:
+            empty = pd.DataFrame(columns=["period", "model", "segment", "customers"])
+            return SegmentTrendView(empty, transitions.iloc[0:0], True)
+        counts = (
+            selected.groupby(["period", "model", "segment"], observed=True)
+            .size()
+            .rename("customers")
+            .reset_index()
+            .sort_values(["period", "segment"])
+            .reset_index(drop=True)
+        )
+        return SegmentTrendView(
+            counts, _transitions_from_labels(selected, periods, model), True
+        )
+
+    periods = _periods_in_range(
+        stored[period_col].tolist(), date_start=date_start, date_end=date_end
+    )
+    stored = stored[stored[period_col].isin(periods)]
+    moves = transitions.copy()
+    if not moves.empty:
+        moves["period_from"] = moves["period_from"].astype(str)
+        moves["period_to"] = moves["period_to"].astype(str)
+        if "model" in moves.columns:
+            moves = moves[moves["model"] == model]
+        consecutive = {
+            (period_from, period_to)
+            for period_from, period_to in zip(periods, periods[1:], strict=False)
+        }
+        moves = moves[
+            [
+                (period_from, period_to) in consecutive
+                for period_from, period_to in zip(
+                    moves["period_from"], moves["period_to"], strict=False
+                )
+            ]
+        ]
+    return SegmentTrendView(stored.reset_index(drop=True), moves, False)
 
 
 def high_value_high_risk(master: pd.DataFrame, top_n: int = 20) -> pd.DataFrame:

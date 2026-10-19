@@ -19,10 +19,14 @@ from components.insight_box import insight_box
 from components.metric_card import Metric, metric_row
 from components.page_header import page_header, section_header
 from components.panels import download_panel
+from components.segment_trends import render_trend_pair, transition_frame
 from components.sidebar import render_sidebar_footer, render_sidebar_nav, sidebar_filters
+from components.strategy_cards import render_strategy_playbook
 from components.table import render_table
+from retention_engine.strategy_mapper import StrategyMatrix
 from services import state_service
-from services.dashboard_service import mask_customer_id
+from services.dashboard_service import filter_segment_trends, mask_customer_id
+from services.retention_service import default_matrix_report
 from utils import formatting
 from utils.config import load_config
 from utils.exceptions import ConfigurationError
@@ -39,12 +43,12 @@ from visualization.retention_charts import (
     priority_histogram,
     revenue_at_risk_bar,
     strategy_distribution_bar,
-    value_risk_matrix,
+    value_risk_heatmap,
 )
 from visualization.rfm_charts import (
     revenue_by_segment_bar,
     segment_share_donut,
-    segment_trend_ribbon,
+    segment_trend_lines,
 )
 from visualization.theme import apply_chart_theme, inject_terminal_css, without_title
 
@@ -92,6 +96,15 @@ def _retention_frame() -> pd.DataFrame | None:
     stored = st.session_state.get("retention_results") or {}
     rows = stored.get("table") if isinstance(stored, dict) else None
     return pd.DataFrame(rows) if rows else None
+
+
+def _strategy_matrix() -> StrategyMatrix | None:
+    """Loaded strategy matrix, or None when the file is missing or uncovered."""
+    try:
+        matrix, report = default_matrix_report()
+    except (ValueError, FileNotFoundError):
+        return None
+    return None if report.get("uncovered") else matrix
 
 
 def _compact(fig):
@@ -203,8 +216,32 @@ with overview_tab:
                 "Build segment trends on page 03 to see segments move over time.",
             )
         else:
-            rfm_hist = history[history["model"] == "RFM"]
-            st.plotly_chart(segment_trend_ribbon(rfm_hist), width="stretch")
+            trend = filter_segment_trends(
+                st.session_state.get("segment_history_labels"),
+                history=history,
+                transitions=transition_frame(hist_state),
+                model="RFM",
+                customer_ids=set(master_f["customer_id"]),
+                date_start=date_start,
+                date_end=date_end,
+            )
+            if trend.history.empty:
+                empty_state(
+                    "No customers in these filters",
+                    "Widen a filter to see how segments moved.",
+                )
+            else:
+                render_trend_pair(
+                    _compact(segment_trend_lines(trend.history)),
+                    trend.transitions,
+                    model="RFM",
+                    key_prefix="overview_segment_trends",
+                )
+                if not trend.customer_filtered:
+                    st.caption(
+                        "Customer filters do not reach this view yet: rebuild segment "
+                        "trends on page 03 to apply them."
+                    )
     row1_a, row1_b, row1_c = st.columns(3)
     with row1_a:
         with chart_section("Revenue trend"):
@@ -233,7 +270,7 @@ with overview_tab:
 
     row2_a, row2_b, row2_c = st.columns(3)
     with row2_a:
-        with chart_section("Value vs churn risk"):
+        with chart_section("Strategic priority heatmap"):
             matrix_cols = {
                 "churn_probability",
                 "expected_value_proxy_historical",
@@ -241,11 +278,11 @@ with overview_tab:
                 "recommended_action",
             }
             if ret_f is not None and not ret_f.empty and matrix_cols.issubset(ret_f.columns):
-                st.plotly_chart(_compact(value_risk_matrix(ret_f)), width="stretch")
+                st.plotly_chart(_compact(value_risk_heatmap(ret_f)), width="stretch")
             else:
                 empty_state(
                     "No retention actions yet",
-                    "The bubble chart appears here after page 08.",
+                    "The heatmap appears here after page 08.",
                 )
     with row2_b:
         with chart_section("Top regions by revenue"):
@@ -478,6 +515,13 @@ with retention_tab:
                 st.plotly_chart(without_title(revenue_at_risk_bar(ret_f)), width="stretch")
         with chart_section("Priority score distribution"):
             st.plotly_chart(without_title(priority_histogram(ret_f)), width="stretch")
+        strategy_matrix = _strategy_matrix()
+        if strategy_matrix is not None:
+            section_header(
+                "Strategy playbook",
+                "One card per strategy rule, with the customers it currently owns.",
+            )
+            render_strategy_playbook(ret_f, strategy_matrix)
         with st.expander("Ranked customers (top 200)", expanded=False):
             ranked = ret_f.sort_values("retention_priority_score", ascending=False).head(200)
             ranked = ranked.copy()

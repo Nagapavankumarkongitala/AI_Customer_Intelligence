@@ -17,7 +17,7 @@ from typing import Any, Final
 import pandas as pd
 
 from analytics.demographics import DEFAULT_AGE_BANDS, assign_age_band
-from services import report_narrative
+from services import report_charts, report_narrative
 from services.dashboard_service import (
     build_master,
     compute_kpis,
@@ -27,17 +27,20 @@ from services.dashboard_service import (
     trend_tables,
 )
 from services.data_dictionary_service import normalize_dictionary_rows
+from utils import formatting
 from utils.exceptions import CustomerIntelligenceError
 
-#: Report sections in display order. Pages toggle these per export.
+#: Report sections in display order. Pages toggle these per export. The
+#: recommendations section closes the report — interpretations first, then the
+#: prioritized actions — so every export ends with the "so what".
 REPORT_SECTIONS: tuple[str, ...] = (
     "summary",
     "overview",
     "segments",
     "churn",
     "retention",
-    "recommendations",
     "appendix",
+    "recommendations",
 )
 
 #: Human-readable section labels, shared by the page toggle and the HTML headings.
@@ -47,8 +50,32 @@ SECTION_LABELS: dict[str, str] = {
     "segments": "Segments & demographics",
     "churn": "Churn risk",
     "retention": "Retention plan",
-    "recommendations": "Recommendations & next steps",
     "appendix": "Appendix & data foundation",
+    "recommendations": "Recommendations & next steps",
+}
+
+#: Sections whose interpretation is recapped in the closing section.
+ANALYTICAL_SECTIONS: Final[tuple[str, ...]] = ("overview", "segments", "churn", "retention")
+
+#: Chart keys per section, in reading order. Shared by HTML, PDF, and Word so
+#: the three exports can never drift apart.
+SECTION_CHARTS: Final[dict[str, tuple[str, ...]]] = {
+    "overview": ("revenue_trend", "activity_trend", "new_returning"),
+    "segments": (
+        "segment_distribution",
+        "revenue_by_segment",
+        "segment_trends",
+        "demographics_age",
+        "demographics_gender",
+        "demographics_region",
+    ),
+    "churn": ("risk_bands",),
+    "retention": (
+        "value_risk_matrix",
+        "revenue_at_risk",
+        "strategy_distribution",
+        "priority_histogram",
+    ),
 }
 
 #: One plain-English explainer per embedded chart. ``action`` never promises
@@ -179,6 +206,26 @@ def _as_frame(value: Any) -> pd.DataFrame | None:
     if isinstance(value, pd.DataFrame) and not value.empty:
         return value
     return None
+
+
+def _kpi_value(key: str, value: Any) -> str:
+    """Human-readable KPI value: ratios as percent, money with the symbol, counts whole."""
+    if value is None:
+        return "–"
+    label = str(key).lower()
+    if "rate" in label:
+        return formatting.fmt_pct(value)
+    if any(word in label for word in ("revenue", "value", "amount", "spend")):
+        return formatting.fmt_money(value)
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return formatting.fmt_int(value)
+    return str(value)
+
+
+def _title_sentence(title: str) -> str:
+    """Close an insight title with a period so it reads before the detail sentence."""
+    text = title.strip()
+    return text if text.endswith((".", ":", "!", "?")) else f"{text}."
 
 
 def _retention_frame(stored: Any) -> pd.DataFrame | None:
@@ -557,6 +604,29 @@ _REPORT_SKINS: Final = {
 }
 
 
+def _section_heading(section: str, label: str) -> str:
+    """Numbered section heading that follows REPORT_SECTIONS order."""
+    number = REPORT_SECTIONS.index(section) + 1 if section in REPORT_SECTIONS else 0
+    return f"{number} · {label}"
+
+
+def _closing_insights(
+    context: dict[str, Any], sections: tuple[str, ...]
+) -> tuple[report_narrative.Insight, ...]:
+    """Recap interpretation across the selected analytical sections (deduplicated)."""
+    seen: set[str] = set()
+    recap: list[report_narrative.Insight] = []
+    for section in ANALYTICAL_SECTIONS:
+        if section not in sections:
+            continue
+        for item in report_narrative.section_insights(context, section):
+            if item.title in seen:
+                continue
+            seen.add(item.title)
+            recap.append(item)
+    return tuple(recap)
+
+
 def render_html_report(
     context: dict[str, Any],
     figures_html: dict[str, str] | None = None,
@@ -599,7 +669,7 @@ def render_html_report(
     kpi_cards = (
         "".join(
             f"<div class='kpi'><div class='kpi-label'>{html.escape(str(k))}</div>"
-            f"<div class='kpi-value'>{html.escape(str(v))}</div></div>"
+            f"<div class='kpi-value'>{html.escape(_kpi_value(k, v))}</div></div>"
             for k, v in kpis.items()
         )
         or "<p class='muted'>KPIs appear after RFM scoring.</p>"
@@ -618,7 +688,8 @@ def render_html_report(
         items = report_narrative.section_insights(context, section)
         return "".join(
             "<div class='insight'><strong>"
-            f"{html.escape(item.title)}</strong> <span>{html.escape(item.detail)}</span></div>"
+            f"{html.escape(_title_sentence(item.title))}</strong> "
+            f"<span>{html.escape(item.detail)}</span></div>"
             for item in items
         )
 
@@ -626,17 +697,18 @@ def render_html_report(
     if "summary" in sections:
         insights_html = "".join(
             "<div class='insight'><strong>"
-            f"{html.escape(item.title)}</strong> <span>{html.escape(item.detail)}</span></div>"
+            f"{html.escape(_title_sentence(item.title))}</strong> "
+            f"<span>{html.escape(item.detail)}</span></div>"
             for item in report_narrative.summary_insights(context)
         )
         built.append(
-            "<section><h2>1 · Executive summary</h2>"
+            f"<section><h2>{_section_heading('summary', 'Executive summary')}</h2>"
             f"<div class='kpi-row'>{kpi_cards}</div>"
             f"{insights_html}</section>"
         )
     if "overview" in sections:
         built.append(
-            "<section><h2>2 · Business &amp; customer trends</h2>"
+            f"<section><h2>{_section_heading('overview', 'Business &amp; customer trends')}</h2>"
             f"{_insights('overview')}"
             f"{_fig('revenue_trend')}{_explain('revenue_trend')}"
             f"{_fig('activity_trend')}{_explain('activity_trend')}"
@@ -644,7 +716,7 @@ def render_html_report(
         )
     if "segments" in sections:
         built.append(
-            "<section><h2>3 · Segments produced</h2>"
+            f"<section><h2>{_section_heading('segments', 'Segments produced')}</h2>"
             f"{_insights('segments')}"
             f"{_fig('segment_distribution')}{_explain('segment_distribution')}"
             f"{_fig('revenue_by_segment')}{_explain('revenue_by_segment')}"
@@ -664,36 +736,18 @@ def render_html_report(
                 "cutoff (leakage-safe by construction).</p>"
             )
         built.append(
-            "<section><h2>4 · Churn risk calculated</h2>"
+            f"<section><h2>{_section_heading('churn', 'Churn risk calculated')}</h2>"
             f"{model_line}{_insights('churn')}"
             f"{_fig('risk_bands')}{_explain('risk_bands')}</section>"
         )
     if "retention" in sections:
         built.append(
-            "<section><h2>5 · Retention strategies covered</h2>"
+            f"<section><h2>{_section_heading('retention', 'Retention strategies covered')}</h2>"
             f"{_insights('retention')}"
             f"{_fig('value_risk_matrix')}{_explain('value_risk_matrix')}"
             f"{_fig('revenue_at_risk')}{_explain('revenue_at_risk')}"
             f"{_fig('strategy_distribution')}{_explain('strategy_distribution')}"
             f"{_fig('priority_histogram')}{_explain('priority_histogram')}</section>"
-        )
-    if "recommendations" in sections:
-        recs = report_narrative.recommendations(context)
-        rec_html = (
-            "".join(
-                f"<div class='rec'><span class='pill'>{html.escape(r.priority)}</span> "
-                f"<strong>{html.escape(r.title)}</strong>"
-                f"<div class='muted'>{html.escape(r.rationale)}</div>"
-                f"<div class='evidence'>{html.escape(r.evidence)}</div></div>"
-                for r in recs
-            )
-            or "<p class='muted'>Recommendations appear once retention results exist.</p>"
-        )
-        built.append(
-            "<section><h2>6 · Recommendations &amp; next steps</h2>"
-            f"{rec_html}"
-            "<p class='muted'>Priority order is decision support over the computed results; it "
-            "does not claim causal impact.</p></section>"
         )
     if "appendix" in sections:
         ready = ", ".join(f"{k}: {'yes' if v else 'pending'}" for k, v in readiness.items())
@@ -708,7 +762,7 @@ def render_html_report(
             or "<li>No cleaning treatments recorded for this dataset.</li>"
         )
         built.append(
-            "<section><h2>7 · Appendix — data &amp; method</h2>"
+            f"<section><h2>{_section_heading('appendix', 'Appendix — data &amp; method')}</h2>"
             f"{_insights('appendix')}"
             f"<p>Source: <strong>{html.escape(str(profile.get('source_filename', '–')))}</strong> · "
             f"{int(profile.get('rows', 0)):,} clean rows × {int(profile.get('columns', 0))} columns · "
@@ -720,6 +774,37 @@ def render_html_report(
             "are arbitrary until profiled against population medians.</p>"
             f"<p class='muted'>Coverage — {html.escape(ready)}. {html.escape(masked_note)}</p>"
             f"{tables_html}</section>"
+        )
+    if "recommendations" in sections:
+        recs = report_narrative.recommendations(context)
+        recap = _closing_insights(context, sections)
+        recap_html = (
+            "".join(
+                "<div class='insight'><strong>"
+                f"{html.escape(_title_sentence(item.title))}</strong> "
+                f"<span>{html.escape(item.detail)}</span></div>"
+                for item in recap
+            )
+            or "<p class='muted'>Section interpretations appear as the upstream results arrive.</p>"
+        )
+        rec_html = (
+            "".join(
+                f"<div class='rec'><span class='pill'>{html.escape(r.priority)}</span> "
+                f"<strong>{html.escape(_title_sentence(r.title))}</strong>"
+                f"<div class='muted'>{html.escape(r.rationale)}</div>"
+                f"<div class='evidence'>{html.escape(r.evidence)}</div></div>"
+                for r in recs
+            )
+            or "<p class='muted'>Recommendations appear once retention results exist.</p>"
+        )
+        built.append(
+            f"<section><h2>{_section_heading('recommendations', 'Recommendations &amp; next steps')}</h2>"
+            "<h3>Interpretations at a glance</h3>"
+            f"{recap_html}"
+            "<h3>Prioritized actions</h3>"
+            f"{rec_html}"
+            "<p class='muted'>Priority order is decision support over the computed results; it "
+            "does not claim causal impact.</p></section>"
         )
     body = "\n".join(built)
 
@@ -750,27 +835,121 @@ Historical monetary value is a value proxy, never CLV. Retention reasons never c
 </body></html>"""
 
 
-def build_pdf_bytes(context: dict[str, Any], mask_ids: bool = True) -> bytes:
-    """Print-ready PDF with KPIs, narratives, and tables (reportlab).
+#: Registered (body, bold) font names for the PDF story, cached per process.
+_PDF_FONTS: dict[str, tuple[str, str]] = {}
 
-    Charts are intentionally tabular in PDF: Plotly interactivity lives in the
-    HTML export, and image rendering would need the optional kaleido package.
+
+def _pdf_fonts() -> tuple[str, str]:
+    """(body, bold) font names for PDF paragraphs.
+
+    DejaVu (shipped with matplotlib) carries the currency symbol and arrows the
+    report uses; Helvetica is the fallback when the font files are unavailable.
+    """
+    if "fonts" in _PDF_FONTS:
+        return _PDF_FONTS["fonts"]
+    body, bold = "Helvetica", "Helvetica-Bold"
+    try:
+        from pathlib import Path
+
+        import matplotlib
+        from reportlab.pdfbase import pdfmetrics
+        from reportlab.pdfbase.ttfonts import TTFont
+
+        font_dir = Path(matplotlib.get_data_path()) / "fonts" / "ttf"
+        regular, strong = font_dir / "DejaVuSans.ttf", font_dir / "DejaVuSans-Bold.ttf"
+        if regular.exists() and strong.exists():
+            registered = set(pdfmetrics.getRegisteredFontNames())
+            if "ReportBody" not in registered:
+                pdfmetrics.registerFont(TTFont("ReportBody", str(regular)))
+            if "ReportBold" not in registered:
+                pdfmetrics.registerFont(TTFont("ReportBold", str(strong)))
+            body, bold = "ReportBody", "ReportBold"
+    except Exception:  # noqa: BLE001 - fonts are cosmetic; exports must never fail on them
+        body, bold = "Helvetica", "Helvetica-Bold"
+    _PDF_FONTS["fonts"] = (body, bold)
+    return body, bold
+
+
+def _pdf_styles() -> Any:
+    """Sample stylesheet rewired to the report fonts and print sizes."""
+    from reportlab.lib.styles import getSampleStyleSheet
+
+    styles = getSampleStyleSheet()
+    body, bold = _pdf_fonts()
+    styles["Title"].fontName = bold
+    styles["Title"].fontSize = 20
+    styles["Title"].leading = 24
+    for name, size, before, after in (
+        ("Heading2", 13, 14, 6),
+        ("Heading3", 10, 8, 3),
+    ):
+        styles[name].fontName = bold
+        styles[name].fontSize = size
+        styles[name].spaceBefore = before
+        styles[name].spaceAfter = after
+    for name in ("Normal", "Italic"):
+        styles[name].fontName = body
+        styles[name].fontSize = 8.8
+        styles[name].leading = 11.8
+    return styles
+
+
+def build_pdf_bytes(
+    context: dict[str, Any],
+    mask_ids: bool = True,
+    sections: tuple[str, ...] = REPORT_SECTIONS,
+    chart_images: Mapping[str, bytes] | None = None,
+) -> bytes:
+    """Print-ready PDF with KPIs, narratives, embedded charts, and tables.
+
+    Charts are rendered to PNG from the same context tables the live page uses
+    and placed next to their reading guide; a missing engine or a sparse table
+    leaves that figure as a short note instead of failing the export. The
+    document closes with the interpretation recap and prioritized actions.
     """
     try:
+        from reportlab.lib import colors
         from reportlab.lib.pagesizes import A4
-        from reportlab.lib.styles import getSampleStyleSheet
+        from reportlab.lib.styles import ParagraphStyle
         from reportlab.lib.units import cm
-        from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+        from reportlab.lib.utils import ImageReader
+        from reportlab.platypus import Image as RLImage
+        from reportlab.platypus import (
+            KeepTogether,
+            Paragraph,
+            SimpleDocTemplate,
+            Spacer,
+            Table,
+            TableStyle,
+        )
     except ImportError as exc:
         raise CustomerIntelligenceError(
             "PDF export needs the 'reportlab' package. Install it with "
             "'pip install reportlab' and try again."
         ) from exc
-    from reportlab.lib import colors
 
+    charts = (
+        dict(chart_images)
+        if chart_images is not None
+        else report_charts.render_report_charts(context)
+    )
+    chart_note = report_charts.available_chart_engine()
     buffer = BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=A4, topMargin=1.5 * cm, bottomMargin=1.5 * cm)
-    styles = getSampleStyleSheet()
+    margin = 1.5 * cm
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        topMargin=margin,
+        bottomMargin=margin,
+        leftMargin=margin,
+        rightMargin=margin,
+    )
+    content_width = A4[0] - 2 * margin
+    styles = _pdf_styles()
+    cell_style = ParagraphStyle("ReportCell", parent=styles["Normal"], fontSize=6.5, leading=8)
+    head_style = ParagraphStyle(
+        "ReportHead", parent=cell_style, fontName=_pdf_fonts()[1], fontSize=6.8, leading=8.4
+    )
     story: list[Any] = [
         Paragraph("Customer Intelligence Report", styles["Title"]),
         Paragraph(
@@ -781,103 +960,407 @@ def build_pdf_bytes(context: dict[str, Any], mask_ids: bool = True) -> bytes:
         Spacer(1, 12),
     ]
 
-    def _table(frame: pd.DataFrame, title: str, max_rows: int = 25) -> None:
-        story.append(Paragraph(title, styles["Heading2"]))
+    def _insight(item: report_narrative.Insight) -> None:
+        story.append(
+            Paragraph(
+                f"<b>{html.escape(_title_sentence(item.title))}</b> " f"{html.escape(item.detail)}",
+                styles["Normal"],
+            )
+        )
+        story.append(Spacer(1, 3))
+
+    def _table(frame: pd.DataFrame, title: str, max_rows: int = 25, level: int = 2) -> None:
+        story.append(Paragraph(title, styles["Heading2" if level == 2 else "Heading3"]))
         if frame.empty:
             story.append(Paragraph("No data for this section yet.", styles["Normal"]))
             return
         view = frame.head(max_rows).astype(str)
-        data = [list(view.columns)] + view.values.tolist()
-        table = Table(data, repeatRows=1)
+        width = content_width / max(len(view.columns), 1)
+        data = [
+            [Paragraph(html.escape(str(name)), head_style) for name in view.columns],
+            *[
+                [Paragraph(html.escape(value), cell_style) for value in row]
+                for row in view.itertuples(index=False)
+            ],
+        ]
+        table = Table(data, colWidths=[width] * len(view.columns), repeatRows=1)
         table.setStyle(
             TableStyle(
                 [
                     ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#f1f5f9")),
                     ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e1")),
-                    ("FONTSIZE", (0, 0), (-1, -1), 7),
+                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                    ("LEFTPADDING", (0, 0), (-1, -1), 3),
+                    ("RIGHTPADDING", (0, 0), (-1, -1), 3),
                 ]
             )
         )
         story.append(table)
         story.append(Spacer(1, 8))
 
+    def _chart(key: str) -> None:
+        exp = CHART_EXPLANATIONS.get(key, {})
+        block: list[Any] = [Paragraph(html.escape(exp.get("title", key)), styles["Heading3"])]
+        png = charts.get(key)
+        if png:
+            reader = ImageReader(BytesIO(png))
+            pixel_width, pixel_height = reader.getSize()
+            block.append(
+                RLImage(
+                    BytesIO(png),
+                    width=content_width,
+                    height=content_width * pixel_height / max(pixel_width, 1),
+                )
+            )
+        else:
+            block.append(
+                Paragraph(
+                    chart_note
+                    or "Chart image unavailable — the source table had no rows " "for this figure.",
+                    styles["Italic"],
+                )
+            )
+        if exp:
+            block.append(
+                Paragraph(
+                    f"<b>What it shows.</b> {html.escape(exp.get('what', ''))} "
+                    f"<b>How to read it.</b> {html.escape(exp.get('how_to_read', ''))} "
+                    f"<b>What to do.</b> {html.escape(exp.get('action', ''))}",
+                    styles["Normal"],
+                )
+            )
+        block.append(Spacer(1, 8))
+        story.append(KeepTogether(block))
+
     kpis = context.get("kpis") or {}
-    if kpis:
-        _table(pd.DataFrame([{"metric": k, "value": v} for k, v in kpis.items()]), "KPIs")
-
-    story.append(Paragraph("Executive summary", styles["Heading2"]))
-    for item in report_narrative.summary_insights(context):
+    if "summary" in sections:
         story.append(
-            Paragraph(
-                f"<strong>{html.escape(item.title)}</strong> {html.escape(item.detail)}",
-                styles["Normal"],
-            )
+            Paragraph(_section_heading("summary", "Executive summary"), styles["Heading2"])
         )
-        story.append(Spacer(1, 3))
-
-    for section, title, keys in (
-        (
-            "overview",
-            "Business & customer trends",
-            ("revenue_trend", "activity_trend", "new_returning"),
-        ),
-        (
-            "segments",
-            "Segments & demographics",
-            (
-                "segment_distribution",
-                "revenue_by_segment",
-                "segment_trends",
-                "demographics_age",
-                "demographics_gender",
-                "demographics_region",
-            ),
-        ),
-        ("churn", "Churn risk", ("risk_bands",)),
-        (
-            "retention",
-            "Retention plan",
-            ("value_risk_matrix", "revenue_at_risk", "strategy_distribution", "priority_histogram"),
-        ),
-    ):
-        story.append(Paragraph(title, styles["Heading2"]))
-        for item in report_narrative.section_insights(context, section):
-            story.append(
-                Paragraph(
-                    f"<strong>{html.escape(item.title)}</strong> {html.escape(item.detail)}",
-                    styles["Normal"],
-                )
+        if kpis:
+            _table(
+                pd.DataFrame(
+                    [
+                        {"Metric": key, "Value": _kpi_value(key, value)}
+                        for key, value in kpis.items()
+                    ]
+                ),
+                "Key metrics",
+                level=3,
             )
-            story.append(Spacer(1, 3))
-        for key in keys:
-            exp = CHART_EXPLANATIONS.get(key, {})
-            story.append(Paragraph(exp.get("title", key), styles["Heading3"]))
-            story.append(
-                Paragraph(
-                    f"{exp.get('what', '')} How to read: {exp.get('how_to_read', '')} "
-                    f"What to do: {exp.get('action', '')}",
-                    styles["Normal"],
-                )
-            )
-            story.append(Spacer(1, 6))
+        for item in report_narrative.summary_insights(context):
+            _insight(item)
 
-    recs = report_narrative.recommendations(context)
-    if recs:
-        story.append(Paragraph("Recommendations & next steps", styles["Heading2"]))
-        for rec in recs:
+    for section in ANALYTICAL_SECTIONS:
+        if section not in sections:
+            continue
+        story.append(
+            Paragraph(_section_heading(section, SECTION_LABELS[section]), styles["Heading2"])
+        )
+        metadata = context.get("churn_metadata") or {}
+        if section == "churn" and metadata:
             story.append(
                 Paragraph(
-                    f"<strong>{html.escape(rec.priority)} — {html.escape(rec.title)}</strong> "
-                    f"{html.escape(rec.rationale)} <i>{html.escape(rec.evidence)}</i>",
+                    f"Model <b>{html.escape(str(metadata.get('model', '–')))}</b> · threshold "
+                    f"{html.escape(str(metadata.get('threshold', '–')))} · cutoff "
+                    f"{html.escape(str(metadata.get('cutoff', '–')))}. Predictors use transactions "
+                    "on or before the cutoff only; the label is activity after it — leakage-safe "
+                    "by construction.",
                     styles["Normal"],
                 )
             )
             story.append(Spacer(1, 4))
+        for item in report_narrative.section_insights(context, section):
+            _insight(item)
+        for key in SECTION_CHARTS[section]:
+            _chart(key)
 
-    for sheet, frame in context_tables(context, mask_ids=mask_ids).items():
-        _table(frame, f"Table — {sheet}")
+    if "appendix" in sections:
+        profile = context.get("data_profile") or {}
+        treatments = context.get("treatments") or []
+        story.append(
+            Paragraph(_section_heading("appendix", "Appendix — data & method"), styles["Heading2"])
+        )
+        for item in report_narrative.section_insights(context, "appendix"):
+            _insight(item)
+        story.append(
+            Paragraph(
+                f"Source <b>{html.escape(str(profile.get('source_filename', '–')))}</b> · "
+                f"{int(profile.get('rows', 0)):,} clean rows × {int(profile.get('columns', 0))} "
+                f"columns · {int(profile.get('customers', 0)):,} customers · "
+                f"{float(profile.get('missing_pct', 0)):.2f}% cells missing.",
+                styles["Normal"],
+            )
+        )
+        story.append(Spacer(1, 4))
+        story.append(Paragraph("Cleaning treatments", styles["Heading3"]))
+        if treatments:
+            for treatment in treatments:
+                story.append(
+                    Paragraph(
+                        f"• {html.escape(str(treatment['treatment']))}: "
+                        f"{html.escape(str(treatment['action']))} "
+                        f"({int(treatment['records_affected']):,} records)",
+                        styles["Normal"],
+                    )
+                )
+        else:
+            story.append(
+                Paragraph("No cleaning treatments recorded for this dataset.", styles["Normal"])
+            )
+        story.append(Spacer(1, 4))
+        story.append(
+            Paragraph(
+                "Method: churn is leakage-safe by construction (predictors ≤ cutoff, label from "
+                "the outcome window; cohort-ordered splits). RFM = 100R+10F+M; cluster IDs are "
+                "arbitrary until profiled against population medians.",
+                styles["Normal"],
+            )
+        )
+        story.append(
+            Paragraph(
+                (
+                    "Customer IDs are masked in this report."
+                    if mask_ids
+                    else "Customer IDs are shown in full (authorized export)."
+                ),
+                styles["Normal"],
+            )
+        )
+        for sheet, frame in context_tables(context, mask_ids=mask_ids).items():
+            _table(frame, f"Table — {sheet}", level=3)
+
+    if "recommendations" in sections:
+        recap = _closing_insights(context, sections)
+        recs = report_narrative.recommendations(context)
+        story.append(
+            Paragraph(
+                _section_heading("recommendations", "Recommendations & next steps"),
+                styles["Heading2"],
+            )
+        )
+        story.append(Paragraph("Interpretations at a glance", styles["Heading3"]))
+        if recap:
+            for item in recap:
+                _insight(item)
+        else:
+            story.append(
+                Paragraph(
+                    "Section interpretations appear as the upstream results arrive.",
+                    styles["Normal"],
+                )
+            )
+        story.append(Paragraph("Prioritized actions", styles["Heading3"]))
+        if recs:
+            for rec in recs:
+                story.append(
+                    Paragraph(
+                        f"<b>{html.escape(rec.priority)} — "
+                        f"{html.escape(_title_sentence(rec.title))}</b> "
+                        f"{html.escape(rec.rationale)} <i>{html.escape(rec.evidence)}</i>",
+                        styles["Normal"],
+                    )
+                )
+                story.append(Spacer(1, 4))
+        else:
+            story.append(
+                Paragraph("Recommendations appear once retention results exist.", styles["Normal"])
+            )
+        story.append(
+            Paragraph(
+                "Priority order is decision support over the computed results; it does not claim "
+                "causal impact.",
+                styles["Italic"],
+            )
+        )
 
     doc.build(story)
+    return buffer.getvalue()
+
+
+def build_docx_bytes(
+    context: dict[str, Any],
+    mask_ids: bool = True,
+    sections: tuple[str, ...] = REPORT_SECTIONS,
+    chart_images: Mapping[str, bytes] | None = None,
+) -> bytes:
+    """Editable Word report with the same sections, charts, and narrative as PDF.
+
+    Charts are embedded as PNG images so the .docx opens with graphs on any
+    machine; ``python-docx`` is optional and raises install guidance when absent.
+    """
+    try:
+        from docx import Document
+        from docx.shared import Inches, Pt
+    except ImportError as exc:
+        raise CustomerIntelligenceError(
+            "Word export needs the 'python-docx' package. Install it with "
+            "'pip install python-docx' and try again."
+        ) from exc
+
+    charts = (
+        dict(chart_images)
+        if chart_images is not None
+        else report_charts.render_report_charts(context)
+    )
+    chart_note = report_charts.available_chart_engine()
+    document = Document()
+    document.styles["Normal"].font.size = Pt(9.5)
+    document.styles["Normal"].font.name = "Calibri"
+    document.add_heading("Customer Intelligence Report", level=0)
+    meta = document.add_paragraph()
+    meta.add_run(
+        f"Generated {context.get('generated_at', '')}. Historical value is a proxy, never CLV. "
+        "Actions are decision support only."
+    ).italic = True
+    meta.add_run(
+        " Customer IDs are masked in this report."
+        if mask_ids
+        else " Customer IDs are shown in full (authorized export)."
+    ).italic = True
+
+    def _insight(item: report_narrative.Insight) -> None:
+        paragraph = document.add_paragraph()
+        paragraph.add_run(_title_sentence(item.title)).bold = True
+        paragraph.add_run(f" {item.detail}")
+
+    def _table(frame: pd.DataFrame, title: str, max_rows: int = 25, level: int = 2) -> None:
+        document.add_heading(title, level=level)
+        if frame.empty:
+            document.add_paragraph("No data for this section yet.")
+            return
+        view = frame.head(max_rows).astype(str)
+        table = document.add_table(rows=1, cols=len(view.columns))
+        table.style = "Table Grid"
+        header = table.rows[0].cells
+        for cell, name in zip(header, view.columns, strict=True):
+            cell.text = str(name)
+            for run in cell.paragraphs[0].runs:
+                run.bold = True
+                run.font.size = Pt(7.5)
+        for record in view.itertuples(index=False):
+            cells = table.add_row().cells
+            for cell, value in zip(cells, record, strict=True):
+                cell.text = str(value)
+                for paragraph in cell.paragraphs:
+                    for run in paragraph.runs:
+                        run.font.size = Pt(7.5)
+        document.add_paragraph()
+
+    def _chart(key: str) -> None:
+        exp = CHART_EXPLANATIONS.get(key, {})
+        document.add_heading(exp.get("title", key), level=2)
+        png = charts.get(key)
+        if png:
+            document.add_picture(BytesIO(png), width=Inches(6.1))
+        else:
+            document.add_paragraph(
+                chart_note
+                or "Chart image unavailable — the source table had no rows for this figure."
+            ).italic = True
+        if exp:
+            caption = document.add_paragraph()
+            caption.add_run("What it shows. ").bold = True
+            caption.add_run(exp.get("what", ""))
+            caption.add_run(" How to read it. ").bold = True
+            caption.add_run(exp.get("how_to_read", ""))
+            caption.add_run(" What to do. ").bold = True
+            caption.add_run(exp.get("action", ""))
+            for run in caption.runs:
+                run.italic = True
+                run.font.size = Pt(8.5)
+
+    if "summary" in sections:
+        document.add_heading(_section_heading("summary", "Executive summary"), level=1)
+        kpis = context.get("kpis") or {}
+        if kpis:
+            _table(
+                pd.DataFrame(
+                    [
+                        {"Metric": key, "Value": _kpi_value(key, value)}
+                        for key, value in kpis.items()
+                    ]
+                ),
+                "Key metrics",
+                level=3,
+            )
+        for item in report_narrative.summary_insights(context):
+            _insight(item)
+
+    for section in ANALYTICAL_SECTIONS:
+        if section not in sections:
+            continue
+        document.add_heading(_section_heading(section, SECTION_LABELS[section]), level=1)
+        metadata = context.get("churn_metadata") or {}
+        if section == "churn" and metadata:
+            document.add_paragraph(
+                f"Model {metadata.get('model', '–')} · threshold {metadata.get('threshold', '–')} · "
+                f"cutoff {metadata.get('cutoff', '–')}. Predictors use transactions on or before "
+                "the cutoff only; the label is activity after it — leakage-safe by construction."
+            ).italic = True
+        for item in report_narrative.section_insights(context, section):
+            _insight(item)
+        for key in SECTION_CHARTS[section]:
+            _chart(key)
+
+    if "appendix" in sections:
+        profile = context.get("data_profile") or {}
+        treatments = context.get("treatments") or []
+        document.add_heading(_section_heading("appendix", "Appendix — data & method"), level=1)
+        for item in report_narrative.section_insights(context, "appendix"):
+            _insight(item)
+        document.add_paragraph(
+            f"Source {profile.get('source_filename', '–')} · "
+            f"{int(profile.get('rows', 0)):,} clean rows × {int(profile.get('columns', 0))} "
+            f"columns · {int(profile.get('customers', 0)):,} customers · "
+            f"{float(profile.get('missing_pct', 0)):.2f}% cells missing."
+        )
+        document.add_heading("Cleaning treatments", level=2)
+        if treatments:
+            for treatment in treatments:
+                document.add_paragraph(
+                    f"{treatment['treatment']}: {treatment['action']} "
+                    f"({int(treatment['records_affected']):,} records)",
+                    style="List Bullet",
+                )
+        else:
+            document.add_paragraph("No cleaning treatments recorded for this dataset.")
+        document.add_paragraph(
+            "Method: churn is leakage-safe by construction (predictors ≤ cutoff, label from the "
+            "outcome window; cohort-ordered splits). RFM = 100R+10F+M; cluster IDs are arbitrary "
+            "until profiled against population medians."
+        ).italic = True
+        for sheet, frame in context_tables(context, mask_ids=mask_ids).items():
+            _table(frame, f"Table — {sheet}", level=3)
+
+    if "recommendations" in sections:
+        recap = _closing_insights(context, sections)
+        recs = report_narrative.recommendations(context)
+        document.add_heading(
+            _section_heading("recommendations", "Recommendations & next steps"), level=1
+        )
+        document.add_heading("Interpretations at a glance", level=2)
+        if recap:
+            for item in recap:
+                _insight(item)
+        else:
+            document.add_paragraph("Section interpretations appear as the upstream results arrive.")
+        document.add_heading("Prioritized actions", level=2)
+        if recs:
+            for rec in recs:
+                paragraph = document.add_paragraph()
+                paragraph.add_run(f"{rec.priority} — {_title_sentence(rec.title)}").bold = True
+                paragraph.add_run(f" {rec.rationale} ")
+                paragraph.add_run(rec.evidence).italic = True
+        else:
+            document.add_paragraph("Recommendations appear once retention results exist.")
+        document.add_paragraph(
+            "Priority order is decision support over the computed results; it does not claim "
+            "causal impact."
+        ).italic = True
+
+    buffer = BytesIO()
+    document.save(buffer)
     return buffer.getvalue()
 
 
@@ -888,6 +1371,23 @@ def available_pdf_engine() -> str | None:
     except ImportError:
         return "PDF export needs the 'reportlab' package. Install it with 'pip install reportlab'."
     return None
+
+
+def available_docx_engine() -> str | None:
+    """None when python-docx is installed, else an install-guidance message."""
+    try:
+        import docx  # noqa: F401
+    except ImportError:
+        return (
+            "Word export needs the 'python-docx' package. Install it with "
+            "'pip install python-docx'."
+        )
+    return None
+
+
+def available_chart_engine() -> str | None:
+    """None when chart images can be rendered, else an install-guidance message."""
+    return report_charts.available_chart_engine()
 
 
 def report_readiness_lines(context: dict[str, Any]) -> list[tuple[str, bool, str]]:
@@ -915,10 +1415,15 @@ def report_readiness_lines(context: dict[str, Any]) -> list[tuple[str, bool, str
 
 
 __all__ = [
+    "ANALYTICAL_SECTIONS",
     "CHART_EXPLANATIONS",
     "REPORT_SECTIONS",
+    "SECTION_CHARTS",
     "SECTION_LABELS",
+    "available_chart_engine",
+    "available_docx_engine",
     "available_pdf_engine",
+    "build_docx_bytes",
     "build_pdf_bytes",
     "build_report_context",
     "context_tables",

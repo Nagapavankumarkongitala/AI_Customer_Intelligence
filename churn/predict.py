@@ -13,6 +13,7 @@ import numpy as np
 import pandas as pd
 
 from churn.explainability import (
+    ShapBudgetExceeded,
     customer_risk_drivers,
     shap_values,
 )
@@ -50,7 +51,7 @@ def score_customers(
     try:
         shap_frame = shap_values(pipeline, X)
         use_shap = True
-    except ImportError:
+    except (ImportError, ShapBudgetExceeded):
         shap_frame = None
         use_shap = False
     # shap_values caps rows for interactive latency; rows beyond the cap fall

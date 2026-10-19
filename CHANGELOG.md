@@ -1,5 +1,53 @@
 # CHANGELOG
 
+## 2026-10-19 — Changed: "Customer segments over time" is now lines + a transition Sankey
+- Changed: the dashboard's **Customer segments over time** card (and page 03's Trends
+  tab) is a two-column row instead of one full-width stacked area. The left column
+  draws one line per segment (`segment_trend_lines`, now page 03's default view); the
+  right column draws a multi-stage Sankey of customer moves between consecutive
+  quarters (`segment_transition_sankey` in `visualization/rfm_charts.py`).
+- Added: `run_segment_trends` in `services/feature_service.py` returns the usual
+  period counts **and** customer-level transitions from the same leakage-safe
+  scoring pass (period snapshots see only transactions up to their date). Only
+  customers present at both ends of a pair become flows, so Sankey widths are real
+  moves, never inferred from aggregate counts. `run_segment_history` is now a thin
+  wrapper over it.
+- Changed: the page 03 build button stores both frames in `segment_history`; the
+  default-run bootstrap writes `segment_transitions.parquet` and reloads it, and the
+  cache version moved to 4. Existing histories without transitions fall back to a
+  "rebuild segment trends" note.
+- Added: `components/segment_trends.py` — the shared two-column composition (equal
+  heights, empty-state guidance, and the honesty caption that leaves between-snapshot
+  joiners/leavers out of the flows).
+
+## 2026-10-19 — Added: charts inside PDF/Word exports, Word download, closing interpretations + recommendations
+- Added: `services/report_charts.py` — a static chart renderer for the export
+  formats that cannot carry Plotly markup. It re-draws the same report charts from
+  the same context tables (revenue/activity/cohort trends, segment distribution and
+  revenue, segment trends, demographics, risk bands, value–risk matrix, revenue at
+  risk, strategy mix, priority histogram) with matplotlib and returns PNG bytes keyed
+  like `CHART_EXPLANATIONS`. Matplotlib stays optional: a missing engine leaves a
+  plain note per figure instead of failing the export. `requirements.txt` now lists
+  `matplotlib` and `python-docx`.
+- Added: `build_docx_bytes` and `available_docx_engine` in
+  `services/report_service.py` — a real `.docx` with the same sections, KPI table,
+  interpretations, embedded chart images with their reading guide, appendix tables,
+  and the closing recap. Page 09 gained a **Download report (Word)** button.
+- Changed: `build_pdf_bytes` now embeds the chart images (previously text-only) next
+  to each chart's "what it shows / how to read / what to do" guide, keeps each figure
+  block on one page, registers a Unicode font (DejaVu via matplotlib) for currency
+  symbols, and honours the page's selected sections. KPI values in the HTML/PDF/Word
+  exports are formatted (percent, money, whole counts) instead of raw floats.
+- Changed: `REPORT_SECTIONS` now ends with **Recommendations & next steps**, after
+  the appendix. That closing section now opens with **Interpretations at a glance**
+  (a recap of every selected section's insight) and then **Prioritized actions**, so
+  HTML, PDF, Word, and the on-page report all finish with the "so what".
+  Section headings are numbered from `REPORT_SECTIONS` instead of hard-coded, and
+  `SECTION_CHARTS` is the single chart-per-section map shared by all exports.
+- New tests: chart-registry coverage, PNG rendering, PDF image embedding, Word
+  media + closing-section order, and HTML closing order in
+  `tests/test_report_service.py`.
+
 ## 2026-10-19 — Reworked: the report page is now a systematic, evidence-linked report
 - Changed: `pages/09_Report_Generator.py` mirrors the executive dashboard tab by tab
   instead of dropping a handful of charts. Sections are now **Executive summary**,

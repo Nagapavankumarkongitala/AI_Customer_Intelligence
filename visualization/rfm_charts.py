@@ -18,6 +18,15 @@ def _segment_map_or_sequence(values: object) -> dict:
     return {"color_discrete_sequence": PRIMARY_DISCRETE}
 
 
+def _rgba(hex_color: str, alpha: float) -> str:
+    """Translucent form of a palette hex for Sankey links (non-hex passthrough)."""
+    value = str(hex_color).lstrip("#")
+    if len(value) != 6:
+        return str(hex_color)
+    red, green, blue = (int(value[index : index + 2], 16) for index in (0, 2, 4))
+    return f"rgba({red},{green},{blue},{alpha})"
+
+
 @styled
 def segment_distribution_bar(profile: pd.DataFrame, segment_col: str = "segment") -> px.Figure:
     """Customer counts per segment, largest first, in segment hues.
@@ -81,7 +90,9 @@ def segment_share_donut(profile: pd.DataFrame, segment_col: str = "segment") -> 
     """Customer share per segment as a donut, in segment hues.
 
     Slices under a few percent stay thin but legible through hover values;
-    the hole centers the total customer count.
+    the hole centers the total customer count. Segment names ride on the
+    slices themselves so the figure stays legible even when a ten-entry
+    legend would otherwise wrap and squeeze the ring into slivers.
     """
     if profile.empty:
         return empty_figure("Customers per segment")
@@ -96,7 +107,11 @@ def segment_share_donut(profile: pd.DataFrame, segment_col: str = "segment") -> 
         title="Customers per segment",
         labels={col: "Segment", "customers": "Customers"},
     )
-    fig.update_traces(textinfo="percent")
+    # Names ride on the slices and the legend is suppressed: with ten long
+    # segment names a side/top legend wraps across the compact card and
+    # squeezes the ring into unreadable slivers.
+    fig.update_traces(textinfo="label+percent")
+    fig.update_layout(showlegend=False)
     total = int(profile["customers"].sum())
     fig.add_annotation(
         x=0.5,
@@ -148,6 +163,48 @@ def rfm_scatter_matrix(
     )
 
 
+@styled(height=480)
+def rfm_scatter_3d(
+    features: pd.DataFrame, color_col: str = "segment", max_points: int = 2000
+) -> go.Figure:
+    """Recency × frequency × monetary value as a 3D scatter, colored by segment.
+
+    Alternative to the scatter matrix: all three axes in one rotatable view, so
+    value concentration across R/F/M reads as a spatial cluster instead of three
+    pairwise panels. Points are a deterministic sample past ``max_points`` so
+    large frames stay interactive.
+    """
+    dims = [c for c in ("recency_days", "frequency", "monetary_value") if c in features.columns]
+    if features.empty or not dims or len(dims) < 3:
+        return empty_figure("RFM relationships (3D)")
+    data = features.copy()
+    if len(data) > max_points:
+        data = data.sample(n=max_points, random_state=42).reset_index(drop=True)
+    color = color_col if color_col in data.columns else None
+    color_kwargs = (
+        _segment_map_or_sequence(data[color])
+        if color
+        else {"color_discrete_sequence": PRIMARY_DISCRETE}
+    )
+    hover = [c for c in ("customer_id",) if c in data.columns] or None
+    return px.scatter_3d(
+        data,
+        x="recency_days",
+        y="frequency",
+        z="monetary_value",
+        color=color,
+        **color_kwargs,
+        hover_data=hover,
+        opacity=0.85,
+        title="RFM relationships (3D)",
+        labels={
+            "recency_days": "Recency (days)",
+            "frequency": "Frequency",
+            "monetary_value": "Monetary value",
+        },
+    )
+
+
 @styled
 def segment_trend_ribbon(history: pd.DataFrame, segment_col: str = "segment") -> px.Figure:
     """Stacked customer counts per segment over periods, in segment hues."""
@@ -163,6 +220,237 @@ def segment_trend_ribbon(history: pd.DataFrame, segment_col: str = "segment") ->
         title="Customer segments over time",
         labels={"period": "Period", "customers": "Customers", col: "Segment"},
     )
+
+
+@styled
+def segment_trend_lines(history: pd.DataFrame, segment_col: str = "segment") -> px.Figure:
+    """One line per segment over periods, in segment hues.
+
+    Alternative to the stacked ribbon: lines keep each cohort's own baseline, so
+    a single segment's rise or fall reads directly instead of being masked by the
+    stack. Best when segment counts are modest; the stacked ribbon stays the
+    default for very many segments.
+    """
+    if history.empty:
+        return empty_figure("Segment trends")
+    col = segment_col if segment_col in history.columns else history.columns[0]
+    return px.line(
+        history,
+        x="period",
+        y="customers",
+        color=col,
+        markers=True,
+        **_segment_map_or_sequence(history[col]),
+        title="Segment trends",
+        labels={"period": "Period", "customers": "Customers", col: "Segment"},
+    )
+
+
+#: Transition Sankey height: taller than a single trend line so eight quarter
+#: columns and their segment bars stay separable.
+TRANSITION_HEIGHT = 460
+
+
+@styled(height=TRANSITION_HEIGHT)
+def segment_transition_sankey(
+    transitions: pd.DataFrame, title: str = "Customer transitions"
+) -> go.Figure:
+    """Customer moves between consecutive period ends, as a multi-stage Sankey.
+
+    ``transitions`` holds one row per (period_from, period_to, segment_from,
+    segment_to, customers). Nodes are (period, segment) pairs; links carry
+    customers who held a label at both ends, so widths are real moves, never
+    inferred from aggregate counts. Interior stage labels are blank: eight
+    quarter columns of repeated names would collide, while the adjacent line
+    chart already names every hue. Stage labels sit under the columns and hover
+    names each move.
+    """
+    columns = ["period_from", "period_to", "segment_from", "segment_to", "customers"]
+    if transitions.empty or not set(columns).issubset(transitions.columns):
+        return empty_figure(title)
+    frame = transitions.loc[transitions["customers"] > 0, columns].copy()
+    if frame.empty:
+        return empty_figure(title)
+    frame["period_from"] = frame["period_from"].astype(str)
+    frame["period_to"] = frame["period_to"].astype(str)
+    periods = sorted(set(frame["period_from"]) | set(frame["period_to"]))
+    totals = pd.concat([frame["segment_from"], frame["segment_to"]]).value_counts()
+    segments = sorted(totals.index, key=lambda name: (-int(totals[name]), str(name)))
+    present = {period: set() for period in periods}
+    for row in frame.itertuples(index=False):
+        present[row.period_from].add(row.segment_from)
+        present[row.period_to].add(row.segment_to)
+    positions = {period: index for index, period in enumerate(periods)}
+    last_stage = len(periods) - 1
+
+    labels: list[str] = []
+    node_x: list[float] = []
+    node_colors: list[str] = []
+    node_hover: list[str] = []
+    index: dict[tuple[str, str], int] = {}
+    for period in periods:
+        for segment in segments:
+            if segment not in present[period]:
+                continue
+            index[(period, segment)] = len(labels)
+            labels.append(segment if period in (periods[0], periods[-1]) else "")
+            node_x.append(positions[period] / last_stage if last_stage else 0.5)
+            node_colors.append(tokens.segment_color(segment))
+            node_hover.append(f"{period} · {segment}")
+
+    source: list[int] = []
+    target: list[int] = []
+    values: list[int] = []
+    link_colors: list[str] = []
+    link_hover: list[str] = []
+    for row in frame.itertuples(index=False):
+        source.append(index[(row.period_from, row.segment_from)])
+        target.append(index[(row.period_to, row.segment_to)])
+        values.append(int(row.customers))
+        link_colors.append(_rgba(tokens.segment_color(row.segment_from), 0.3))
+        link_hover.append(
+            f"{row.segment_from} → {row.segment_to}<br>{row.period_from} → {row.period_to}"
+        )
+
+    fig = go.Figure(
+        go.Sankey(
+            arrangement="snap",
+            node={
+                "label": labels,
+                "x": node_x,
+                "color": node_colors,
+                "pad": 14,
+                "thickness": 14,
+                "line": {"width": 0},
+                "customdata": node_hover,
+                "hovertemplate": "%{customdata}<extra></extra>",
+            },
+            link={
+                "source": source,
+                "target": target,
+                "value": values,
+                "color": link_colors,
+                "customdata": link_hover,
+                "hovertemplate": "%{customdata}<br>%{value:,} customers<extra></extra>",
+            },
+            textfont={"size": 10},
+        )
+    )
+    fig.update_layout(title_text=title)
+    for period in periods:
+        fig.add_annotation(
+            x=positions[period] / last_stage if last_stage else 0.5,
+            y=-0.07,
+            xref="paper",
+            yref="paper",
+            text=period,
+            showarrow=False,
+            yanchor="top",
+            font={"size": 10, "color": tokens.color("muted")},
+        )
+    return fig
+
+
+#: Panels per row in the small-multiples view (four keeps even 12 clusters to
+#: three rows, which is what a 420px grid can show without crushing the panels).
+FACET_COLUMNS = 4
+
+#: Facet grids need more height than a single chart: up to three panel rows.
+FACET_HEIGHT = 420
+
+
+@styled
+def segment_trend_share(history: pd.DataFrame, segment_col: str = "segment") -> px.Figure:
+    """Composition over time: every period re-based to 100% of its own total.
+
+    The stacked area answers "how many"; this answers "what share". It is the
+    more explainable view whenever the base itself grows, because segments rising
+    in absolute terms can still be losing ground — only the normalised view shows
+    which ones are.
+
+    Plotly's ``groupnorm`` does not normalise area traces (verified on 7.1), so
+    the share is computed here, where a test can also see it. The y-axis carries
+    a percent suffix because the shared theme drops axis titles.
+    """
+    if history.empty:
+        return empty_figure("Segment share over time")
+    col = segment_col if segment_col in history.columns else history.columns[0]
+    frame = history.copy()
+    totals = frame.groupby("period", observed=True)["customers"].transform("sum")
+    frame["share"] = 100 * frame["customers"] / totals.where(totals > 0, 1)
+    fig = px.area(
+        frame,
+        x="period",
+        y="share",
+        color=col,
+        **_segment_map_or_sequence(frame[col]),
+        title="Segment share over time",
+        labels={"period": "Period", "share": "Share of base", col: "Segment"},
+    )
+    fig.update_traces(hovertemplate="%{y:.1f}%<extra>%{fullData.name}</extra>")
+    fig.update_yaxes(ticksuffix="%")
+    return fig
+
+
+@styled(height=FACET_HEIGHT)
+def segment_trend_facets(history: pd.DataFrame, segment_col: str = "segment") -> px.Figure:
+    """Small multiples: one panel per segment, each with its own y-axis.
+
+    The most explainable trend view — no segment hides behind another and none is
+    flattened by a bigger neighbour's scale. Panels are titled with the segment
+    name, so the shared legend is redundant and dropped.
+    """
+    if history.empty:
+        return empty_figure("Segment trends (one panel per segment)")
+    col = segment_col if segment_col in history.columns else history.columns[0]
+    fig = px.area(
+        history,
+        x="period",
+        y="customers",
+        color=col,
+        facet_col=col,
+        facet_col_wrap=FACET_COLUMNS,
+        **_segment_map_or_sequence(history[col]),
+        title="Segment trends (one panel per segment)",
+        labels={"period": "Period", "customers": "Customers", col: "Segment"},
+    )
+    fig.for_each_annotation(
+        lambda annotation: annotation.update(text=annotation.text.split("=")[-1])
+    )
+    fig.update_yaxes(matches=None)
+    fig.update_layout(showlegend=False)
+    return fig
+
+
+@styled
+def segment_trend_heatmap(history: pd.DataFrame, segment_col: str = "segment") -> px.Figure:
+    """Period × segment grid: colour reads the count, so growth shows as a band.
+
+    Every period and segment fits at once, and rows are ordered by total size so
+    the segments that matter sit on top. Best for "which segment changed" rather
+    than for reading exact values.
+    """
+    if history.empty:
+        return empty_figure("Segment activity by period")
+    col = segment_col if segment_col in history.columns else history.columns[0]
+    pivot = history.pivot_table(
+        index=col, columns="period", values="customers", aggfunc="sum", fill_value=0
+    )
+    if pivot.empty:
+        return empty_figure("Segment activity by period")
+    pivot = pivot.reindex(pivot.sum(axis=1).sort_values(ascending=False).index)
+    fig = px.imshow(
+        pivot.to_numpy().tolist(),
+        x=[str(period) for period in pivot.columns],
+        y=[str(segment) for segment in pivot.index],
+        color_continuous_scale=tokens.sequential_scale(),
+        text_auto=True,
+        aspect="auto",
+        title="Segment activity by period",
+        labels={"x": "Period", "y": "Segment", "color": "Customers"},
+    )
+    fig.update_traces(textfont_size=10)
+    return fig
 
 
 @styled

@@ -34,7 +34,12 @@ from services.dashboard_service import (
     trend_tables,
 )
 from services.data_dictionary_service import build_dictionary
-from services.feature_service import run_segment_history, segment_profile
+from services.feature_service import (
+    run_segment_history,
+    run_segment_trends,
+    run_segment_trends_with_labels,
+    segment_profile,
+)
 from services.profiling_service import compute_quality
 from services.retention_service import build_retention_table, export_campaign
 
@@ -95,6 +100,24 @@ def cached_run_segment_history(
 ) -> pd.DataFrame:
     """Period × model × segment customer counts for trend ribbons."""
     return run_segment_history(clean_data, granularity=granularity, quantiles=quantiles)
+
+
+@st.cache_data(show_spinner=False)
+def cached_run_segment_trends(
+    clean_data: pd.DataFrame, granularity: str, quantiles: int
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Trend counts and customer transitions from one period-scoring pass."""
+    return run_segment_trends(clean_data, granularity=granularity, quantiles=quantiles)
+
+
+@st.cache_data(show_spinner=False)
+def cached_run_segment_trends_with_labels(
+    clean_data: pd.DataFrame, granularity: str, quantiles: int
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """Counts, transitions, and per-customer period labels from one scoring pass."""
+    return run_segment_trends_with_labels(
+        clean_data, granularity=granularity, quantiles=quantiles
+    )
 
 
 @st.cache_data(show_spinner=False)

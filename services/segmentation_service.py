@@ -14,7 +14,7 @@ from segmentation import (
     hierarchical_segmentation,
     kmeans_segmentation,
 )
-from segmentation.common import require_optional
+from segmentation.common import NOISE_LABEL, require_optional
 from segmentation.evaluation import evaluate_clustering
 from segmentation.segment_naming import propose_names
 from segmentation.segment_profiling import build_cluster_profile
@@ -186,6 +186,20 @@ def train_all_models(
             }
         )
     return runs
+
+
+def labeling_series(run: dict) -> pd.Series:
+    """A saved run as a ``customer_id`` → business segment name series.
+
+    Cluster IDs are arbitrary, so charts should show the run's own names —
+    falling back to the numeric ID, and to "Noise" for the density noise label,
+    when a cluster was never named.
+    """
+    names = {int(k): str(v) for k, v in (run.get("names") or {}).items()}
+    labels = pd.Series(run["labels"], index=list(run["customer_ids"]), name="segment")
+    return labels.map(
+        lambda value: names.get(int(value), "Noise" if int(value) == NOISE_LABEL else str(value))
+    ).rename("segment")
 
 
 def save_segmentation_run(

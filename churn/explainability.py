@@ -14,6 +14,17 @@ from sklearn.inspection import permutation_importance
 N_DRIVERS = 2
 
 
+class ShapBudgetExceeded(RuntimeError):
+    """Exact TreeExplainer work exceeds the safe budget (median drivers instead)."""
+
+
+#: rows × trees × encoded-features ceiling for exact TreeExplainer. Past this
+#: the C extension stalls with zero CPU (observed: 500 rows × 300 trees × ~65
+#: features wedged; 200 × 300 × ~20 returns instantly). Callers fall back to
+#: median-based drivers, which carry the same output schema.
+MAX_TREE_SHAP_WORK = 3_000_000
+
+
 def feature_names_of(pipeline) -> list[str]:
     """Post-preprocessing feature names for a fitted churn pipeline."""
     preprocess = pipeline.named_steps["preprocess"]
@@ -63,7 +74,14 @@ def _shap_explainer(model, background):
     if hasattr(model, "coef_"):
         dense = background.toarray() if hasattr(background, "toarray") else background
         return shap.LinearExplainer(model, dense), dense
-    return shap.TreeExplainer(model), background
+    # TreeExplainer validates inputs with np.isnan, which rejects sparse and
+    # object-dtype matrices. The churn preprocessor emits sparse output once
+    # one-hot cardinality pushes density below the ColumnTransformer threshold
+    # (real geo data always does), so densify here like the linear path.
+    dense = background.toarray() if hasattr(background, "toarray") else np.asarray(background)
+    if not np.issubdtype(dense.dtype, np.number):
+        dense = dense.astype(float)
+    return shap.TreeExplainer(model), dense
 
 
 def shap_values(pipeline, X: pd.DataFrame, max_rows: int = 500) -> pd.DataFrame:
@@ -77,7 +95,16 @@ def shap_values(pipeline, X: pd.DataFrame, max_rows: int = 500) -> pd.DataFrame:
         ) from exc
     sample = X.head(max_rows)
     transformed = pipeline.named_steps["preprocess"].transform(sample)
-    explainer, background = _shap_explainer(pipeline.named_steps["model"], transformed)
+    model = pipeline.named_steps["model"]
+    if not hasattr(model, "coef_"):
+        n_trees = getattr(model, "n_estimators", 1) or 1
+        work = len(sample) * n_trees * np.shape(transformed)[1]
+        if work > MAX_TREE_SHAP_WORK:
+            raise ShapBudgetExceeded(
+                f"SHAP explanations skipped: {work:,} row-tree-feature work exceeds "
+                f"the {MAX_TREE_SHAP_WORK:,} budget. Median-based drivers are used instead."
+            )
+    explainer, background = _shap_explainer(model, transformed)
     values = explainer.shap_values(background)
     if isinstance(values, list):
         values = values[1] if len(values) > 1 else values[0]

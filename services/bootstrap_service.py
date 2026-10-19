@@ -1,15 +1,16 @@
 """Default-data bootstrap: data_edited.csv loads with the app, fully modeled.
 
-Builds the whole pipeline once (clean -> features -> RFM/LRFM -> demographics
--> segmentation -> churn -> retention), caches artifacts under
-``data/processed/default_run/``, and reloads them into session state on every
-app start so all pages show results immediately.
+Builds the whole pipeline once (clean -> features -> RFM/LRFM -> quarterly
+segment history -> demographics -> segmentation -> churn -> retention), caches
+artifacts under ``data/processed/default_run/``, and reloads them into session
+state on every app start so all pages show results immediately.
 
-Heavy O(n^2) segmentation models (hierarchical, ensemble) are recorded as
-skipped in the default run — the data has ~25k customers and Ward linkage on
-a 25k x 25k matrix is not boot-safe. They remain runnable from page 05.
-Optional-dependency models (hdbscan, autoencoder, lightgbm, xgboost) are
-likewise skipped with their install guidance when unavailable.
+Every registry model is preloaded, including the heavy O(n^2) segmentation
+models (hierarchical Ward linkage, consensus ensemble) and every churn
+estimator. At ~25k customers that build is slow and memory-hungry; the cost is
+accepted because it runs unattended and buys sparse-free downstream pickers.
+Optional-dependency models (hdbscan, autoencoder, lightgbm, xgboost) are skipped
+with install guidance when unavailable — never hard-required.
 """
 
 from __future__ import annotations
@@ -38,14 +39,26 @@ DEFAULT_SOURCE = Path("data_edited.csv")
 CACHE_DIR = Path("data/processed/default_run")
 MANIFEST = CACHE_DIR / "manifest.json"
 
-# Fast, scalable models for the unattended default run.
-DEFAULT_SEGMENTATION_MODELS = ("kmeans", "gmm")
-SKIPPED_SEGMENTATION_REASONS = {
-    "hierarchical": "skipped in default run: O(n^2) Ward linkage is not boot-safe at ~25k customers (run manually on page 05)",
-    "ensemble": "skipped in default run: consensus matrix is O(n^2) (run manually on page 05)",
-}
-DEFAULT_CHURN_MODELS = ("logreg", "random_forest")
+# Every registry model is preloaded so downstream pickers (segmentation
+# comparison, report) are never sparse. The O(n^2) entries — hierarchical Ward
+# linkage and the consensus ensemble — are slow and memory-hungry at ~25k
+# customers; that cost is accepted here because the build runs unattended.
+DEFAULT_SEGMENTATION_MODELS = (
+    "kmeans",
+    "gmm",
+    "hierarchical",
+    "hdbscan",
+    "autoencoder",
+    "ensemble",
+)
+DEFAULT_CHURN_MODELS = ("logreg", "histgb", "random_forest", "lightgbm", "xgboost")
 DEFAULT_N_CLUSTERS = 5
+#: Bumped whenever the cached artifact set changes shape (here: all segmentation
+#: and churn models preloaded, plus per-customer segment-history labels), so
+#: stale caches rebuild once instead of loading without the new files.
+CACHE_VERSION = 5
+#: Segment-trend preload for the default run (page 03 defaults).
+DEFAULT_HISTORY_GRANULARITY = "quarterly"
 
 
 def _config() -> dict:
@@ -80,6 +93,7 @@ def cache_is_fresh() -> bool:
     return (
         manifest.get("source_mtime") == stat.st_mtime
         and manifest.get("source_size") == stat.st_size
+        and manifest.get("cache_version") == CACHE_VERSION
     )
 
 
@@ -99,7 +113,11 @@ def build_default_run(force: bool = False) -> dict:
     cfg = _config()
     started = datetime.now().isoformat()
 
+    def _stage(name: str) -> None:
+        log.info("default run stage: %s", name)
+
     # 1-2. Load + mapping (auto-detect; data_edited.csv normalizes cleanly).
+    _stage("load + mapping")
     preview = load_upload_bytes(DEFAULT_SOURCE.read_bytes(), DEFAULT_SOURCE.name)
     mapping = dict(preview.proposal.mapping)
     validate_mapping(mapping, preview.normalized_columns)
@@ -107,6 +125,7 @@ def build_default_run(force: bool = False) -> dict:
     _write_frame(raw, "raw")
 
     # 3. Quality + clean + dictionary (defaults = least destructive valid).
+    _stage("quality + clean + dictionary")
     quality = compute_quality(raw, mapping)
     cleaning_cfg = CleaningConfig()
     cleaned, audit = clean(raw, mapping, cleaning_cfg, source_filename=DEFAULT_SOURCE.name)
@@ -124,6 +143,7 @@ def build_default_run(force: bool = False) -> dict:
     _write_json(dictionary.to_dict(orient="records"), "dictionary")
 
     # 4-5. Features + RFM/LRFM (snapshot = max transaction + 1 day).
+    _stage("features + RFM/LRFM")
     from analytics.customer_features import build_customer_features
 
     snapshot = pd.to_datetime(cleaned["transaction_date"]).max() + pd.Timedelta(days=1)
@@ -139,7 +159,20 @@ def build_default_run(force: bool = False) -> dict:
     _write_frame(rfm, "rfm")
     _write_frame(lrfm, "lrfm")
 
+    # 5b. Segment history (quarterly RFM/LRFM trend preload for the dashboard
+    # ribbon and page-03 Trends tabs; leakage-safe by construction).
+    _stage("segment history (quarterly)")
+    from services.feature_service import run_segment_trends_with_labels
+
+    history, transitions, labels = run_segment_trends_with_labels(
+        cleaned, granularity=DEFAULT_HISTORY_GRANULARITY, quantiles=quantiles
+    )
+    _write_frame(history, "segment_history")
+    _write_frame(transitions, "segment_transitions")
+    _write_frame(labels, "segment_history_labels")
+
     # 6. Demographics (same record shape as page 04).
+    _stage("demographics")
     profile = build_demographic_profile(features, rfm[["customer_id", "segment"]])
     _write_json(
         {
@@ -153,7 +186,8 @@ def build_default_run(force: bool = False) -> dict:
         "demographics",
     )
 
-    # 7. Segmentation: fast models trained, O(n^2)/optional ones recorded skipped.
+    # 7. Segmentation: every registry model trained (O(n^2) ones included).
+    _stage("segmentation (all models)")
     seg_features = [f for f in cfg["segmentation"]["default_features"] if f in features.columns]
     prepared = segmentation_service.prepare_segmentation_features(
         features,
@@ -211,26 +245,9 @@ def build_default_run(force: bool = False) -> dict:
                 "labels": [int(v) for v in labels],
             }
         )
-    for name, reason in SKIPPED_SEGMENTATION_REASONS.items():
-        runs.append(
-            {
-                "model": name,
-                "status": "skipped",
-                "reason": reason,
-                "params": {"n_clusters": DEFAULT_N_CLUSTERS, "seed": RANDOM_SEED},
-            }
-        )
-    for name in ("hdbscan", "autoencoder"):
-        availability = segmentation_service.model_availability().get(name)
-        if availability:
-            runs.append(
-                {
-                    "model": name,
-                    "status": "skipped",
-                    "reason": availability,
-                    "params": {"n_clusters": DEFAULT_N_CLUSTERS, "seed": RANDOM_SEED},
-                }
-            )
+    # Every registry model is attempted above; one that cannot run (optional dep
+    # missing) is already recorded as skipped with its install-guidance message,
+    # so no second placeholder row is added here.
     ok_runs = [r for r in runs if r.get("status") == "ok"]
     if not ok_runs:
         raise RuntimeError("Default segmentation produced no successful runs.")
@@ -271,6 +288,7 @@ def build_default_run(force: bool = False) -> dict:
     )
 
     # 8-9. Churn dataset + train + score.
+    _stage("churn dataset")
     from churn.dataset_builder import build_churn_dataset
 
     txn_dates = pd.to_datetime(cleaned["transaction_date"])
@@ -286,6 +304,7 @@ def build_default_run(force: bool = False) -> dict:
     )
     bundles: dict[str, dict] = {}
     for model_name in DEFAULT_CHURN_MODELS:
+        _stage(f"churn train: {model_name}")
         try:
             bundles[model_name] = churn_service.train_churn_model(
                 dataset, model_name, random_state=RANDOM_SEED, calibrate=True
@@ -296,9 +315,11 @@ def build_default_run(force: bool = False) -> dict:
         raise RuntimeError("Default churn training produced no successful models.")
     best_churn = max(bundles, key=lambda m: bundles[m]["test_metrics"]["roc_auc"] or -1)
     bundle = bundles[best_churn]
+    _stage("churn scoring features")
     scoring_features = build_customer_features(
         cleaned, snapshot_date=max_date + pd.Timedelta(days=1)
     ).features
+    _stage("churn scoring")
     scores = churn_service.score_all_customers(
         bundle,
         scoring_features,
@@ -338,6 +359,7 @@ def build_default_run(force: bool = False) -> dict:
     )
 
     # 10. Retention table (page-08 record shape: dict of records + summary).
+    _stage("retention")
     matrix = retention_service.default_matrix_report()[0]
     retention_table = retention_service.build_retention_table(scores, features, matrix)
     _write_frame(retention_table, "retention")
@@ -346,6 +368,7 @@ def build_default_run(force: bool = False) -> dict:
     stat = DEFAULT_SOURCE.stat()
     manifest = {
         "source": DEFAULT_SOURCE.name,
+        "cache_version": CACHE_VERSION,
         "source_mtime": stat.st_mtime,
         "source_size": stat.st_size,
         "built_at": started,
@@ -355,6 +378,9 @@ def build_default_run(force: bool = False) -> dict:
         "quality_overall": quality.overall,
         "rfm_segments": int(rfm["segment"].nunique()),
         "lrfm_segments": int(lrfm["segment"].nunique()),
+        "segment_history_granularity": DEFAULT_HISTORY_GRANULARITY,
+        "segment_history_periods": int(history["period"].nunique()) if not history.empty else 0,
+        "segment_transition_rows": int(len(transitions)),
         "segmentation_models": [r["model"] for r in ok_runs],
         "selected_segmentation_model": best["model"],
         "churn_models": sorted(bundles),
@@ -392,6 +418,36 @@ def load_default_into_state(state: dict) -> dict | None:
     state["customer_features"] = _read_frame("features")
     state["rfm_results"] = _read_frame("rfm")
     state["lrfm_results"] = _read_frame("lrfm")
+    try:
+        history_frame = _read_frame("segment_history")
+    except (FileNotFoundError, OSError, ValueError):
+        history_frame = None
+    try:
+        transition_frame = _read_frame("segment_transitions")
+    except (FileNotFoundError, OSError, ValueError):
+        transition_frame = None
+    try:
+        label_frame = _read_frame("segment_history_labels")
+    except (FileNotFoundError, OSError, ValueError):
+        label_frame = None
+    state["segment_history_labels"] = label_frame
+    if history_frame is not None and not history_frame.empty:
+        transitions = (
+            transition_frame.assign(
+                period_from=transition_frame["period_from"].astype(str),
+                period_to=transition_frame["period_to"].astype(str),
+            ).to_dict(orient="records")
+            if transition_frame is not None and not transition_frame.empty
+            else []
+        )
+        state["segment_history"] = {
+            "table": history_frame.assign(period=history_frame["period"].astype(str)).to_dict(
+                orient="records"
+            ),
+            "transitions": transitions,
+            "granularity": manifest.get("segment_history_granularity", DEFAULT_HISTORY_GRANULARITY),
+            "quantiles": int(_config()["rfm"]["quantiles"]),
+        }
     state["demographic_profile"] = _read_json("demographics")
     seg_index = _read_json("segmentation_index")
     seg_labels = _read_json("segmentation_labels")
@@ -418,10 +474,11 @@ def load_default_into_state(state: dict) -> dict | None:
         "horizon_days": churn_meta[best]["horizon_days"],
     }
     # Restore the persisted pipeline object so downstream code can reuse it.
+    # load_model returns the stored object itself (no tuple to unpack).
     from utils.model_utils import load_model
 
     try:
-        state["churn_model"], _ = load_model(manifest["churn_path"])
+        state["churn_model"] = load_model(manifest["churn_path"])
     except (FileNotFoundError, OSError, ValueError):
         state["churn_model"] = None
     state["churn_scores"] = _read_frame("scores")

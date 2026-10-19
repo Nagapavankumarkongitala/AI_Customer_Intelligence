@@ -1,10 +1,17 @@
 """Report service: context, narratives, and multi-format exports."""
 
+import io
+import zipfile
+
 import pandas as pd
 
+from services.report_charts import render_report_charts
 from services.report_service import (
     CHART_EXPLANATIONS,
     REPORT_SECTIONS,
+    SECTION_CHARTS,
+    build_docx_bytes,
+    build_pdf_bytes,
     build_report_context,
     context_tables,
     context_to_excel_bytes,
@@ -132,6 +139,60 @@ def test_excel_tables_mask_ids() -> None:
     assert not any(v == "C00001" for v in tables["Retention_Top"]["customer_id"])
     data = context_to_excel_bytes(context, mask_ids=True)
     assert data[:2] == b"PK"
+
+
+def test_chart_registry_covers_every_explained_chart() -> None:
+    """Every chart the sections embed (and explain) has a static renderer."""
+    explained = set(CHART_EXPLANATIONS)
+    embedded = {key for keys in SECTION_CHARTS.values() for key in keys}
+    assert embedded <= explained
+    from services.report_charts import CHART_BUILDERS
+
+    assert embedded <= set(CHART_BUILDERS)
+
+
+def test_report_charts_render_png_bytes() -> None:
+    """The static renderer returns PNGs for the charts the context can support."""
+    context = build_report_context(_sample_state())
+    charts = render_report_charts(context)
+    assert {"revenue_trend", "risk_bands", "value_risk_matrix"} <= set(charts)
+    for png in charts.values():
+        assert png[:8] == b"\x89PNG\r\n\x1a\n"
+
+
+def test_pdf_embeds_chart_images() -> None:
+    """The PDF export carries the chart PNGs, not only text tables."""
+    context = build_report_context(_sample_state())
+    charts = render_report_charts(context)
+    data = build_pdf_bytes(context, chart_images=charts)
+    assert data[:4] == b"%PDF"
+    assert b"/Subtype /Image" in data
+
+
+def test_word_export_embeds_charts_and_closes_with_recommendations() -> None:
+    """The Word export is a real .docx with chart media and the closing recap."""
+    context = build_report_context(_sample_state())
+    data = build_docx_bytes(context, chart_images=render_report_charts(context))
+    assert data[:2] == b"PK"
+    archive = zipfile.ZipFile(io.BytesIO(data))
+    assert any(name.startswith("word/media/") for name in archive.namelist())
+    document = archive.read("word/document.xml").decode("utf-8")
+    assert "Interpretations at a glance" in document
+    assert "Prioritized actions" in document
+    assert document.index("Appendix — data &amp; method") < document.index(
+        "Recommendations &amp; next steps"
+    )
+
+
+def test_html_closes_with_interpretations_and_recommendations() -> None:
+    """The HTML report ends with the recap and actions, after the appendix."""
+    context = build_report_context(_sample_state())
+    html_report = render_html_report(context, figures_html={}, mask_ids=True)
+    appendix_at = html_report.index("Appendix — data &amp; method")
+    closing_at = html_report.index("Recommendations &amp; next steps")
+    assert appendix_at < closing_at
+    assert closing_at < html_report.index("Interpretations at a glance")
+    assert closing_at < html_report.index("Prioritized actions")
 
 
 def test_context_carries_foundation_and_narrative_inputs() -> None:

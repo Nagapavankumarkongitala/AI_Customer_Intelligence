@@ -17,7 +17,8 @@ from components.empty_state import chart_section, empty_state
 from components.filters import controls_expander
 from components.insight_box import insight_box
 from components.metric_card import Metric, metric_row
-from components.page_header import page_header
+from components.metric_guides import render_metric_guides
+from components.page_header import page_header, section_header
 from components.sidebar import render_sidebar_footer, render_sidebar_nav, sidebar_filters
 from services import state_service
 from services.export_service import to_csv_bytes, to_json_bytes
@@ -175,12 +176,24 @@ ct = crosstab_counts(labelings[ref], labelings[target])
 ari = agreement_ari(labelings[ref], labelings[target])
 agree_l, agree_r = st.columns([1, 2])
 with agree_l:
-    metric_row([Metric(f"Adjusted Rand Index ({ref} vs {target})", f"{ari:.3f}")])
+    with chart_section(
+        "Pair agreement",
+        "1.0 = identical groupings, 0 = chance-level agreement.",
+    ):
+        metric_row([Metric(f"Adjusted Rand Index ({ref} vs {target})", f"{ari:.3f}")])
 with agree_r:
     with chart_section(f"Customer flow ({ref} → {target})"):
         st.plotly_chart(without_title(sankey_mapping(ct, ref, target)), width="stretch")
 with st.expander("Cross-tabulation (counts)", expanded=False):
     st.dataframe(ct, width="stretch")
+
+# --- Scorecard glossary: reading guide for the columns charted above -----------
+section_header(
+    "How to read the scorecard",
+    "Every column the scorecard emits, with its direction, its range, and the gate it "
+    "carries in the recommendation below.",
+)
+render_metric_guides()
 
 # --- Per-model checklists ------------------------------------------------------
 with st.expander("Interpretability checklists"):

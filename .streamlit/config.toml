@@ -1,7 +1,7 @@
 [theme]
 # Professional light analytics surface (design tokens: visualization/tokens.py).
 # Risk states keep red/green/amber hues; meaning always rides on labels, never
-# colour alone. The navy/cyan console is retained as the selectable dark skin.
+# colour alone. The charcoal-and-lime console is the selectable dark skin.
 base = "light"
 primaryColor = "#2563EB"
 backgroundColor = "#F6F8FC"

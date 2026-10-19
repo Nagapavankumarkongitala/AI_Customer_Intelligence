@@ -3,6 +3,10 @@
 Snapshot default: one day after the last valid transaction (configurable offset).
 Demographics/geography: latest non-null observed value per customer (never arbitrary
 first); customers with conflicting values are listed in the conflicts report.
+
+Implementation: fully vectorized groupby aggregations (no per-customer Python
+loop). Output values, column order, and row order (customer first-appearance)
+match the legacy row loop exactly.
 """
 
 from __future__ import annotations
@@ -23,6 +27,36 @@ class CustomerFeatureResult:
     features: pd.DataFrame
     demographic_conflicts: dict[str, dict[str, list]] = field(default_factory=dict)
     dropped_invalid_dates: int = 0
+
+
+def _latest_valid_values(ordered: pd.DataFrame, column: str) -> tuple[pd.Series, dict[str, list]]:
+    """Latest non-blank value per customer for one demographic column.
+
+    ``ordered`` must be date-ordered within each customer (ties keep input
+    order). Returns (latest value, conflicts for multi-value customers only).
+    """
+    series = ordered[column]
+    not_null = series.notna()
+    stripped = series[not_null].astype("string").str.strip()
+    valid = not_null & (stripped != "").reindex(ordered.index, fill_value=False)
+    picked = (
+        ordered.loc[valid]
+        .groupby("customer_id", sort=False)
+        .tail(1)
+        .set_index("customer_id")[column]
+    )
+    sub = ordered.loc[valid]
+    distinct_counts = (
+        sub[column].astype(str).str.strip().groupby(sub["customer_id"], sort=False).nunique()
+    )
+    conflicts: dict[str, list] = {}
+    multi = distinct_counts[distinct_counts > 1]
+    if not multi.empty:
+        holders = ordered.loc[valid & ordered["customer_id"].isin(set(multi.index))]
+        for customer_id, group in holders.groupby("customer_id", sort=False):
+            distinct = sorted(set(group[column].astype(str).str.strip()))
+            conflicts[str(customer_id)] = [str(value) for value in distinct]
+    return picked, conflicts
 
 
 def build_customer_features(
@@ -54,71 +88,71 @@ def build_customer_features(
     previous_start = snapshot - pd.Timedelta(days=2 * recent_days)
 
     df["_year_month"] = df["_txn_date"].dt.to_period("M").astype(str)
-    rows: list[dict] = []
-    conflicts: dict[str, dict[str, list]] = {}
-    for customer_id, group in df.groupby("customer_id", sort=False):
-        group = group.sort_values("_txn_date")
-        dates = group["_txn_date"]
-        amounts = group["_amount"]
-        first, last = dates.iloc[0], dates.iloc[-1]
-        frequency = len(group)
-        monetary = float(amounts.sum())
-        relationship = (last - first).days
-        if frequency >= 2:
-            gaps = dates.diff().dt.total_seconds().dropna() / 86400.0
-            avg_gap = float(gaps.mean())
-            std_gap = float(gaps.std()) if frequency >= 3 else float("nan")
-        else:
-            avg_gap, std_gap = float("nan"), float("nan")
-        recent_mask = dates > recent_start
-        previous_mask = (dates > previous_start) & (dates <= recent_start)
-        recent_freq = int(recent_mask.sum())
-        previous_freq = int(previous_mask.sum())
-        recent_monetary = float(amounts[recent_mask].sum())
-        previous_monetary = float(amounts[previous_mask].sum())
-        active_months = int(group["_year_month"].nunique())
+    order = list(df["customer_id"].drop_duplicates())
+    ordered = df.sort_values(["customer_id", "_txn_date"], kind="mergesort").reset_index(drop=True)
+    key = ordered["customer_id"]
 
-        row: dict = {
-            "customer_id": customer_id,
-            "first_transaction_date": first.date().isoformat(),
-            "last_transaction_date": last.date().isoformat(),
-            "recency_days": (snapshot - last).days,
+    first = ordered.groupby(key, sort=False)["_txn_date"].min()
+    last = ordered.groupby(key, sort=False)["_txn_date"].max()
+    frequency = ordered.groupby(key, sort=False).size()
+    monetary = ordered.groupby(key, sort=False)["_amount"].sum()
+    active_months = ordered.groupby(key, sort=False)["_year_month"].nunique()
+
+    ordered["_gap_days"] = (
+        ordered.groupby(key, sort=False)["_txn_date"].diff().dt.total_seconds() / 86400.0
+    )
+    gap_stats = ordered.groupby(key, sort=False)["_gap_days"].agg(["mean", "std"])
+
+    recent_mask = ordered["_txn_date"] > recent_start
+    previous_mask = (ordered["_txn_date"] > previous_start) & (ordered["_txn_date"] <= recent_start)
+    recent_freq = recent_mask.groupby(key, sort=False).sum()
+    previous_freq = previous_mask.groupby(key, sort=False).sum()
+    recent_monetary = ordered["_amount"].where(recent_mask, 0.0).groupby(key, sort=False).sum()
+    previous_monetary = ordered["_amount"].where(previous_mask, 0.0).groupby(key, sort=False).sum()
+
+    frame = pd.DataFrame(
+        {
+            "first_transaction_date": first.dt.date.astype(str),
+            "last_transaction_date": last.dt.date.astype(str),
+            "recency_days": (snapshot - last).dt.days,
             "frequency": frequency,
-            "monetary_value": round(monetary, 2),
-            "relationship_length_days": relationship,
-            "average_order_value": round(monetary / frequency, 2),
+            "monetary_value": monetary.round(2),
+            "relationship_length_days": (last - first).dt.days,
+            "average_order_value": (monetary / frequency).round(2),
             "active_months": active_months,
-            "transactions_per_active_month": round(frequency / active_months, 3),
-            "average_interpurchase_days": avg_gap,
-            "interpurchase_std_days": std_gap,
+            "transactions_per_active_month": (frequency / active_months).round(3),
+            "average_interpurchase_days": gap_stats["mean"],
+            "interpurchase_std_days": gap_stats["std"],
             "recent_period_frequency": recent_freq,
             "previous_period_frequency": previous_freq,
             "frequency_change": recent_freq - previous_freq,
-            "recent_period_monetary": round(recent_monetary, 2),
-            "previous_period_monetary": round(previous_monetary, 2),
-            "monetary_change": round(recent_monetary - previous_monetary, 2),
+            "recent_period_monetary": recent_monetary.round(2),
+            "previous_period_monetary": previous_monetary.round(2),
+            "monetary_change": (recent_monetary - previous_monetary).round(2),
         }
-        customer_conflicts: dict[str, list] = {}
-        for col in DEMOGRAPHIC_FIELDS:
-            if col not in group:
-                row[col] = None
-                continue
-            observed = group[col].dropna()
-            observed = observed[observed.astype("string").str.strip() != ""]
-            if observed.empty:
-                row[col] = None
-            else:
-                row[col] = observed.iloc[-1]
-                distinct = sorted(str(v) for v in observed.astype(str).str.strip().unique())
-                if len(distinct) > 1:
-                    customer_conflicts[col] = distinct
-        if customer_conflicts:
-            conflicts[str(customer_id)] = customer_conflicts
-        rows.append(row)
+    )
 
-    features = pd.DataFrame(rows)
+    conflicts: dict[str, dict[str, list]] = {}
+    for col in DEMOGRAPHIC_FIELDS:
+        if col not in ordered.columns:
+            frame[col] = None
+            continue
+        picked, col_conflicts = _latest_valid_values(ordered, col)
+        # Legacy contract: complete columns keep their native dtype (so numeric
+        # demographics stay model-eligible); columns with gaps become object
+        # with None — never pandas-NA, which sklearn imputers reject.
+        aligned = picked.reindex(frame.index)
+        if aligned.isna().any():
+            aligned = aligned.astype(object).where(aligned.notna(), None)
+        frame[col] = aligned
+        for customer_id, distinct in col_conflicts.items():
+            conflicts.setdefault(customer_id, {})[col] = distinct
+
+    frame = frame.reindex(order)
+    frame.insert(0, "customer_id", frame.index)
+    frame.index = pd.RangeIndex(len(frame))
     return CustomerFeatureResult(
-        features=features,
+        features=frame,
         demographic_conflicts=conflicts,
         dropped_invalid_dates=dropped,
     )

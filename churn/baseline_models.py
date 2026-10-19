@@ -4,6 +4,10 @@ One ColumnTransformer handles numerics (median impute) and categoricals
 (most-frequent impute + one-hot). Estimators carry class_weight='balanced'
 unless they manage imbalance themselves. Sampling (oversampling) is applied to
 training data only, in churn_service — never here.
+
+The one-hot block is sparse for every estimator except
+``HistGradientBoostingClassifier``, which rejects sparse input outright; its
+preprocessor emits dense output instead (``dense=True``).
 """
 
 from __future__ import annotations
@@ -18,11 +22,21 @@ from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
 BASELINE_ESTIMATORS = ("logreg", "histgb")
 
+#: Estimators that cannot consume sparse input and need a dense one-hot block.
+DENSE_INPUT_ESTIMATORS = ("histgb",)
+
 
 def build_preprocessor(
-    numeric_cols: list[str], categorical_cols: list[str], scale_numeric: bool = False
+    numeric_cols: list[str],
+    categorical_cols: list[str],
+    scale_numeric: bool = False,
+    dense: bool = False,
 ) -> ColumnTransformer:
-    """ColumnTransformer for churn modeling frames."""
+    """ColumnTransformer for churn modeling frames.
+
+    ``dense=True`` emits a dense one-hot block, for estimators that reject
+    sparse input (see ``DENSE_INPUT_ESTIMATORS``).
+    """
     numeric_steps = [("impute", SimpleImputer(strategy="median"))]
     if scale_numeric:
         numeric_steps.append(("scale", StandardScaler()))
@@ -34,7 +48,10 @@ def build_preprocessor(
                 Pipeline(
                     steps=[
                         ("impute", SimpleImputer(strategy="most_frequent")),
-                        ("onehot", OneHotEncoder(handle_unknown="ignore")),
+                        (
+                            "onehot",
+                            OneHotEncoder(handle_unknown="ignore", sparse_output=not dense),
+                        ),
                     ]
                 ),
                 categorical_cols,
@@ -61,7 +78,10 @@ def build_model_pipeline(
 ) -> Pipeline:
     """Full fit/predict pipeline; logreg scales numerics, trees do not."""
     preprocessor = build_preprocessor(
-        numeric_cols, categorical_cols, scale_numeric=(name == "logreg")
+        numeric_cols,
+        categorical_cols,
+        scale_numeric=(name == "logreg"),
+        dense=(name in DENSE_INPUT_ESTIMATORS),
     )
     return Pipeline(
         [

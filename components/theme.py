@@ -54,6 +54,11 @@ def theme_toggle() -> str:
     display index follows the stored value so first paint is already correct.
     Application happens through ``ensure_theme`` at the rail head on the
     rerun the interaction triggers.
+
+    Deliberately manual, not ``prefers-color-scheme``: Streamlit executes no
+    client JavaScript from Python, and the ``components.html`` iframe is
+    sandboxed from the parent document, so the OS/Browser preference is
+    unreachable from the app layer.
     """
     stored_label = _stored_label()
     st.radio(

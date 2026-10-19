@@ -1,6 +1,18 @@
 {
   "version": 1,
   "skills": {
+    "chart-designer": {
+      "source": "claude-office-skills/skills",
+      "sourceType": "github",
+      "skillPath": "chart-designer/SKILL.md",
+      "computedHash": "df44ae89c73df1456aab7e61cf46f2d6d34c9ed016e6747fb9a4c9d596af0f0f"
+    },
+    "data-storytelling": {
+      "source": "wshobson/agents",
+      "sourceType": "github",
+      "skillPath": "plugins/business-analytics/skills/data-storytelling/SKILL.md",
+      "computedHash": "f015e72bde964f59df0c47b0cc3e713ef9cf0dbeec201e8dd95b472cd8e2e15b"
+    },
     "find-skills": {
       "source": "vercel-labs/skills",
       "sourceType": "github",
@@ -13,6 +25,12 @@
       "skillPath": "skills/frontend-design/SKILL.md",
       "computedHash": "106acf230014cbb43ca34e6410371321b56ca742f9ee0442e8ec05bf02eb0384"
     },
+    "power-bi-report-design-consultation": {
+      "source": "github/awesome-copilot",
+      "sourceType": "github",
+      "skillPath": "skills/power-bi-report-design-consultation/SKILL.md",
+      "computedHash": "12dacbd64cd67369f810c094dc70427d4805788f4ec6b1257e17d8e6aed74cf1"
+    },
     "ui-ux-pro-max": {
       "source": "psyop-z/uiuxpromax",
       "sourceType": "github",
@@ -24,6 +42,12 @@
       "sourceType": "github",
       "skillPath": "skills/web-design-guidelines/SKILL.md",
       "computedHash": "d8e7d3afe37dcc8a97b99ffb5afdb4d0919ae0092ea8b68f44eb201f035e33ac"
+    },
+    "xlsx-analyze": {
+      "source": "jorgenliu/engaku",
+      "sourceType": "github",
+      "skillPath": ".github/skills/xlsx-analyze/SKILL.md",
+      "computedHash": "d48d3ca58f8ee85e02acad25b0d4985f0542c09635dcdb11ba22d971c4271da1"
     }
   }
 }

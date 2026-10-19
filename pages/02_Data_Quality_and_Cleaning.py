@@ -138,12 +138,15 @@ cleaning_config = CleaningConfig(
 
 if st.button("Apply cleaning", type="primary"):
     try:
-        clean_data, audit = clean(
-            raw,
-            mapping,
-            cleaning_config,
-            source_filename=st.session_state.get("source_filename", ""),
-        )
+        with st.status("Applying cleaning rules...", expanded=True) as status:
+            status.update(state="running", label="Running cleaning pipeline…")
+            clean_data, audit = clean(
+                raw,
+                mapping,
+                cleaning_config,
+                source_filename=st.session_state.get("source_filename", ""),
+            )
+            status.update(state="complete", label="Cleaning complete", expanded=False)
         st.session_state["clean_data"] = clean_data
         st.session_state["cleaning_config"] = cleaning_config.as_dict()
         st.session_state["cleaning_audit"] = audit

@@ -3,7 +3,13 @@
 import pandas as pd
 
 from analytics.customer_features import build_customer_features
-from services.feature_service import run_segment_history
+from services.feature_service import (
+    TRANSITION_COLUMNS,
+    run_label_history,
+    run_segment_history,
+    run_segment_trends,
+    run_segment_trends_with_labels,
+)
 
 
 def _txns() -> pd.DataFrame:
@@ -98,6 +104,27 @@ def test_invalid_dates_dropped_and_counted() -> None:
     assert "C3" not in set(result.features["customer_id"])
 
 
+def test_blank_and_tied_demographics() -> None:
+    """Blank strings count as missing; same-day ties and conflicts stay exact."""
+    df = pd.DataFrame(
+        {
+            "customer_id": ["C1", "C1", "C1", "C2"],
+            "transaction_date": ["2024-01-10", "2024-01-10", "2024-03-10", "2024-03-01"],
+            "amount_spent": [100.0, 200.0, 300.0, 50.0],
+            "gender": ["  ", None, "Female", "Male"],
+            "age": [30, 30, 31, 40],
+            "city": ["Pune", "Pune", "Mumbai", "Delhi"],
+        }
+    )
+    result = build_customer_features(df)
+    c1 = result.features.loc[result.features["customer_id"] == "C1"].iloc[0]
+    assert c1["frequency"] == 3
+    assert c1["gender"] == "Female"
+    assert c1["city"] == "Mumbai"
+    assert result.demographic_conflicts["C1"]["city"] == ["Mumbai", "Pune"]
+    assert "C2" not in result.demographic_conflicts
+
+
 def _history_txns() -> pd.DataFrame:
     """Two cohorts: six customers Jan–Jun, six more starting only in June."""
     rows = []
@@ -129,15 +156,115 @@ def test_segment_history_never_leaks_future() -> None:
     assert (totals == 6).all(), f"late cohort leaked: {totals.to_dict()}"
 
 
+def test_segment_trends_return_customer_level_transitions() -> None:
+    """Every transition pair counts customers present at both consecutive ends."""
+    history, transitions = run_segment_trends(_history_txns(), granularity="monthly", quantiles=3)
+    assert list(transitions.columns) == TRANSITION_COLUMNS
+    assert set(transitions["model"]) == {"RFM", "LRFM"}
+    assert list(history.columns) == ["period", "model", "segment", "customers"]
+    pair_totals = transitions.groupby(["model", "period_from", "period_to"], observed=True)[
+        "customers"
+    ].sum()
+    assert len(pair_totals) == 2 * 4  # five scored periods -> four pairs per model
+    assert (pair_totals == 6).all(), pair_totals.to_dict()
+    assert (transitions["customers"] > 0).all()
+
+
+def test_trend_labels_regroup_to_the_published_counts() -> None:
+    """Per-customer labels are the same scoring pass, so they sum to history."""
+    history, _, labels = run_segment_trends_with_labels(
+        _history_txns(), granularity="monthly", quantiles=3
+    )
+    assert list(labels.columns) == ["period", "model", "customer_id", "segment"]
+    regrouped = (
+        labels.groupby(["period", "model", "segment"], observed=True)
+        .size()
+        .rename("customers")
+        .reset_index()
+    )
+    published = history.assign(period=history["period"].astype(str))
+    merged = published.merge(
+        regrouped,
+        on=["period", "model", "segment"],
+        how="outer",
+        suffixes=("_history", "_labels"),
+        indicator=True,
+    )
+    assert (merged["_merge"] == "both").all(), merged[merged["_merge"] != "both"]
+    assert (merged["customers_history"] == merged["customers_labels"]).all()
+    assert labels["customer_id"].nunique() == 12
+
+
+def test_segment_transitions_never_leak_future() -> None:
+    """Moves stop at the last fully observed snapshot (June is partial)."""
+    _, transitions = run_segment_trends(_history_txns(), granularity="monthly", quantiles=3)
+    assert set(transitions["period_to"].astype(str)) == {
+        "2024-02",
+        "2024-03",
+        "2024-04",
+        "2024-05",
+    }
+    assert set(transitions["period_from"].astype(str)) == {
+        "2024-01",
+        "2024-02",
+        "2024-03",
+        "2024-04",
+    }
+
+
 def test_segment_history_rejects_bad_args() -> None:
     """Bad granularity and quantiles fail loudly, not silently."""
     frame = _history_txns()
     for call in (
         lambda: run_segment_history(frame, granularity="fortnightly"),
         lambda: run_segment_history(frame, granularity="monthly", quantiles=7),
+        lambda: run_segment_trends(frame, granularity="fortnightly"),
     ):
         try:
             call()
         except ValueError:
             continue
         raise AssertionError("bad history args did not raise")
+
+
+def _fixed_labels() -> pd.Series:
+    """Alternating Champions / Lost Customers over every customer in the frame."""
+    customers = sorted(_history_txns()["customer_id"].unique())
+    return pd.Series(
+        ["Lost Customers" if i % 2 == 0 else "Champions" for i in range(len(customers))],
+        index=customers,
+    )
+
+
+def test_label_history_trends_a_fixed_labeling() -> None:
+    """AI runs trend on the RFM period grid, counted over the base that existed."""
+    history = run_label_history(
+        _history_txns(), {"AI:kmeans": _fixed_labels()}, granularity="monthly"
+    )
+    assert list(history.columns) == ["period", "model", "segment", "customers"]
+    assert set(history["model"]) == {"AI:kmeans"}
+    totals = history.groupby("period", observed=True)["customers"].sum()
+    assert list(totals.index) == ["2024-01", "2024-02", "2024-03", "2024-04", "2024-05"]
+    assert (totals == 6).all(), f"late cohort leaked: {totals.to_dict()}"
+    champions = history[history["segment"] == "Champions"].groupby("period", observed=True)
+    assert (champions["customers"].sum() == 3).all()
+
+
+def test_label_history_keeps_every_labeling_and_guards_args() -> None:
+    """Each requested labeling becomes its own model row; bad input fails loudly."""
+    frame = _history_txns()
+    history = run_label_history(
+        frame, {"AI:kmeans": _fixed_labels(), "AI:gmm": _fixed_labels()}, granularity="monthly"
+    )
+    assert set(history["model"]) == {"AI:kmeans", "AI:gmm"}
+
+    assert run_label_history(frame, {}).empty
+    for call in (
+        lambda: run_label_history(frame, {"x": _fixed_labels()}, granularity="fortnightly"),
+        lambda: run_label_history(frame.drop(columns=["transaction_date"]), {"x": _fixed_labels()}),
+    ):
+        try:
+            call()
+        except (ValueError, KeyError):
+            continue
+        raise AssertionError("bad label-history args did not raise")

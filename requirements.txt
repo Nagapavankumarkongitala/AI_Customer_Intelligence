@@ -12,6 +12,10 @@ joblib
 pyyaml
 pydantic
 jinja2>=3.1.5
+reportlab
+# Report exports: PNG charts for PDF/Word, and the Word document writer.
+matplotlib
+python-docx
 
 # Phase-gated: required only where used; import optionally with install guidance.
 xgboost
@@ -19,3 +23,4 @@ lightgbm
 shap
 tensorflow
 umap-learn
+hdbscan

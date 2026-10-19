@@ -1,6 +1,6 @@
 # Model Card — logreg_v1
 
-Date: 2026-10-12
+Date: 2026-10-19
 
 ## Purpose
 Leakage-safe churn classification with logreg.

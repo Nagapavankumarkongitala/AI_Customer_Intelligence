@@ -1,4 +1,4 @@
-"""Page 09 — Report Generator: a systematic, narrative report with HTML/Excel/PDF exports.
+"""Page 09 — Report Generator: a systematic, narrative report with HTML/Excel/PDF/Word exports.
 
 The page mirrors the executive dashboard one tab at a time — business and
 customer trends, segments and demographics, churn risk, and the retention plan
@@ -19,11 +19,16 @@ from components.sidebar import render_sidebar_footer, render_sidebar_nav
 from components.table import render_table
 from services import report_narrative, state_service
 from services.dashboard_service import mask_customer_id
+from services.report_charts import render_report_charts
 from services.report_service import (
+    ANALYTICAL_SECTIONS,
     CHART_EXPLANATIONS,
     REPORT_SECTIONS,
     SECTION_LABELS,
+    available_chart_engine,
+    available_docx_engine,
     available_pdf_engine,
+    build_docx_bytes,
     build_pdf_bytes,
     build_report_context,
     context_tables,
@@ -62,7 +67,8 @@ render_sidebar_nav("pages/09_Report_Generator.py")
 page_header(
     "Report Generator",
     "A systematic report over every dashboard tab — key insights, interpretation, "
-    "and prioritized next steps — downloadable as HTML, Excel, and PDF.",
+    "and prioritized next steps — downloadable as HTML, Excel, PDF, and Word, with "
+    "the charts embedded in the PDF and Word files.",
 )
 
 clean_data = st.session_state.get("clean_data")
@@ -492,23 +498,34 @@ def _render_retention() -> None:
 
 def _render_recommendations() -> None:
     section_header(
-        "6 · Recommendations & next steps",
-        "Prioritized actions, each tied to the evidence that produced it.",
+        "7 · Recommendations & next steps",
+        "Interpretations recapped, then prioritized actions tied to the evidence.",
     )
+    recap = [
+        item
+        for section in ANALYTICAL_SECTIONS
+        if section in selected
+        for item in report_narrative.section_insights(context, section)
+    ]
+    if recap:
+        st.markdown("**Interpretations at a glance**")
+        for item in recap:
+            insight_box(item.title, item.detail, tone=item.tone)
     recs = report_narrative.recommendations(context)
     if not recs:
         empty_state(
             "No recommendations yet",
             "Recommendations appear as retention results arrive.",
         )
-        return
-    for priority in report_narrative.PRIORITIES:
-        group = [rec for rec in recs if rec.priority == priority]
-        if not group:
-            continue
-        st.markdown(f"**{priority}**")
-        for rec in group:
-            insight_box(rec.title, f"{rec.rationale}  ·  {rec.evidence}", tone=rec.tone)
+    else:
+        st.markdown("**Prioritized actions**")
+        for priority in report_narrative.PRIORITIES:
+            group = [rec for rec in recs if rec.priority == priority]
+            if not group:
+                continue
+            st.markdown(f"**{priority}**")
+            for rec in group:
+                insight_box(rec.title, f"{rec.rationale}  ·  {rec.evidence}", tone=rec.tone)
     st.caption(
         "Priority order is decision support over the computed results; it does not claim "
         "causal impact."
@@ -517,7 +534,7 @@ def _render_recommendations() -> None:
 
 def _render_appendix() -> None:
     section_header(
-        "7 · Appendix & data foundation",
+        "6 · Appendix & data foundation",
         "Source profile, coverage, cleaning treatments, and method notes.",
     )
     profile = context.get("data_profile") or {}
@@ -564,13 +581,23 @@ if "churn" in selected:
     _render_churn()
 if "retention" in selected:
     _render_retention()
-if "recommendations" in selected:
-    _render_recommendations()
 if "appendix" in selected:
     _render_appendix()
+if "recommendations" in selected:
+    _render_recommendations()
 
-section_header("Downloads", "One pack, three formats. IDs masked unless authorized.")
+section_header("Downloads", "One pack, four formats. IDs masked unless authorized.")
 mask_ids = not reveal_ids
+pdf_guidance = available_pdf_engine()
+word_guidance = available_docx_engine()
+chart_guidance = available_chart_engine()
+export_available = not pdf_guidance or not word_guidance
+chart_images = render_report_charts(context) if export_available else {}
+if export_available and not chart_guidance:
+    st.caption(
+        "PDF and Word embed the report charts as images; every figure keeps its "
+        "how-to-read interpretation."
+    )
 html_bytes = render_html_report(
     context,
     figures_html=figures_html,
@@ -597,12 +624,18 @@ else:
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         key="dl_rep_excel",
     )
-pdf_guidance = available_pdf_engine()
+if chart_guidance and export_available:
+    st.info(f"{chart_guidance} PDF and Word will list the figures without images.")
 if pdf_guidance:
-    st.info(f"{pdf_guidance} HTML and Excel remain available.")
+    st.info(f"{pdf_guidance} HTML, Excel, and Word remain available.")
 else:
     try:
-        pdf_bytes = build_pdf_bytes(context, mask_ids=mask_ids)
+        pdf_bytes = build_pdf_bytes(
+            context,
+            mask_ids=mask_ids,
+            sections=tuple(selected),
+            chart_images=chart_images,
+        )
     except CustomerIntelligenceError as exc:
         st.error(str(exc))
     else:
@@ -612,6 +645,26 @@ else:
             file_name="customer_intelligence_report.pdf",
             mime="application/pdf",
             key="dl_rep_pdf",
+        )
+if word_guidance:
+    st.info(f"{word_guidance} HTML, Excel, and PDF remain available.")
+else:
+    try:
+        word_bytes = build_docx_bytes(
+            context,
+            mask_ids=mask_ids,
+            sections=tuple(selected),
+            chart_images=chart_images,
+        )
+    except CustomerIntelligenceError as exc:
+        st.error(str(exc))
+    else:
+        st.download_button(
+            "Download report (Word)",
+            data=word_bytes,
+            file_name="customer_intelligence_report.docx",
+            mime=("application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+            key="dl_rep_word",
         )
 
 render_sidebar_footer()

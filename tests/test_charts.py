@@ -339,6 +339,31 @@ def test_sankey_has_a_title() -> None:
     assert fig.layout.title.text == "RFM → AI flow"
 
 
+def test_segment_transition_sankey_renders_multi_period_moves() -> None:
+    """One stage per period, real link values, names only at the two edges."""
+    flows = pd.DataFrame(
+        {
+            "period_from": ["2024-Q1", "2024-Q1", "2024-Q2"],
+            "period_to": ["2024-Q2", "2024-Q2", "2024-Q3"],
+            "segment_from": ["Champions", "Lost Customers", "Champions"],
+            "segment_to": ["Champions", "Champions", "Lost Customers"],
+            "customers": [4, 1, 2],
+        }
+    )
+    fig = rfm_charts.segment_transition_sankey(flows)
+    trace = fig.data[0]
+    assert trace.type == "sankey"
+    assert list(trace.link.value) == [4, 1, 2]
+    labels = list(trace.node.label)
+    assert labels[0] == "Champions" and labels[1] == "Lost Customers"
+    assert "" in labels  # interior stage labels stay blank
+    assert labels[-1] == "Lost Customers"
+    assert all(str(color).startswith("rgba(") for color in trace.link.color)
+    assert rfm_charts.segment_transition_sankey(pd.DataFrame()).layout.title.text == (
+        "Customer transitions"
+    )
+
+
 def test_revenue_area_and_horizontal_geo_render() -> None:
     """Area revenue trend and horizontal geo bars render with data."""
     trend = pd.DataFrame({"month": ["2024-01", "2024-02"], "revenue": [100.0, 200.0]})
