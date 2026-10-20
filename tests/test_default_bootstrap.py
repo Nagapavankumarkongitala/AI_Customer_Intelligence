@@ -1,4 +1,4 @@
-"""Default-data bootstrap: cached data_edited.csv run loads into session state."""
+"""Default-data bootstrap: cached data.csv run loads into session state."""
 
 import json
 
@@ -20,7 +20,7 @@ def test_load_populates_contract_keys() -> None:
     state_service.initialize(state)
     manifest = bootstrap_service.load_default_into_state(state)
     assert manifest is not None
-    assert manifest["source"] == "data_edited.csv"
+    assert manifest["source"] == "data.csv"
     assert state_service.validate(state) == []
     for key in (
         "raw_data",

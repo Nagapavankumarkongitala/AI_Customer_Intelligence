@@ -1,4 +1,4 @@
-"""Default-data bootstrap: data_edited.csv loads with the app, fully modeled.
+"""Default-data bootstrap: data.csv loads with the app, fully modeled.
 
 Builds the whole pipeline once (clean -> features -> RFM/LRFM -> quarterly
 segment history -> demographics -> segmentation -> churn -> retention), caches
@@ -35,7 +35,7 @@ from utils.constants import RANDOM_SEED
 
 log = logging.getLogger(__name__)
 
-DEFAULT_SOURCE = Path("data_edited.csv")
+DEFAULT_SOURCE = Path("data.csv")
 CACHE_DIR = Path("data/processed/default_run")
 MANIFEST = CACHE_DIR / "manifest.json"
 
@@ -98,7 +98,7 @@ def cache_is_fresh() -> bool:
 
 
 def build_default_run(force: bool = False) -> dict:
-    """Run the full pipeline on data_edited.csv and cache every artifact.
+    """Run the full pipeline on data.csv and cache every artifact.
 
     Returns the manifest summary dict. Reuses the cache unless ``force`` or
     the source file changed.
@@ -107,7 +107,7 @@ def build_default_run(force: bool = False) -> dict:
         return json.loads(MANIFEST.read_text(encoding="utf-8"))
     if not DEFAULT_SOURCE.exists():
         raise FileNotFoundError(
-            "Default dataset 'data_edited.csv' not found at the repository root."
+            "Default dataset 'data.csv' not found at the repository root."
         )
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
     cfg = _config()
@@ -116,7 +116,7 @@ def build_default_run(force: bool = False) -> dict:
     def _stage(name: str) -> None:
         log.info("default run stage: %s", name)
 
-    # 1-2. Load + mapping (auto-detect; data_edited.csv normalizes cleanly).
+    # 1-2. Load + mapping (auto-detect; data.csv normalizes cleanly).
     _stage("load + mapping")
     preview = load_upload_bytes(DEFAULT_SOURCE.read_bytes(), DEFAULT_SOURCE.name)
     mapping = dict(preview.proposal.mapping)

@@ -34,7 +34,7 @@ with controls_expander():
             "Transaction file", type=[s.lstrip(".") for s in SUPPORTED_UPLOAD_SUFFIXES]
         )
         use_demo = st.button("Load synthetic demo data")
-        use_default = st.button("Load default dataset (data_edited.csv)")
+        use_default = st.button("Load default dataset (data.csv)")
     with control_group("Column Mapping (auto-detected, correct as needed)"):
         raw_preview = st.session_state.get("raw_data")
         if raw_preview is not None:

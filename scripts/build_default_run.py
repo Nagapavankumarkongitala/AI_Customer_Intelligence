@@ -1,10 +1,10 @@
-"""Precompute the default run: data_edited.csv -> cached pipeline artifacts.
+"""Precompute the default run: data.csv -> cached pipeline artifacts.
 
 Usage:
     python scripts/build_default_run.py [--force]
 
 The Streamlit app auto-loads the cache on startup; run this after pulling
-or when data_edited.csv changes. Takes a while: it trains every segmentation
+or when data.csv changes. Takes a while: it trains every segmentation
 model (hierarchical Ward linkage and the consensus ensemble are O(n^2) at ~25k
 customers) and every churn model on ~25k customers.
 """
