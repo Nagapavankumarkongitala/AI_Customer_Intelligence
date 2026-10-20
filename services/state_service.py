@@ -33,7 +33,6 @@ _DEFAULTS: dict[str, Any] = {
     "churn_scores": None,
     "retention_results": {},
     "segment_history": {},
-    "segment_history_labels": None,
     "global_filters": {},
 }
 

@@ -322,7 +322,16 @@ def filter_segment_trends(
             .sort_values(["period", "segment"])
             .reset_index(drop=True)
         )
-        return SegmentTrendView(counts, _transitions_from_labels(selected, periods, model), True)
+        trans = _transitions_from_labels(selected, periods, model)
+        if not trans.empty and len(trans) > 1:
+            pairs = trans[["period_from", "period_to"]].drop_duplicates()
+            if len(pairs) == 1:
+                row = trans.iloc[0:1].copy()
+                for c in ["segment_from", "segment_to", "customers"]:
+                    if c in row.columns:
+                        row[c] = None
+                trans = row.reset_index(drop=True)
+        return SegmentTrendView(counts, trans, True)
 
     periods = _periods_in_range(
         stored[period_col].tolist(), date_start=date_start, date_end=date_end
