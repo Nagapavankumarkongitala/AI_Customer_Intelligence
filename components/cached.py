@@ -115,9 +115,7 @@ def cached_run_segment_trends_with_labels(
     clean_data: pd.DataFrame, granularity: str, quantiles: int
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """Counts, transitions, and per-customer period labels from one scoring pass."""
-    return run_segment_trends_with_labels(
-        clean_data, granularity=granularity, quantiles=quantiles
-    )
+    return run_segment_trends_with_labels(clean_data, granularity=granularity, quantiles=quantiles)
 
 
 @st.cache_data(show_spinner=False)

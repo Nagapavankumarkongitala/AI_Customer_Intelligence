@@ -322,9 +322,7 @@ def filter_segment_trends(
             .sort_values(["period", "segment"])
             .reset_index(drop=True)
         )
-        return SegmentTrendView(
-            counts, _transitions_from_labels(selected, periods, model), True
-        )
+        return SegmentTrendView(counts, _transitions_from_labels(selected, periods, model), True)
 
     periods = _periods_in_range(
         stored[period_col].tolist(), date_start=date_start, date_end=date_end
