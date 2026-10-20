@@ -1,0 +1,8 @@
+{
+  "cutoff": "2026-07-08",
+  "horizon_days": 90,
+  "churn_rate": 0.8604,
+  "customers": 39868,
+  "excluded_short_history": 35,
+  "leakage_ok": true
+}

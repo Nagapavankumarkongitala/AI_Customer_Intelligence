@@ -1,0 +1,16 @@
+{
+  "customers": 39903,
+  "total_revenue_at_risk": 3014697261.06,
+  "priority_customers": 39891,
+  "strategy_mix": {
+    "Automated low-cost re-engagement": 13301,
+    "Cross-sell and early access": 13194,
+    "Recognition and referral invitation": 12784,
+    "Personal outreach (VIP intervention)": 517,
+    "Personalized reactivation": 107
+  },
+  "band_mix": {
+    "medium": 38953,
+    "high": 950
+  }
+}

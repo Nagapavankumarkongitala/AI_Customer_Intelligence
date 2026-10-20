@@ -1,0 +1,329 @@
+{
+  "runs": [
+    {
+      "model": "kmeans",
+      "status": "ok",
+      "params": {
+        "n_clusters": 5,
+        "seed": 42
+      },
+      "metrics": {
+        "silhouette": 0.2702,
+        "davies_bouldin": 1.0656,
+        "calinski_harabasz": 18172.828,
+        "n_clusters": 5,
+        "cluster_ids": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "sizes": {
+          "0": 14007,
+          "1": 3901,
+          "2": 1920,
+          "3": 9205,
+          "4": 10870
+        },
+        "proportions": {
+          "0": 0.351,
+          "1": 0.0978,
+          "2": 0.0481,
+          "3": 0.2307,
+          "4": 0.2724
+        },
+        "noise_count": 0,
+        "noise_pct": 0.0,
+        "min_cluster_size": 1920
+      },
+      "stability": {
+        "method": "seeds",
+        "seeds": [
+          42,
+          7,
+          123
+        ],
+        "mean_pairwise_ari": 0.9906
+      },
+      "names": {
+        "0": "Premium Active",
+        "1": "Light Dormant",
+        "2": "Premium Active A",
+        "3": "Core Steady",
+        "4": "Core Dormant"
+      },
+      "feature_names": [
+        "recency_days",
+        "frequency",
+        "monetary_value",
+        "relationship_length_days",
+        "average_order_value"
+      ],
+      "customer_ids": null,
+      "labels": null
+    },
+    {
+      "model": "gmm",
+      "status": "ok",
+      "params": {
+        "n_clusters": 5,
+        "seed": 42
+      },
+      "metrics": {
+        "silhouette": 0.048,
+        "davies_bouldin": 2.4293,
+        "calinski_harabasz": 5755.2722,
+        "n_clusters": 5,
+        "cluster_ids": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "sizes": {
+          "0": 9294,
+          "1": 2115,
+          "2": 14075,
+          "3": 2851,
+          "4": 11568
+        },
+        "proportions": {
+          "0": 0.2329,
+          "1": 0.053,
+          "2": 0.3527,
+          "3": 0.0714,
+          "4": 0.2899
+        },
+        "noise_count": 0,
+        "noise_pct": 0.0,
+        "min_cluster_size": 2115
+      },
+      "stability": {
+        "method": "seeds",
+        "seeds": [
+          42,
+          7,
+          123
+        ],
+        "mean_pairwise_ari": 1.0
+      },
+      "names": {
+        "0": "Premium Active",
+        "1": "Light Dormant",
+        "2": "Core Dormant",
+        "3": "Premium Active A",
+        "4": "Core Steady"
+      },
+      "feature_names": [
+        "recency_days",
+        "frequency",
+        "monetary_value",
+        "relationship_length_days",
+        "average_order_value"
+      ],
+      "customer_ids": null,
+      "labels": null
+    },
+    {
+      "model": "hierarchical",
+      "status": "ok",
+      "params": {
+        "n_clusters": 5,
+        "seed": 42
+      },
+      "metrics": {
+        "silhouette": 0.224,
+        "davies_bouldin": 1.1791,
+        "calinski_harabasz": 15732.6965,
+        "n_clusters": 5,
+        "cluster_ids": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "sizes": {
+          "0": 4230,
+          "1": 7847,
+          "2": 16229,
+          "3": 1926,
+          "4": 9671
+        },
+        "proportions": {
+          "0": 0.106,
+          "1": 0.1967,
+          "2": 0.4067,
+          "3": 0.0483,
+          "4": 0.2424
+        },
+        "noise_count": 0,
+        "noise_pct": 0.0,
+        "min_cluster_size": 1926
+      },
+      "stability": {
+        "method": "seeds",
+        "seeds": [
+          42,
+          7,
+          123
+        ],
+        "mean_pairwise_ari": 1.0
+      },
+      "names": {
+        "0": "Light Dormant",
+        "1": "Core Steady",
+        "2": "Premium Active",
+        "3": "Premium Active A",
+        "4": "Core Dormant"
+      },
+      "feature_names": [
+        "recency_days",
+        "frequency",
+        "monetary_value",
+        "relationship_length_days",
+        "average_order_value"
+      ],
+      "customer_ids": null,
+      "labels": null
+    },
+    {
+      "model": "hdbscan",
+      "status": "skipped",
+      "reason": "This model needs the optional 'hdbscan' package, which is not installed. Install it with 'pip install hdbscan' and run again.",
+      "params": {
+        "n_clusters": 5,
+        "seed": 42
+      }
+    },
+    {
+      "model": "autoencoder",
+      "status": "ok",
+      "params": {
+        "n_clusters": 5,
+        "seed": 42
+      },
+      "metrics": {
+        "silhouette": 0.212,
+        "davies_bouldin": 1.291,
+        "calinski_harabasz": 14721.0438,
+        "n_clusters": 5,
+        "cluster_ids": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "sizes": {
+          "0": 16923,
+          "1": 9576,
+          "2": 8510,
+          "3": 1962,
+          "4": 2932
+        },
+        "proportions": {
+          "0": 0.4241,
+          "1": 0.24,
+          "2": 0.2133,
+          "3": 0.0492,
+          "4": 0.0735
+        },
+        "noise_count": 0,
+        "noise_pct": 0.0,
+        "min_cluster_size": 1962
+      },
+      "stability": {
+        "method": "seeds",
+        "seeds": [
+          42,
+          7,
+          123
+        ],
+        "mean_pairwise_ari": 0.4423
+      },
+      "names": {
+        "0": "Premium Steady",
+        "1": "Core Steady",
+        "2": "Premium Active",
+        "3": "Core Active",
+        "4": "Light Dormant"
+      },
+      "feature_names": [
+        "recency_days",
+        "frequency",
+        "monetary_value",
+        "relationship_length_days",
+        "average_order_value"
+      ],
+      "customer_ids": null,
+      "labels": null
+    },
+    {
+      "model": "ensemble",
+      "status": "ok",
+      "params": {
+        "n_clusters": 5,
+        "seed": 42
+      },
+      "metrics": {
+        "silhouette": 0.244,
+        "davies_bouldin": 1.1452,
+        "calinski_harabasz": 16836.7864,
+        "n_clusters": 5,
+        "cluster_ids": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "sizes": {
+          "0": 10542,
+          "1": 6956,
+          "2": 16257,
+          "3": 1926,
+          "4": 4222
+        },
+        "proportions": {
+          "0": 0.2642,
+          "1": 0.1743,
+          "2": 0.4074,
+          "3": 0.0483,
+          "4": 0.1058
+        },
+        "noise_count": 0,
+        "noise_pct": 0.0,
+        "min_cluster_size": 1926
+      },
+      "stability": {
+        "method": "seeds",
+        "seeds": [
+          42,
+          7,
+          123
+        ],
+        "mean_pairwise_ari": 0.8285
+      },
+      "names": {
+        "0": "Core Dormant",
+        "1": "Core Steady",
+        "2": "Premium Steady",
+        "3": "Premium Active",
+        "4": "Light Dormant"
+      },
+      "feature_names": [
+        "recency_days",
+        "frequency",
+        "monetary_value",
+        "relationship_length_days",
+        "average_order_value"
+      ],
+      "customer_ids": null,
+      "labels": null
+    }
+  ],
+  "selected": "kmeans"
+}

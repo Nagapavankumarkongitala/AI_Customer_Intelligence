@@ -1,0 +1,92 @@
+{
+  "audit": {
+    "input_rows": 250000,
+    "output_rows": 245989,
+    "rows_removed": 4011,
+    "rules": {
+      "duplicates": {
+        "action": "drop",
+        "records_affected": 0
+      },
+      "missing_customer_id": {
+        "action": "drop",
+        "records_affected": 0
+      },
+      "invalid_dates": {
+        "action": "drop",
+        "records_affected": 4011
+      },
+      "missing_amounts": {
+        "action": "median",
+        "records_affected": 0
+      },
+      "negative_amounts": {
+        "action": "keep",
+        "records_affected": 5
+      },
+      "monetary_outliers": {
+        "action": "ignore",
+        "records_affected": 25478
+      },
+      "invalid_ages": {
+        "action": "missing",
+        "records_affected": 0
+      },
+      "whitespace_normalization": {
+        "action": "always",
+        "records_affected": 0
+      }
+    },
+    "cleaning_config": {
+      "duplicates": "drop",
+      "missing_customer_id": "drop",
+      "invalid_dates": "drop",
+      "missing_amounts": "median",
+      "negatives": "keep",
+      "outliers": "ignore",
+      "invalid_ages": "missing",
+      "age_min": 0,
+      "age_max": 120,
+      "future_tolerance_days": 0,
+      "iqr_multiplier": 1.5
+    },
+    "timestamp": "2026-10-20T18:43:33.557662+00:00",
+    "source_filename": "data.csv",
+    "column_mapping": {
+      "customer_id": "customer_id",
+      "transaction_date": "transaction_date",
+      "amount_spent": "total_amount",
+      "gender": "gender",
+      "age": "age",
+      "city": "city",
+      "state": "state",
+      "country": "country",
+      "region": "region"
+    }
+  },
+  "cleaning_config": {
+    "duplicates": "drop",
+    "missing_customer_id": "drop",
+    "invalid_dates": "drop",
+    "missing_amounts": "median",
+    "negatives": "keep",
+    "outliers": "ignore",
+    "invalid_ages": "missing",
+    "age_min": 0,
+    "age_max": 120,
+    "future_tolerance_days": 0,
+    "iqr_multiplier": 1.5
+  },
+  "column_mapping": {
+    "customer_id": "customer_id",
+    "transaction_date": "transaction_date",
+    "amount_spent": "total_amount",
+    "gender": "gender",
+    "age": "age",
+    "city": "city",
+    "state": "state",
+    "country": "country",
+    "region": "region"
+  },
+  "quality_overall": 99.36
+}

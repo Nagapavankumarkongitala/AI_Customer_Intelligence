@@ -1,0 +1,36 @@
+{
+  "source": "data.csv",
+  "cache_version": 5,
+  "source_mtime": 1792501887.0295424,
+  "source_size": 17557335,
+  "built_at": "2026-10-20T23:46:30.169986",
+  "rows": 250000,
+  "customers": 39903,
+  "cleaned_rows": 245989,
+  "quality_overall": 99.36,
+  "rfm_segments": 10,
+  "lrfm_segments": 10,
+  "segment_history_granularity": "quarterly",
+  "segment_history_periods": 8,
+  "segment_transition_rows": 790,
+  "segmentation_models": [
+    "kmeans",
+    "gmm",
+    "hierarchical",
+    "autoencoder",
+    "ensemble"
+  ],
+  "selected_segmentation_model": "kmeans",
+  "churn_models": [
+    "histgb",
+    "logreg",
+    "random_forest",
+    "xgboost"
+  ],
+  "selected_churn_model": "histgb",
+  "churn_auc": 0.5117,
+  "churn_rate": 0.8604,
+  "retention_customers": 39903,
+  "segmentation_path": "models\\segmentation\\default_kmeans_k5.joblib",
+  "churn_path": "models\\churn\\default_histgb_2026-07-08.joblib"
+}

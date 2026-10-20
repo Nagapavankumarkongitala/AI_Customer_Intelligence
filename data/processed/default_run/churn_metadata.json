@@ -1,0 +1,82 @@
+{
+  "logreg": {
+    "model": "logreg",
+    "threshold": 0.05,
+    "metrics": {
+      "threshold": 0.05,
+      "roc_auc": 0.5035,
+      "pr_auc": 0.8613,
+      "precision": 0.8629,
+      "recall": 1.0,
+      "f1": 0.9264,
+      "balanced_accuracy": 0.5,
+      "log_loss": 0.3997,
+      "brier": 0.1183,
+      "n": 5981,
+      "positive_rate": 0.8629
+    },
+    "calibration": "sigmoid on validation",
+    "cutoff": "2026-07-08",
+    "horizon_days": 90
+  },
+  "histgb": {
+    "model": "histgb",
+    "threshold": 0.05,
+    "metrics": {
+      "threshold": 0.05,
+      "roc_auc": 0.5117,
+      "pr_auc": 0.8638,
+      "precision": 0.8629,
+      "recall": 1.0,
+      "f1": 0.9264,
+      "balanced_accuracy": 0.5,
+      "log_loss": 0.3997,
+      "brier": 0.1183,
+      "n": 5981,
+      "positive_rate": 0.8629
+    },
+    "calibration": "sigmoid on validation",
+    "cutoff": "2026-07-08",
+    "horizon_days": 90
+  },
+  "random_forest": {
+    "model": "random_forest",
+    "threshold": 0.05,
+    "metrics": {
+      "threshold": 0.05,
+      "roc_auc": 0.4986,
+      "pr_auc": 0.8631,
+      "precision": 0.8629,
+      "recall": 1.0,
+      "f1": 0.9264,
+      "balanced_accuracy": 0.5,
+      "log_loss": 0.3997,
+      "brier": 0.1183,
+      "n": 5981,
+      "positive_rate": 0.8629
+    },
+    "calibration": "sigmoid on validation",
+    "cutoff": "2026-07-08",
+    "horizon_days": 90
+  },
+  "xgboost": {
+    "model": "xgboost",
+    "threshold": 0.05,
+    "metrics": {
+      "threshold": 0.05,
+      "roc_auc": 0.5063,
+      "pr_auc": 0.8659,
+      "precision": 0.8629,
+      "recall": 1.0,
+      "f1": 0.9264,
+      "balanced_accuracy": 0.5,
+      "log_loss": 0.3996,
+      "brier": 0.1183,
+      "n": 5981,
+      "positive_rate": 0.8629
+    },
+    "calibration": "sigmoid on validation",
+    "cutoff": "2026-07-08",
+    "horizon_days": 90
+  }
+}

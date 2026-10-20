@@ -1,0 +1,726 @@
+{
+  "tables": {
+    "age_summary": [
+      {
+        "customers_with_age": 39903,
+        "mean_age": 35.31,
+        "median_age": 33.0
+      }
+    ],
+    "age_bands": [
+      {
+        "age_band": "25\u201334",
+        "customers": 13949,
+        "pct": 34.96
+      },
+      {
+        "age_band": "35\u201349",
+        "customers": 11329,
+        "pct": 28.39
+      },
+      {
+        "age_band": "18\u201324",
+        "customers": 8573,
+        "pct": 21.48
+      },
+      {
+        "age_band": "50\u201364",
+        "customers": 5030,
+        "pct": 12.61
+      },
+      {
+        "age_band": "65+",
+        "customers": 1022,
+        "pct": 2.56
+      }
+    ],
+    "gender": [
+      {
+        "gender": "male",
+        "customers": 19959,
+        "pct": 50.02,
+        "revenue": 2907096677.24,
+        "revenue_pct": 49.86
+      },
+      {
+        "gender": "female",
+        "customers": 19944,
+        "pct": 49.98,
+        "revenue": 2923636088.5,
+        "revenue_pct": 50.14
+      }
+    ],
+    "geo_city": [
+      {
+        "city": "New Delhi",
+        "customers": 1104,
+        "pct": 2.77,
+        "revenue": 164410923.33,
+        "revenue_pct": 2.82
+      },
+      {
+        "city": "Madurai",
+        "customers": 1099,
+        "pct": 2.75,
+        "revenue": 163771563.6,
+        "revenue_pct": 2.81
+      },
+      {
+        "city": "Howrah",
+        "customers": 1094,
+        "pct": 2.74,
+        "revenue": 157085773.83,
+        "revenue_pct": 2.69
+      },
+      {
+        "city": "Kanpur",
+        "customers": 1073,
+        "pct": 2.69,
+        "revenue": 155719792.12,
+        "revenue_pct": 2.67
+      },
+      {
+        "city": "Patiala",
+        "customers": 1069,
+        "pct": 2.68,
+        "revenue": 152370564.88,
+        "revenue_pct": 2.61
+      },
+      {
+        "city": "Varanasi",
+        "customers": 1069,
+        "pct": 2.68,
+        "revenue": 154363500.17,
+        "revenue_pct": 2.65
+      },
+      {
+        "city": "Chennai",
+        "customers": 1065,
+        "pct": 2.67,
+        "revenue": 153942546.95,
+        "revenue_pct": 2.64
+      },
+      {
+        "city": "Amritsar",
+        "customers": 1065,
+        "pct": 2.67,
+        "revenue": 154262770.68,
+        "revenue_pct": 2.65
+      },
+      {
+        "city": "Alwar",
+        "customers": 1054,
+        "pct": 2.64,
+        "revenue": 152297020.84,
+        "revenue_pct": 2.61
+      },
+      {
+        "city": "Kolkata",
+        "customers": 1037,
+        "pct": 2.6,
+        "revenue": 149245766.98,
+        "revenue_pct": 2.56
+      },
+      {
+        "city": "Agra",
+        "customers": 1034,
+        "pct": 2.59,
+        "revenue": 153464620.12,
+        "revenue_pct": 2.63
+      },
+      {
+        "city": "Dwarka",
+        "customers": 1034,
+        "pct": 2.59,
+        "revenue": 153123345.21,
+        "revenue_pct": 2.63
+      },
+      {
+        "city": "Surat",
+        "customers": 1033,
+        "pct": 2.59,
+        "revenue": 153271090.24,
+        "revenue_pct": 2.63
+      },
+      {
+        "city": "Palwal",
+        "customers": 1033,
+        "pct": 2.59,
+        "revenue": 149615638.72,
+        "revenue_pct": 2.57
+      },
+      {
+        "city": "Sohna",
+        "customers": 1030,
+        "pct": 2.58,
+        "revenue": 149042799.9,
+        "revenue_pct": 2.56
+      },
+      {
+        "city": "Mysore",
+        "customers": 1030,
+        "pct": 2.58,
+        "revenue": 148266022.49,
+        "revenue_pct": 2.54
+      },
+      {
+        "city": "Vadodara",
+        "customers": 1029,
+        "pct": 2.58,
+        "revenue": 152971336.59,
+        "revenue_pct": 2.62
+      },
+      {
+        "city": "Thane",
+        "customers": 1028,
+        "pct": 2.58,
+        "revenue": 154772302.29,
+        "revenue_pct": 2.65
+      },
+      {
+        "city": "Mangalore",
+        "customers": 1023,
+        "pct": 2.56,
+        "revenue": 149410500.13,
+        "revenue_pct": 2.56
+      },
+      {
+        "city": "Lucknow",
+        "customers": 1023,
+        "pct": 2.56,
+        "revenue": 144784590.27,
+        "revenue_pct": 2.48
+      },
+      {
+        "city": "Jaipur",
+        "customers": 1022,
+        "pct": 2.56,
+        "revenue": 151249153.31,
+        "revenue_pct": 2.59
+      },
+      {
+        "city": "Panipat",
+        "customers": 1020,
+        "pct": 2.56,
+        "revenue": 148739758.28,
+        "revenue_pct": 2.55
+      },
+      {
+        "city": "Mumbai",
+        "customers": 1020,
+        "pct": 2.56,
+        "revenue": 149132591.71,
+        "revenue_pct": 2.56
+      },
+      {
+        "city": "Gurugram",
+        "customers": 1017,
+        "pct": 2.55,
+        "revenue": 149619405.11,
+        "revenue_pct": 2.57
+      },
+      {
+        "city": "Nagpur",
+        "customers": 1014,
+        "pct": 2.54,
+        "revenue": 151302151.13,
+        "revenue_pct": 2.59
+      },
+      {
+        "city": "Faridabad",
+        "customers": 1011,
+        "pct": 2.53,
+        "revenue": 144289132.53,
+        "revenue_pct": 2.47
+      },
+      {
+        "city": "Noida",
+        "customers": 1008,
+        "pct": 2.53,
+        "revenue": 148547384.94,
+        "revenue_pct": 2.55
+      },
+      {
+        "city": "Durgapur",
+        "customers": 997,
+        "pct": 2.5,
+        "revenue": 142849573.27,
+        "revenue_pct": 2.45
+      },
+      {
+        "city": "Coimbatore",
+        "customers": 997,
+        "pct": 2.5,
+        "revenue": 145268437.59,
+        "revenue_pct": 2.49
+      },
+      {
+        "city": "Jodhpur",
+        "customers": 997,
+        "pct": 2.5,
+        "revenue": 151048195.44,
+        "revenue_pct": 2.59
+      },
+      {
+        "city": "Udaipur",
+        "customers": 993,
+        "pct": 2.49,
+        "revenue": 143591368.47,
+        "revenue_pct": 2.46
+      },
+      {
+        "city": "Ludhiana",
+        "customers": 990,
+        "pct": 2.48,
+        "revenue": 146840144.9,
+        "revenue_pct": 2.52
+      },
+      {
+        "city": "Kota",
+        "customers": 984,
+        "pct": 2.47,
+        "revenue": 146836343.99,
+        "revenue_pct": 2.52
+      },
+      {
+        "city": "Rajkot",
+        "customers": 983,
+        "pct": 2.46,
+        "revenue": 139629031.71,
+        "revenue_pct": 2.39
+      },
+      {
+        "city": "Pune",
+        "customers": 981,
+        "pct": 2.46,
+        "revenue": 139762882.74,
+        "revenue_pct": 2.4
+      },
+      {
+        "city": "Delhi NCR",
+        "customers": 973,
+        "pct": 2.44,
+        "revenue": 148810537.51,
+        "revenue_pct": 2.55
+      },
+      {
+        "city": "Ahmedabad",
+        "customers": 964,
+        "pct": 2.42,
+        "revenue": 142229263.4,
+        "revenue_pct": 2.44
+      },
+      {
+        "city": "Bangalore",
+        "customers": 957,
+        "pct": 2.4,
+        "revenue": 139196472.81,
+        "revenue_pct": 2.39
+      },
+      {
+        "city": "Jalandhar",
+        "customers": 949,
+        "pct": 2.38,
+        "revenue": 135598467.56,
+        "revenue_pct": 2.33
+      }
+    ],
+    "concentration": [
+      {
+        "level": "city",
+        "top3_share_pct": 8.26,
+        "hhi": 0.0257
+      },
+      {
+        "level": "state",
+        "top3_share_pct": 38.52,
+        "hhi": 0.1044
+      },
+      {
+        "level": "country",
+        "top3_share_pct": 100.0,
+        "hhi": 1.0
+      },
+      {
+        "level": "region",
+        "top3_share_pct": 92.17,
+        "hhi": 0.3902
+      }
+    ],
+    "geo_state": [
+      {
+        "state": "UP",
+        "customers": 5207,
+        "pct": 13.05,
+        "revenue": 756879887.62,
+        "revenue_pct": 12.98
+      },
+      {
+        "state": "Haryana",
+        "customers": 5111,
+        "pct": 12.81,
+        "revenue": 741306734.54,
+        "revenue_pct": 12.71
+      },
+      {
+        "state": "Rajasthan",
+        "customers": 5050,
+        "pct": 12.66,
+        "revenue": 745022082.05,
+        "revenue_pct": 12.78
+      },
+      {
+        "state": "Punjab",
+        "customers": 4073,
+        "pct": 10.21,
+        "revenue": 589071948.02,
+        "revenue_pct": 10.1
+      },
+      {
+        "state": "Maharashtra",
+        "customers": 4043,
+        "pct": 10.13,
+        "revenue": 594969927.87,
+        "revenue_pct": 10.2
+      },
+      {
+        "state": "Gujarat",
+        "customers": 4009,
+        "pct": 10.05,
+        "revenue": 588100721.94,
+        "revenue_pct": 10.09
+      },
+      {
+        "state": "Tamil Nadu",
+        "customers": 3161,
+        "pct": 7.92,
+        "revenue": 462982548.14,
+        "revenue_pct": 7.94
+      },
+      {
+        "state": "West Bengal",
+        "customers": 3128,
+        "pct": 7.84,
+        "revenue": 449181114.08,
+        "revenue_pct": 7.7
+      },
+      {
+        "state": "Delhi",
+        "customers": 3111,
+        "pct": 7.8,
+        "revenue": 466344806.05,
+        "revenue_pct": 8.0
+      },
+      {
+        "state": "Karnataka",
+        "customers": 3010,
+        "pct": 7.54,
+        "revenue": 436872995.43,
+        "revenue_pct": 7.49
+      }
+    ],
+    "geo_country": [
+      {
+        "country": "India",
+        "customers": 39903,
+        "pct": 100.0,
+        "revenue": 5830732765.74,
+        "revenue_pct": 100.0
+      }
+    ],
+    "geo_region": [
+      {
+        "region": "North",
+        "customers": 22552,
+        "pct": 56.52,
+        "revenue": 3298625458.28,
+        "revenue_pct": 56.57
+      },
+      {
+        "region": "West",
+        "customers": 8052,
+        "pct": 20.18,
+        "revenue": 1183070649.81,
+        "revenue_pct": 20.29
+      },
+      {
+        "region": "South",
+        "customers": 6171,
+        "pct": 15.47,
+        "revenue": 899855543.57,
+        "revenue_pct": 15.43
+      },
+      {
+        "region": "East",
+        "customers": 3128,
+        "pct": 7.84,
+        "revenue": 449181114.08,
+        "revenue_pct": 7.7
+      }
+    ],
+    "segment_profiles": [
+      {
+        "segment": "At Risk",
+        "customers": 2496,
+        "pct": 6.26,
+        "mean_age": 35.44,
+        "revenue": 359439728.24,
+        "top_gender": "male",
+        "top_gender_pct": 51.24,
+        "top_region": "North",
+        "top_region_pct": 59.17
+      },
+      {
+        "segment": "Cannot Lose Them",
+        "customers": 4389,
+        "pct": 11.0,
+        "mean_age": 35.31,
+        "revenue": 845645071.97,
+        "top_gender": "male",
+        "top_gender_pct": 50.17,
+        "top_region": "North",
+        "top_region_pct": 55.3
+      },
+      {
+        "segment": "Champions",
+        "customers": 8654,
+        "pct": 21.69,
+        "mean_age": 35.25,
+        "revenue": 1772602806.54,
+        "top_gender": "male",
+        "top_gender_pct": 50.1,
+        "top_region": "North",
+        "top_region_pct": 55.93
+      },
+      {
+        "segment": "Hibernating",
+        "customers": 1790,
+        "pct": 4.49,
+        "mean_age": 31.08,
+        "revenue": 395717317.38,
+        "top_gender": "female",
+        "top_gender_pct": 51.06,
+        "top_region": "North",
+        "top_region_pct": 54.75
+      },
+      {
+        "segment": "Lost Customers",
+        "customers": 7229,
+        "pct": 18.12,
+        "mean_age": 36.14,
+        "revenue": 407500369.66,
+        "top_gender": "female",
+        "top_gender_pct": 50.64,
+        "top_region": "North",
+        "top_region_pct": 56.94
+      },
+      {
+        "segment": "Loyal Customers",
+        "customers": 3665,
+        "pct": 9.18,
+        "mean_age": 35.48,
+        "revenue": 727241291.9,
+        "top_gender": "male",
+        "top_gender_pct": 50.97,
+        "top_region": "North",
+        "top_region_pct": 55.77
+      },
+      {
+        "segment": "Needs Attention",
+        "customers": 4417,
+        "pct": 11.07,
+        "mean_age": 35.36,
+        "revenue": 503062985.31,
+        "top_gender": "female",
+        "top_gender_pct": 50.1,
+        "top_region": "North",
+        "top_region_pct": 57.21
+      },
+      {
+        "segment": "New Customers",
+        "customers": 1268,
+        "pct": 3.18,
+        "mean_age": 37.68,
+        "revenue": 53867158.39,
+        "top_gender": "female",
+        "top_gender_pct": 50.87,
+        "top_region": "North",
+        "top_region_pct": 55.6
+      },
+      {
+        "segment": "Potential Loyalists",
+        "customers": 5025,
+        "pct": 12.59,
+        "mean_age": 35.63,
+        "revenue": 599474563.87,
+        "top_gender": "female",
+        "top_gender_pct": 50.11,
+        "top_region": "North",
+        "top_region_pct": 57.11
+      },
+      {
+        "segment": "Promising",
+        "customers": 970,
+        "pct": 2.43,
+        "mean_age": 31.37,
+        "revenue": 166181472.48,
+        "top_gender": "male",
+        "top_gender_pct": 51.13,
+        "top_region": "North",
+        "top_region_pct": 58.35
+      }
+    ],
+    "segment_comparison": [
+      {
+        "segment": "At Risk",
+        "metric": "mean_age",
+        "segment_value": 35.44,
+        "population_value": 35.31,
+        "difference": 0.13
+      },
+      {
+        "segment": "At Risk",
+        "metric": "mean_monetary",
+        "segment_value": 144006.3,
+        "population_value": 146122.67,
+        "difference": -2116.37
+      },
+      {
+        "segment": "Cannot Lose Them",
+        "metric": "mean_age",
+        "segment_value": 35.31,
+        "population_value": 35.31,
+        "difference": 0.0
+      },
+      {
+        "segment": "Cannot Lose Them",
+        "metric": "mean_monetary",
+        "segment_value": 192673.75,
+        "population_value": 146122.67,
+        "difference": 46551.08
+      },
+      {
+        "segment": "Champions",
+        "metric": "mean_age",
+        "segment_value": 35.25,
+        "population_value": 35.31,
+        "difference": -0.06
+      },
+      {
+        "segment": "Champions",
+        "metric": "mean_monetary",
+        "segment_value": 204830.46,
+        "population_value": 146122.67,
+        "difference": 58707.79
+      },
+      {
+        "segment": "Hibernating",
+        "metric": "mean_age",
+        "segment_value": 31.08,
+        "population_value": 35.31,
+        "difference": -4.23
+      },
+      {
+        "segment": "Hibernating",
+        "metric": "mean_monetary",
+        "segment_value": 221071.13,
+        "population_value": 146122.67,
+        "difference": 74948.46
+      },
+      {
+        "segment": "Lost Customers",
+        "metric": "mean_age",
+        "segment_value": 36.14,
+        "population_value": 35.31,
+        "difference": 0.83
+      },
+      {
+        "segment": "Lost Customers",
+        "metric": "mean_monetary",
+        "segment_value": 56370.23,
+        "population_value": 146122.67,
+        "difference": -89752.44
+      },
+      {
+        "segment": "Loyal Customers",
+        "metric": "mean_age",
+        "segment_value": 35.48,
+        "population_value": 35.31,
+        "difference": 0.17
+      },
+      {
+        "segment": "Loyal Customers",
+        "metric": "mean_monetary",
+        "segment_value": 198428.73,
+        "population_value": 146122.67,
+        "difference": 52306.06
+      },
+      {
+        "segment": "Needs Attention",
+        "metric": "mean_age",
+        "segment_value": 35.36,
+        "population_value": 35.31,
+        "difference": 0.05
+      },
+      {
+        "segment": "Needs Attention",
+        "metric": "mean_monetary",
+        "segment_value": 113892.46,
+        "population_value": 146122.67,
+        "difference": -32230.21
+      },
+      {
+        "segment": "New Customers",
+        "metric": "mean_age",
+        "segment_value": 37.68,
+        "population_value": 35.31,
+        "difference": 2.37
+      },
+      {
+        "segment": "New Customers",
+        "metric": "mean_monetary",
+        "segment_value": 42481.99,
+        "population_value": 146122.67,
+        "difference": -103640.68
+      },
+      {
+        "segment": "Potential Loyalists",
+        "metric": "mean_age",
+        "segment_value": 35.63,
+        "population_value": 35.31,
+        "difference": 0.32
+      },
+      {
+        "segment": "Potential Loyalists",
+        "metric": "mean_monetary",
+        "segment_value": 119298.42,
+        "population_value": 146122.67,
+        "difference": -26824.25
+      },
+      {
+        "segment": "Promising",
+        "metric": "mean_age",
+        "segment_value": 31.37,
+        "population_value": 35.31,
+        "difference": -3.94
+      },
+      {
+        "segment": "Promising",
+        "metric": "mean_monetary",
+        "segment_value": 171321.11,
+        "population_value": 146122.67,
+        "difference": 25198.44
+      }
+    ]
+  },
+  "missing_pct": {
+    "gender": 0.0,
+    "age": 0.0,
+    "city": 0.0,
+    "state": 0.0,
+    "country": 0.0,
+    "region": 0.0
+  },
+  "notes": [],
+  "source": "data.csv"
+}
