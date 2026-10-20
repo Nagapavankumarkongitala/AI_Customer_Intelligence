@@ -106,9 +106,7 @@ def build_default_run(force: bool = False) -> dict:
     if not force and cache_is_fresh():
         return json.loads(MANIFEST.read_text(encoding="utf-8"))
     if not DEFAULT_SOURCE.exists():
-        raise FileNotFoundError(
-            "Default dataset 'data.csv' not found at the repository root."
-        )
+        raise FileNotFoundError("Default dataset 'data.csv' not found at the repository root.")
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
     cfg = _config()
     started = datetime.now().isoformat()
