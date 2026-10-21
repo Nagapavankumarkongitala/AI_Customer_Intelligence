@@ -15,6 +15,11 @@ servers/
 awesome-ai-agents/
 .agents/
 
+# Node.js (not part of this project — Streamlit app is pure Python)
+node_modules/
+package.json
+package-lock.json
+
 # Streamlit secrets / env
 .env
 .streamlit/secrets.toml
