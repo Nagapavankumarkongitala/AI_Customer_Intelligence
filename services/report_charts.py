@@ -526,6 +526,69 @@ def _priority_histogram(context: dict[str, Any]) -> bytes | None:
     return _save(fig)
 
 
+def _comparison_metric(
+    context: dict[str, Any], metric: str, title: str, percent: bool = False
+) -> bytes | None:
+    """One scorecard metric across the candidate models, as a vertical bar chart.
+
+    Bars are coloured by the model's kind (AI vs traditional) so the RFM/LRFM
+    entries — which leave silhouette blank by design — read as a different class
+    rather than as missing data. ``percent`` scales a 0–1 metric to a percentage
+    axis; the value labels stay in the metric's own units.
+    """
+    comparison = context.get("comparison") or {}
+    table = _as_frame(comparison.get("table")) if isinstance(comparison, dict) else None
+    if table is None or metric not in table.columns:
+        return None
+    data = table.dropna(subset=[metric])
+    if data.empty:
+        return None
+    labels = [_short(str(value), 16) for value in data["model"]]
+    values = pd.to_numeric(data[metric], errors="coerce").astype(float).to_numpy()
+    colors = [
+        _SECONDARY if str(kind) == "Traditional" else _PRIMARY
+        for kind in data.get("kind", pd.Series(["AI"] * len(data)))
+    ]
+    fig, ax = _axes()
+    positions = np.arange(len(values))
+    bars = ax.bar(positions, values, color=colors, width=0.62)
+    ax.set_xticks(positions)
+    ax.set_xticklabels(labels, fontsize=7.5, rotation=20, ha="right")
+    ax.grid(axis="x", visible=False)
+    ax.grid(axis="y", color=_GRID, linewidth=0.9)
+    ax.set_axisbelow(True)
+    ax.spines["bottom"].set_visible(False)
+    if percent:
+        ax.yaxis.set_major_formatter(FuncFormatter(lambda value, _pos: f"{value:.0%}"))
+        end_labels = [f"{value:.0%}" for value in values]
+    else:
+        end_labels = [f"{value:.3f}" for value in values]
+    ax.bar_label(bars, labels=end_labels, padding=3, fontsize=7)
+    top = float(values.max()) if len(values) else 1.0
+    ax.set_ylim(0, top * 1.2 if top > 0 else 1)
+    return _save(fig)
+
+
+def _comparison_separation(context: dict[str, Any]) -> bytes | None:
+    """Silhouette per AI run (RFM/LRFM blank by design)."""
+    return _comparison_metric(context, "silhouette", "Silhouette by model")
+
+
+def _comparison_stability(context: dict[str, Any]) -> bytes | None:
+    """Seed stability (ARI) per model."""
+    return _comparison_metric(context, "stability_ari", "Seed stability by model")
+
+
+def _comparison_value(context: dict[str, Any]) -> bytes | None:
+    """Revenue differentiation (eta²) per model."""
+    return _comparison_metric(context, "value_eta2", "Revenue differentiation by model")
+
+
+def _comparison_evenness(context: dict[str, Any]) -> bytes | None:
+    """Size balance (evenness) per model, as a percentage of even."""
+    return _comparison_metric(context, "evenness", "Size balance by model", percent=True)
+
+
 #: Registry consumed by the PDF and Word exporters, keyed like CHART_EXPLANATIONS.
 CHART_BUILDERS: dict[str, Callable[[dict[str, Any]], bytes | None]] = {
     "revenue_trend": _revenue_trend,
@@ -537,6 +600,10 @@ CHART_BUILDERS: dict[str, Callable[[dict[str, Any]], bytes | None]] = {
     "demographics_age": _demographics_age,
     "demographics_gender": _demographics_gender,
     "demographics_region": _demographics_region,
+    "comparison_separation": _comparison_separation,
+    "comparison_stability": _comparison_stability,
+    "comparison_value": _comparison_value,
+    "comparison_evenness": _comparison_evenness,
     "risk_bands": _risk_bands,
     "value_risk_matrix": _value_risk_matrix,
     "revenue_at_risk": _revenue_at_risk,

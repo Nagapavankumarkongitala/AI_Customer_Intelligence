@@ -207,12 +207,14 @@ section_header("Customer base")
 metric_row(
     [
         Metric("Customers", formatting.fmt_int(len(features))),
-        Metric("Total revenue", formatting.fmt_money(features["monetary_value"].sum())),
+        Metric("Total revenue", formatting.fmt_money_compact(features["monetary_value"].sum())),
         Metric(
             "Average order value",
-            formatting.fmt_money(features["monetary_value"].sum() / features["frequency"].sum()),
+            formatting.fmt_money_compact(
+                features["monetary_value"].sum() / features["frequency"].sum()
+            ),
         ),
-        Metric("Avg recency (days)", f"{features['recency_days'].mean():,.0f}"),
+        Metric("Avg recency (days)", formatting.fmt_int(features["recency_days"].mean())),
     ]
 )
 

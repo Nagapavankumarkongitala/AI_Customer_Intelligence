@@ -34,6 +34,7 @@ from services.segmentation_service import (
     sweep_clusters,
     train_all_models,
 )
+from utils import formatting
 from utils.exceptions import CustomerIntelligenceError
 from utils.logging_config import configure_logging
 from visualization.segmentation_charts import (
@@ -82,35 +83,64 @@ with controls_expander("Feature Controls"):
             help="Robust (median/IQR) resists outliers; standard uses mean/std.",
         )
 
-if st.button("Prepare features"):
+
+def _prepare(frame: "object", columns: list[str], scaler_name: str, log1p: bool) -> dict | None:
+    """Prepare segmentation features and stash the result in session state.
+
+    Returns the prepared bundle, or None when preparation raised (the message is
+    stashed for the empty state). One code path serves both the manual button and
+    the first-load auto-prepare, so the two can never disagree.
+    """
     try:
         prepared = prepare_segmentation_features(
-            features,
-            selected,
-            scaler=scaler,
-            log1p=use_log1p,
+            frame,
+            columns,
+            scaler=scaler_name,
+            log1p=log1p,
             minimum_customers=cfg["segmentation"]["minimum_customers"],
         )
-        st.session_state["seg_prepared"] = {
-            "matrix": prepared.matrix,
-            "feature_names": prepared.feature_names,
-            "pipeline": prepared.pipeline,
-            "report": {
-                "dropped_zero_variance": prepared.dropped_zero_variance,
-                "log1p_applied": prepared.log1p_applied,
-                "high_correlations": prepared.high_correlations,
-            },
-        }
-        st.success(
-            f"Prepared {prepared.matrix.shape[0]} customers × "
-            f"{prepared.matrix.shape[1]} features."
-        )
     except (CustomerIntelligenceError, KeyError, ValueError) as exc:
-        st.error(str(exc))
+        st.session_state["seg_prepared_error"] = str(exc)
+        return None
+    bundle = {
+        "matrix": prepared.matrix,
+        "feature_names": prepared.feature_names,
+        "pipeline": prepared.pipeline,
+        "report": {
+            "dropped_zero_variance": prepared.dropped_zero_variance,
+            "log1p_applied": prepared.log1p_applied,
+            "high_correlations": prepared.high_correlations,
+        },
+    }
+    st.session_state["seg_prepared"] = bundle
+    st.session_state.pop("seg_prepared_error", None)
+    return bundle
+
+
+if st.button("Prepare features"):
+    if _prepare(features, selected, scaler, use_log1p) is not None:
+        prepared = st.session_state["seg_prepared"]
+        st.success(
+            f"Prepared {prepared['matrix'].shape[0]} customers × "
+            f"{prepared['matrix'].shape[1]} features."
+        )
+    else:
+        st.error(st.session_state["seg_prepared_error"])
+
+# Auto-prepare on first load so the tab opens with the pipeline ready instead of
+# stopping at an empty state — the default feature set is known and cheap to
+# prepare. Training still waits for an explicit click, so this never starts a
+# long job behind the user's back.
+if st.session_state.get("seg_prepared") is None:
+    _prepare(features, defaults or numeric_cols, "robust", True)
 
 prepared_state = st.session_state.get("seg_prepared")
 if prepared_state is None:
-    empty_state("No prepared features", "Select features and prepare them to continue.")
+    empty_state(
+        "No prepared features",
+        st.session_state.get("seg_prepared_error")
+        or "Select features and prepare them to continue.",
+    )
     st.stop()
 
 report = prepared_state["report"]
@@ -272,7 +302,7 @@ metric_row(
     [
         Metric("Clusters", str(metrics["n_clusters"])),
         Metric("Silhouette ↑", str(metrics["silhouette"])),
-        Metric("Noise", f"{metrics['noise_pct']}%"),
+        Metric("Noise", formatting.fmt_pct100(metrics["noise_pct"])),
         Metric("Seed stability (ARI)", str(run["stability"]["mean_pairwise_ari"])),
     ]
 )

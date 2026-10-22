@@ -407,6 +407,20 @@ def _resolve_mode(mode: str | None) -> str:
     return mode if mode in tokens.MODES else tokens.active_mode()
 
 
+def _has_secondary_axis(fig: Any) -> bool:
+    """Whether any trace rides a paired axis (``make_subplots(secondary_y=...)``).
+
+    Plotly marks the pairing on the trace itself, so the figure is inspected
+    rather than the layout: a chart with two different scales needs its axis
+    titles kept, a single-scale chart does not.
+    """
+    for trace in getattr(fig, "data", ()) or ():
+        for axis in ("xaxis", "yaxis"):
+            if str(getattr(trace, axis, "") or "").endswith("2"):
+                return True
+    return False
+
+
 def _apply_color_table(fig: Any, table: dict[str, str]) -> Any:
     import plotly.graph_objects as go
 
@@ -565,10 +579,22 @@ def apply_chart_theme(
         zeroline=False,
         showline=False,
         tickfont={"color": ink["muted"]},
-        title_text="",
         title_standoff=0,
         automargin=True,
     )
+    # Y-axis titles are dropped on single-axis charts (tick values plus the
+    # section heading carry the meaning), but a figure with a secondary axis has
+    # two different scales on one plot — there the titles are the only thing that
+    # says which series belongs to which, so they are kept and styled instead.
+    # The axis objects are touched directly (not via update_yaxes(secondary_y=...))
+    # because mode normalisation rebuilds the figure and drops its subplot grid.
+    if _has_secondary_axis(fig):
+        for axis_name in ("yaxis", "yaxis2"):
+            axis = getattr(fig.layout, axis_name, None)
+            if axis is not None:
+                axis.title.font = {"color": ink["muted"], "size": 11}
+    else:
+        fig.update_yaxes(title_text="")
 
     # Separate adjacent markers with a hairline in the surface tone.
     separator = ink["background"] if dark else ink["surface"]

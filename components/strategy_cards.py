@@ -51,7 +51,7 @@ def _render_reason(
     mapping = {
         "value": formatting.fmt_money(value) if value is not None else "—",
         "band": "/".join(bands) or "band",
-        "probability": f"{probability:.3f}" if probability is not None else "—",
+        "probability": formatting.fmt_float(probability, 3) if probability is not None else "—",
     }
     rendered = template
     for key, text in mapping.items():

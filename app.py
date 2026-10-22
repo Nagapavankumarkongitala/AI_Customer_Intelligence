@@ -8,6 +8,7 @@ from components.cached import (
     cached_build_master,
     cached_compute_kpis,
     cached_high_value_high_risk,
+    cached_period_deltas,
     cached_prepare_transactions,
     cached_segment_portfolio,
     cached_trend_tables,
@@ -37,7 +38,8 @@ from visualization.executive_dashboard import (
     activity_trend_fig,
     new_returning_fig,
     portfolio_bar_fig,
-    revenue_area_fig,
+    revenue_trend_fig,
+    shade_quarters,
 )
 from visualization.retention_charts import (
     priority_histogram,
@@ -46,8 +48,10 @@ from visualization.retention_charts import (
     value_risk_heatmap,
 )
 from visualization.rfm_charts import (
+    biggest_segment_shifts,
+    group_small_segments,
     revenue_by_segment_bar,
-    segment_share_donut,
+    segment_share_bar,
     segment_trend_lines,
 )
 from visualization.theme import apply_chart_theme, inject_terminal_css, without_title
@@ -112,6 +116,28 @@ def _compact(fig):
     return without_title(apply_chart_theme(fig, compact=True), compact=True)
 
 
+#: Metrics where a rise is bad news, so the delta pill takes the negative tone.
+_INVERSE_DELTA = {"predicted_churn_rate"}
+
+
+def _delta_text(change: float | None) -> str | None:
+    """Signed percentage for a delta pill, or None when there is no baseline."""
+    if change is None:
+        return None
+    return f"{change * 100:+.1f}%"
+
+
+def _delta(change: float | None, *, inverse: bool = False) -> tuple[str | None, str]:
+    """(text, tone) for a KPI delta: tone reflects whether the move is good news."""
+    text = _delta_text(change)
+    if text is None:
+        return None, "neutral"
+    good = (change < 0) if inverse else (change > 0)
+    if change == 0:
+        return text, "neutral"
+    return text, "positive" if good else "negative"
+
+
 page_header("Executive Dashboard")
 
 clean_data = st.session_state.get("clean_data")
@@ -163,6 +189,7 @@ if master_f.empty:
     )
     st.stop()
 kpis = cached_compute_kpis(txns_f, master_f)
+deltas = cached_period_deltas(txns_f, master_f)
 trends = cached_trend_tables(txns_f, master_f)
 
 retention = _retention_frame()
@@ -181,11 +208,33 @@ overview_tab, trends_tab, segments_tab, churn_tab, retention_tab = st.tabs(
 )
 
 with overview_tab:
+    rev_delta = _delta(deltas.get("total_revenue"))
+    cust_delta = _delta(deltas.get("total_customers"))
+    aov_delta = _delta(deltas.get("average_order_value"))
+    delta_window = f"vs previous {deltas.get('days', 30)} days" if deltas else None
     metric_row(
         [
-            Metric("Customers", formatting.fmt_int(kpis["total_customers"])),
-            Metric("Revenue", formatting.fmt_money(kpis["total_revenue"])),
-            Metric("Avg order value", formatting.fmt_money(kpis["average_order_value"])),
+            Metric(
+                "Customers",
+                formatting.fmt_int(kpis["total_customers"]),
+                delta=cust_delta[0],
+                tone=cust_delta[1],
+                help=delta_window,
+            ),
+            Metric(
+                "Revenue",
+                formatting.fmt_money_compact(kpis["total_revenue"]),
+                delta=rev_delta[0],
+                tone=rev_delta[1],
+                help=delta_window,
+            ),
+            Metric(
+                "Avg order value",
+                formatting.fmt_money_compact(kpis["average_order_value"]),
+                delta=aov_delta[0],
+                tone=aov_delta[1],
+                help=delta_window,
+            ),
             Metric(
                 "Predicted churn",
                 (
@@ -198,7 +247,7 @@ with overview_tab:
             Metric(
                 "Revenue at risk",
                 (
-                    formatting.fmt_money(kpis["revenue_at_risk"])
+                    formatting.fmt_money_compact(kpis["revenue_at_risk"])
                     if kpis["revenue_at_risk"] is not None
                     else "Needs page 08"
                 ),
@@ -206,6 +255,17 @@ with overview_tab:
             ),
         ]
     )
+    # Revenue at risk as a share of total revenue: a single number is easy to
+    # skim past, so the proportion gets its own bar.
+    if kpis.get("revenue_at_risk") is not None and kpis["total_revenue"]:
+        share = kpis["revenue_at_risk"] / kpis["total_revenue"]
+        st.progress(
+            min(max(share, 0.0), 1.0),
+            text=(
+                f"Revenue at risk is {share:.1%} of the "
+                f"{formatting.fmt_money_compact(kpis['total_revenue'])} total"
+            ),
+        )
     with chart_section("Customer segments over time"):
         hist_state = st.session_state.get("segment_history") or {}
         rows = hist_state.get("table") if isinstance(hist_state, dict) else None
@@ -231,8 +291,17 @@ with overview_tab:
                     "Widen a filter to see how segments moved.",
                 )
             else:
+                share_view = st.toggle(
+                    "Show share of base (%)",
+                    value=False,
+                    key="overview_segment_share",
+                    help=(
+                        "Percentages re-base every period to 100%, so a segment can "
+                        "lose ground even while its customer count grows."
+                    ),
+                )
                 render_trend_pair(
-                    _compact(segment_trend_lines(trend.history)),
+                    _compact(segment_trend_lines(trend.history, share=share_view)),
                     trend.transitions,
                     model="RFM",
                     key_prefix="overview_segment_trends",
@@ -242,17 +311,58 @@ with overview_tab:
                         "Customer filters do not reach this view yet: rebuild segment "
                         "trends on page 03 to apply them."
                     )
+                # Call out the biggest period-over-period moves so a spike (e.g. in
+                # "Lost Customers") does not have to be spotted by eye.
+                shifts = biggest_segment_shifts(trend.history, top_n=3)
+                if not shifts.empty:
+                    with st.expander("Biggest segment shifts", expanded=False):
+                        for row in shifts.itertuples(index=False):
+                            arrow = "▲" if row.delta > 0 else "▼"
+                            st.markdown(
+                                f"{arrow} **{row.segment}** "
+                                f"{row.from_period} → {row.to_period}: "
+                                f"{row.delta:+,.0f} customers "
+                                f"({row.share_delta:+.1f} pts of base)"
+                            )
     row1_a, row1_b, row1_c = st.columns(3)
     with row1_a:
         with chart_section("Revenue trend"):
-            st.plotly_chart(_compact(revenue_area_fig(trends["revenue"])), width="stretch")
+            rev_frame = trends["revenue"]
+            # Customer count is the one driver we hold monthly, so it is the only
+            # context series offered: churn is a per-customer snapshot with no
+            # monthly history, and a made-up series would be worse than none.
+            show_volume = st.toggle(
+                "Overlay customer volume",
+                value=False,
+                key="overview_revenue_volume",
+                help="Adds active customers on a second axis, so volume vs value is visible.",
+            )
+            secondary = None
+            if show_volume and "month" in trends["activity"].columns:
+                rev_frame = rev_frame.merge(trends["activity"], on="month", how="left")
+                if "active_customers" in rev_frame.columns:
+                    secondary = "active_customers"
+            fig = revenue_trend_fig(rev_frame, secondary=secondary, forecast_periods=3)
+            fig = _compact(shade_quarters(fig, rev_frame["month"]))
+            st.plotly_chart(fig, width="stretch")
     with row1_b:
+        group_small = st.toggle(
+            "Group small segments",
+            value=False,
+            key="overview_group_segments",
+            help="Fold segments under 5% of customers into one 'Other' bucket.",
+        )
         with chart_section("Customers per segment"):
             if portfolio is not None:
+                shown = group_small_segments(portfolio, "rfm_segment") if group_small else portfolio
                 st.plotly_chart(
-                    _compact(segment_share_donut(portfolio, "rfm_segment")),
+                    _compact(segment_share_bar(shown, "rfm_segment", "customers")),
                     width="stretch",
                 )
+                if group_small and len(shown) < len(portfolio):
+                    with st.expander("Segments in 'Other'", expanded=False):
+                        folded = portfolio[~portfolio["rfm_segment"].isin(shown["rfm_segment"])]
+                        render_table(folded, money_cols=("revenue",))
             else:
                 empty_state(
                     "No RFM segments yet",
@@ -261,7 +371,10 @@ with overview_tab:
     with row1_c:
         with chart_section("Customers per risk band"):
             if "risk_band" in master_f.columns:
-                st.plotly_chart(_compact(risk_band_bar(master_f)), width="stretch")
+                revenue_col = "revenue_at_risk" if "revenue_at_risk" in master_f.columns else None
+                st.plotly_chart(
+                    _compact(risk_band_bar(master_f, revenue_col=revenue_col)), width="stretch"
+                )
             else:
                 empty_state(
                     "No churn risk yet",
@@ -289,13 +402,22 @@ with overview_tab:
             if "region" in txns_f.columns:
                 region_rev = (
                     txns_f.assign(region=txns_f["region"].fillna("Unknown"))
-                    .groupby("region")["_amount"]
-                    .sum()
+                    .groupby("region")
+                    .agg(revenue=("_amount", "sum"), orders=("_amount", "size"))
                     .reset_index()
-                    .rename(columns={"_amount": "revenue"})
                 )
+                region_rev["average_order_value"] = region_rev["revenue"] / region_rev[
+                    "orders"
+                ].where(region_rev["orders"] > 0, 1)
                 st.plotly_chart(
-                    _compact(revenue_geo_bar(region_rev, "region", horizontal=True)),
+                    _compact(
+                        revenue_geo_bar(
+                            region_rev,
+                            "region",
+                            horizontal=True,
+                            secondary="average_order_value",
+                        )
+                    ),
                     width="stretch",
                 )
             else:
@@ -305,13 +427,33 @@ with overview_tab:
             demo_age_tab, demo_gender_tab = st.tabs(["Age", "Gender"])
             with demo_age_tab:
                 if "age_band" in master_f.columns:
-                    bands = (
-                        master_f["age_band"]
-                        .value_counts()
-                        .rename_axis("age_band")
-                        .reset_index(name="customers")
+                    money_col = (
+                        "monetary_value"
+                        if "monetary_value" in master_f.columns
+                        else next(
+                            (c for c in ("revenue", "revenue_at_risk") if c in master_f.columns),
+                            None,
+                        )
                     )
-                    st.plotly_chart(_compact(age_band_bar(bands)), width="stretch")
+                    if money_col:
+                        bands = (
+                            master_f.groupby("age_band")
+                            .agg(customers=("customer_id", "size"), value=(money_col, "mean"))
+                            .reset_index()
+                            .rename(columns={"value": "average_order_value"})
+                        )
+                        st.plotly_chart(
+                            _compact(age_band_bar(bands, value_col="average_order_value")),
+                            width="stretch",
+                        )
+                    else:
+                        bands = (
+                            master_f["age_band"]
+                            .value_counts()
+                            .rename_axis("age_band")
+                            .reset_index(name="customers")
+                        )
+                        st.plotly_chart(_compact(age_band_bar(bands)), width="stretch")
                 else:
                     empty_state(
                         "No age bands yet",
@@ -419,9 +561,12 @@ with segments_tab:
                 Metric("Segments", str(len(portfolio))),
                 Metric(
                     "Largest segment",
-                    f"{top_seg['rfm_segment']} ({top_seg['customers']:,})",
+                    f"{top_seg['rfm_segment']} ({formatting.fmt_int(top_seg['customers'])})",
                 ),
-                Metric("Top revenue share", f"{top_seg['revenue_share']:.1f}%"),
+                Metric(
+                    "Top revenue share",
+                    formatting.fmt_pct100(top_seg["revenue_share"]),
+                ),
             ]
         )
         seg_left, seg_right = st.columns(2)
@@ -465,7 +610,11 @@ with churn_tab:
             ]
         )
         with chart_section("Customers per risk band"):
-            st.plotly_chart(without_title(risk_band_bar(master_f)), width="stretch")
+            churn_revenue_col = "revenue_at_risk" if "revenue_at_risk" in master_f.columns else None
+            st.plotly_chart(
+                without_title(risk_band_bar(master_f, revenue_col=churn_revenue_col)),
+                width="stretch",
+            )
         with st.expander("High-value, high-risk (IDs masked)", expanded=False):
             if not hvhr.empty:
                 masked_hvhr = hvhr.copy()
@@ -499,7 +648,7 @@ with retention_tab:
                 Metric(
                     "Avg priority score",
                     (
-                        f"{ret_f['retention_priority_score'].mean():.3f}"
+                        formatting.fmt_float(ret_f["retention_priority_score"].mean(), 3)
                         if "retention_priority_score" in ret_f.columns
                         else "–"
                     ),

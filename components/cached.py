@@ -29,6 +29,7 @@ from services.dashboard_service import (
     build_master,
     compute_kpis,
     high_value_high_risk,
+    period_deltas,
     prepare_transactions,
     segment_portfolio,
     trend_tables,
@@ -74,6 +75,12 @@ def cached_apply_filters(
 def cached_compute_kpis(txns: pd.DataFrame, master: pd.DataFrame) -> dict:
     """Row-1 KPI cards from the filtered pair."""
     return compute_kpis(txns, master)
+
+
+@st.cache_data(show_spinner=False)
+def cached_period_deltas(txns: pd.DataFrame, master: pd.DataFrame, days: int = 30) -> dict:
+    """Period-over-period change for the KPI cards."""
+    return period_deltas(txns, master, days=days)
 
 
 @st.cache_data(show_spinner=False)

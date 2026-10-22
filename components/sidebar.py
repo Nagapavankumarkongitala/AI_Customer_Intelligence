@@ -23,7 +23,7 @@ import pandas as pd
 import streamlit as st
 
 from components.nav_tabs import NAV_PAGES
-from components.theme import ensure_theme, theme_toggle
+from components.theme import apply_notation, ensure_theme, notation_toggle, theme_toggle
 from visualization import tokens
 
 
@@ -62,11 +62,14 @@ def collect_status(state: Mapping) -> dict[str, str]:
 
 
 def render_sidebar_nav(active: str) -> None:
-    """Rail head: stored theme, title, page links, appearance toggle.
+    """Rail head: stored theme, title, page links, appearance and notation.
 
     ``active`` is kept for call-site stability; link highlighting is automatic.
     """
     ensure_theme()
+    # Notation is set before any page body runs, so every card, table, and chart
+    # rendered later in this same run already uses the selected notation.
+    apply_notation()
     with st.sidebar:
         st.markdown(
             f"<span style='font-weight:700;color:{tokens.color('text')};'>"
@@ -78,6 +81,8 @@ def render_sidebar_nav(active: str) -> None:
         st.divider()
         theme_toggle()
         st.caption("Dark is the charcoal-and-lime console, widgets included.")
+        notation_toggle()
+        st.caption("Lakh/crore for Indian audiences; K/M/B for global ones.")
 
 
 @contextmanager

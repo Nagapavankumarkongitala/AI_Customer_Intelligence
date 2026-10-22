@@ -204,6 +204,48 @@ def segment_portfolio(
     return table.sort_values("customers", ascending=False).reset_index(drop=True)
 
 
+def period_deltas(txns: pd.DataFrame, master: pd.DataFrame, days: int = 30) -> dict:
+    """Period-over-period change for the KPI cards (current vs previous window).
+
+    Splits the filtered transactions at the latest date into the most recent
+    ``days`` and the ``days`` before that, and compares revenue, customers, and
+    average order value between them. Returns the signed *fraction* change per
+    metric (``None`` when the previous window is empty, since a percentage
+    against zero is meaningless). Churn and revenue-at-risk have no history to
+    compare against — they are model outputs for one snapshot — so they are not
+    included; the cards that lack a delta simply carry none.
+    """
+    if txns.empty:
+        return {}
+    end = txns["_txn_date"].max()
+    current_start = end - pd.Timedelta(days=days)
+    previous_start = current_start - pd.Timedelta(days=days)
+    current = txns[txns["_txn_date"] > current_start]
+    previous = txns[(txns["_txn_date"] > previous_start) & (txns["_txn_date"] <= current_start)]
+    if previous.empty:
+        return {}
+
+    def _revenue(frame: pd.DataFrame) -> float:
+        return float(frame["_amount"].sum())
+
+    def _customers(frame: pd.DataFrame) -> set:
+        return set(frame["customer_id"])
+
+    def _aov(frame: pd.DataFrame) -> float:
+        return _revenue(frame) / len(frame) if len(frame) else 0.0
+
+    def _change(now: float, before: float) -> float | None:
+        return (now - before) / before if before else None
+
+    now_customers, before_customers = _customers(current), _customers(previous)
+    return {
+        "total_revenue": _change(_revenue(current), _revenue(previous)),
+        "total_customers": _change(float(len(now_customers)), float(len(before_customers))),
+        "average_order_value": _change(_aov(current), _aov(previous)),
+        "days": days,
+    }
+
+
 @dataclass(frozen=True)
 class SegmentTrendView:
     """One model's segment trend re-sliced to the current filters.

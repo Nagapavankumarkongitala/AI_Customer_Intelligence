@@ -147,7 +147,7 @@ metric_row(
     [
         Metric(
             "Revenue at risk",
-            formatting.fmt_money(summary["total_revenue_at_risk"]),
+            formatting.fmt_money_compact(summary["total_revenue_at_risk"]),
         ),
         Metric("Customers scored", formatting.fmt_int(summary["customers"])),
         Metric(

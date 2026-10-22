@@ -106,3 +106,84 @@ def test_recommendation_handles_missing_metrics() -> None:
         ]
     )
     assert rec["operational_pick"] == "b"
+
+
+def _comparison_state() -> dict:
+    """Minimal state with features, RFM, and one saved AI run."""
+    ids = ["C00001", "C00002", "C00003", "C00004"]
+    return {
+        "customer_features": pd.DataFrame(
+            {
+                "customer_id": ids,
+                "monetary_value": [50.0, 60.0, 900.0, 1000.0],
+            }
+        ),
+        "rfm_results": pd.DataFrame(
+            {"customer_id": ids, "segment": ["Low", "Low", "High", "High"]}
+        ),
+        "segmentation_runs": [
+            {
+                "model": "kmeans",
+                "labels": [0, 0, 1, 1],
+                "customer_ids": ids,
+                "names": {"0": "Low", "1": "High"},
+                "metrics": {
+                    "n_clusters": 2,
+                    "silhouette": 0.7,
+                    "davies_bouldin": 0.8,
+                    "noise_pct": 0.0,
+                },
+                "stability": {"mean_pairwise_ari": 0.9},
+            }
+        ],
+        "churn_scores": pd.DataFrame({"customer_id": ids, "predicted_class": [0, 1, 0, 1]}),
+    }
+
+
+def test_build_comparison_assembles_scorecard() -> None:
+    """The shared service builds one scorecard row per candidate model."""
+    from services.comparison_service import build_comparison, scorecard_for_display
+
+    comparison = build_comparison(_comparison_state())
+    assert comparison is not None
+    table = comparison["table"]
+    assert set(table["model"]) == {"AI:kmeans", "RFM"}
+    assert set(table["kind"]) == {"AI", "Traditional"}
+    grid = scorecard_for_display(table)
+    assert "checklist" not in grid.columns
+    # RFM's silhouette is blank by design; stability is deterministic 1.0.
+    rfm_row = table.loc[table["model"] == "RFM"].iloc[0]
+    assert pd.isna(rfm_row["silhouette"])
+    assert rfm_row["stability_ari"] == 1.0
+
+
+def test_build_comparison_pair_and_churn() -> None:
+    """The pairwise agreement and churn labels come from the same state."""
+    from services.comparison_service import build_comparison
+
+    comparison = build_comparison(_comparison_state())
+    pair = comparison["pair"]
+    assert pair["reference"] == "RFM" and pair["target"] == "AI:kmeans"
+    assert pair["cross_tab"].to_numpy().sum() == 4
+    assert comparison["churn_labels"] is not None
+    assert len(comparison["churn_labels"]) == 4
+
+
+def test_build_comparison_needs_candidates() -> None:
+    """Without features or any labeling there is nothing to compare."""
+    from services.comparison_service import build_comparison
+
+    assert build_comparison({}) is None
+    assert build_comparison({"customer_features": pd.DataFrame({"customer_id": ["C1"]})}) is None
+
+
+def test_scorecard_as_text_blanks_missing() -> None:
+    """Text form blanks the missing silhouette so exports never print 'nan'."""
+    from services.comparison_service import build_comparison, scorecard_as_text
+
+    comparison = build_comparison(_comparison_state())
+    text = scorecard_as_text(comparison["table"])
+    assert (text["model"] == "RFM").any()
+    assert text.loc[text["model"] == "RFM", "silhouette"].iloc[0] == ""
+    assert "nan" not in text.to_string().lower()
+    assert scorecard_as_text(pd.DataFrame()).empty

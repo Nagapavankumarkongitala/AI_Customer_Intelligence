@@ -6,6 +6,7 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 
+from utils import formatting
 from visualization import tokens
 from visualization.theme import PRIMARY_DISCRETE, PRIMARY_SCALE, empty_figure, styled
 
@@ -223,27 +224,106 @@ def segment_trend_ribbon(history: pd.DataFrame, segment_col: str = "segment") ->
 
 
 @styled
-def segment_trend_lines(history: pd.DataFrame, segment_col: str = "segment") -> px.Figure:
+def segment_trend_lines(
+    history: pd.DataFrame, segment_col: str = "segment", share: bool = False
+) -> px.Figure:
     """One line per segment over periods, in segment hues.
 
     Alternative to the stacked ribbon: lines keep each cohort's own baseline, so
     a single segment's rise or fall reads directly instead of being masked by the
     stack. Best when segment counts are modest; the stacked ribbon stays the
     default for very many segments.
+
+    With ``share=True`` every period is re-based to 100% of its own total, which
+    is the honest view when the customer base itself is growing: a segment rising
+    in absolute terms can still be losing ground, and only the normalised line
+    shows which ones are. The share is computed here (Plotly's ``groupnorm`` does
+    not normalise line traces) so a test can see it.
     """
     if history.empty:
         return empty_figure("Segment trends")
     col = segment_col if segment_col in history.columns else history.columns[0]
-    return px.line(
-        history,
+    frame = history
+    value, title, axis_label = "customers", "Segment trends", "Customers"
+    if share:
+        frame = history.copy()
+        totals = frame.groupby("period", observed=True)["customers"].transform("sum")
+        frame["share"] = 100 * frame["customers"] / totals.where(totals > 0, 1)
+        value, title, axis_label = "share", "Segment share over time", "Share of base"
+    fig = px.line(
+        frame,
         x="period",
-        y="customers",
+        y=value,
         color=col,
         markers=True,
-        **_segment_map_or_sequence(history[col]),
-        title="Segment trends",
-        labels={"period": "Period", "customers": "Customers", col: "Segment"},
+        **_segment_map_or_sequence(frame[col]),
+        title=title,
+        labels={"period": "Period", value: axis_label, col: "Segment"},
     )
+    if share:
+        fig.update_traces(hovertemplate="%{y:.1f}%<extra>%{fullData.name}</extra>")
+        fig.update_yaxes(ticksuffix="%")
+    return fig
+
+
+def biggest_segment_shifts(
+    history: pd.DataFrame, segment_col: str = "segment", top_n: int = 3
+) -> pd.DataFrame:
+    """Period-over-period moves worth calling out, largest change first.
+
+    For every segment the change between consecutive periods is computed from the
+    stored counts (``share`` optional). Returns one row per move with
+    ``from_period``, ``to_period``, ``segment``, ``delta``, and ``share_delta``
+    (percentage-point change in the segment's share of the base), so a page can
+    annotate the periods where a cohort jumped or collapsed — a spike in "Lost
+    Customers", say — instead of leaving the reader to spot it.
+
+    Empty when there are fewer than two periods or no segment appears in both.
+    """
+    cols = ["from_period", "to_period", "segment", "delta", "share_delta"]
+    needed = {"period", "customers", segment_col}
+    if history.empty or not needed.issubset(history.columns):
+        return pd.DataFrame(columns=cols)
+    frame = history.copy()
+    frame["period"] = frame["period"].astype(str)
+    periods = sorted(frame["period"].unique())
+    if len(periods) < 2:
+        return pd.DataFrame(columns=cols)
+    totals = frame.groupby("period", observed=True)["customers"].sum()
+    wide = (
+        frame.pivot_table(
+            index=segment_col, columns="period", values="customers", aggfunc="sum", fill_value=0
+        )
+        .reindex(columns=periods, fill_value=0)
+        .astype(float)
+    )
+    rows: list[dict] = []
+    for previous, current in zip(periods, periods[1:], strict=False):
+        base_prev = float(totals.get(previous, 0)) or 1.0
+        base_curr = float(totals.get(current, 0)) or 1.0
+        for segment in wide.index:
+            before, after = wide.at[segment, previous], wide.at[segment, current]
+            delta = after - before
+            if delta == 0:
+                continue
+            rows.append(
+                {
+                    "from_period": previous,
+                    "to_period": current,
+                    "segment": str(segment),
+                    "delta": float(delta),
+                    "share_delta": 100 * after / base_curr - 100 * before / base_prev,
+                }
+            )
+    if not rows:
+        return pd.DataFrame(columns=cols)
+    ranked = pd.DataFrame(rows)
+    # Rank by the size of the move on a comparable scale: absolute-count moves for
+    # the count view, percentage-point moves when shares are what matters. Both
+    # are kept so the caller can label with either.
+    ranked["_rank"] = ranked["delta"].abs()
+    ranked = ranked.sort_values("_rank", ascending=False).drop(columns="_rank")
+    return ranked.head(top_n).reset_index(drop=True)
 
 
 #: Transition Sankey height: taller than a single trend line so eight quarter
@@ -357,6 +437,101 @@ FACET_COLUMNS = 4
 
 #: Facet grids need more height than a single chart: up to three panel rows.
 FACET_HEIGHT = 420
+
+
+@styled
+def segment_share_bar(
+    profile: pd.DataFrame, segment_col: str = "segment", value: str = "customers"
+) -> px.Figure:
+    """Sorted horizontal bars per segment — the comparable alternative to a donut.
+
+    With ten segments a donut makes mid-sized slices impossible to rank; a sorted
+    bar chart puts the largest on top and every bar on a shared baseline, so
+    "Needs Attention (11.1%)" versus "Cannot Lose Them (11.0%)" reads instantly.
+    ``value`` selects the measure ("customers" or "revenue") so the caller can
+    show count and revenue as two panels of the same shape.
+    """
+    if profile.empty or value not in profile.columns:
+        return empty_figure("Customers per segment")
+    col = segment_col if segment_col in profile.columns else profile.columns[0]
+    title = "Revenue per segment" if value == "revenue" else "Customers per segment"
+    frame = profile.sort_values(value, ascending=True).copy()
+    total = float(frame[value].sum())
+    if value == "customers":
+        labels = [
+            (
+                f"{formatting.fmt_int(v)}  ({formatting.fmt_pct100(100 * v / total)})"
+                if total
+                else formatting.fmt_int(v)
+            )
+            for v in frame[value]
+        ]
+    else:
+        labels = [
+            (
+                f"{formatting.fmt_money_compact(v)}  ({formatting.fmt_pct100(100 * v / total)})"
+                if total
+                else formatting.fmt_money_compact(v)
+            )
+            for v in frame[value]
+        ]
+    fig = px.bar(
+        frame,
+        x=value,
+        y=col,
+        orientation="h",
+        color=col,
+        text=labels,
+        **_segment_map_or_sequence(frame[col]),
+        title=title,
+        labels={value: title.split()[0], col: "Segment"},
+    )
+    fig.update_traces(textposition="outside", textfont_size=11, cliponaxis=False)
+    fig.update_layout(showlegend=False)
+    fig.update_xaxes(showticklabels=False)
+    fig.update_yaxes(title_text="")
+    return fig
+
+
+#: Segments below this share of customers fold into an "Other" bucket when the
+#: caller opts in, so a long ten-segment palette does not drown the few that
+#: matter. Only used when the caller asks for grouping.
+SEGMENT_OTHER_THRESHOLD = 5.0
+
+#: Label for the folded tail of a grouped segment chart.
+SEGMENT_OTHER_LABEL = "Other segments"
+
+
+def group_small_segments(
+    profile: pd.DataFrame, segment_col: str = "segment", min_share: float = SEGMENT_OTHER_THRESHOLD
+) -> pd.DataFrame:
+    """Fold segments under ``min_share`` percent of customers into one "Other" row.
+
+    Purely a display transform: customer and revenue totals are preserved, so the
+    grouped frame sums to the same base as the input. Returns the input unchanged
+    when nothing falls below the threshold (or when folding would not reduce the
+    count). Callers offer the ungrouped table next to the chart for drill-down.
+    """
+    if profile.empty or segment_col not in profile.columns or "customers" not in profile.columns:
+        return profile
+    total = float(profile["customers"].sum())
+    if not total:
+        return profile
+    small = profile[profile["customers"] / total * 100 < min_share]
+    if len(small) < 2:  # nothing meaningful to fold
+        return profile
+    big = profile[~profile.index.isin(small.index)]
+    folded = {col: small[col].sum() for col in profile.columns if col != segment_col}
+    folded[segment_col] = SEGMENT_OTHER_LABEL
+    grouped = pd.concat([big, pd.DataFrame([folded])], ignore_index=True)
+    if "customer_share" in grouped.columns:
+        grouped["customer_share"] = (grouped["customers"] / total * 100).round(2)
+    if "revenue_share" in grouped.columns and "revenue" in grouped.columns:
+        rev_total = float(grouped["revenue"].sum())
+        grouped["revenue_share"] = (
+            (grouped["revenue"] / rev_total * 100).round(2) if rev_total else 0.0
+        )
+    return grouped.sort_values("customers", ascending=False).reset_index(drop=True)
 
 
 @styled

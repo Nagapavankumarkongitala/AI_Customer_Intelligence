@@ -30,6 +30,7 @@ from components.metric_guides import (
 from visualization import tokens
 
 COMPARE_PAGE = Path("pages/06_Segmentation_Comparison.py")
+COMPARE_SERVICE = Path("services/comparison_service.py")
 SEGMENT_PAGE = Path("pages/05_Advanced_Segmentation.py")
 
 #: The eight evidence columns the page-06 scorecard emits.
@@ -73,12 +74,20 @@ def test_glossary_cards_are_directional_and_documented() -> None:
 
 
 def test_compare_page_emits_and_explains_every_documented_column() -> None:
-    """The page still scores each column and renders the glossary for it."""
-    source = COMPARE_PAGE.read_text(encoding="utf-8")
-    assert "render_metric_guides()" in source
-    assert "How to read the scorecard" in source
+    """The scorecard still scores each documented column and the page explains it.
+
+    The columns are assembled in ``services.comparison_service`` (shared with the
+    report's Model comparison section), so the scoring check follows them there;
+    the page still renders the glossary and charts the same set.
+    """
+    page = COMPARE_PAGE.read_text(encoding="utf-8")
+    service = COMPARE_SERVICE.read_text(encoding="utf-8")
+    assert "render_metric_guides()" in page
+    assert "How to read the scorecard" in page
     for guide in METRIC_GUIDES:
-        assert f'"{guide.column}"' in source, f"{guide.column} is no longer scored on page 06"
+        assert f'"{guide.column}"' in service, f"{guide.column} is no longer scored for page 06"
+    # The scorecard columns and the glossary list must stay in agreement.
+    assert set(guide.column for guide in METRIC_GUIDES) <= set(SCORECARD_COLUMNS)
 
 
 def test_metric_card_html_escapes_and_paints_from_tokens() -> None:

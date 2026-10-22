@@ -88,8 +88,8 @@ if has_age or has_gender:
                     "Customers with age",
                     formatting.fmt_int(summary["customers_with_age"]),
                 ),
-                Metric("Mean age", f"{summary['mean_age']}"),
-                Metric("Median age", f"{summary['median_age']}"),
+                Metric("Mean age", formatting.fmt_int(summary["mean_age"])),
+                Metric("Median age", formatting.fmt_int(summary["median_age"])),
             ]
         )
     demo_a, demo_b, demo_c = st.columns(3)

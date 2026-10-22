@@ -488,19 +488,22 @@ def test_value_risk_matrix_has_priority_quadrant() -> None:
 
 
 def test_value_risk_heatmap_aggregates_quadrants() -> None:
-    """Heatmap bins customers into four quadrants with count + revenue labels."""
+    """Quadrant matrix encodes count (size), revenue (colour) and text labels."""
     table = _retention_table()
     fig = retention_charts.value_risk_heatmap(table, churn_threshold=0.6)
-    heatmap = next(trace for trace in fig.data if trace.type == "heatmap")
-    z = _trace_values(heatmap.z)
-    # Rows: Low risk, High risk. Cols: Low value, High value (median value 2,000).
-    # Act first holds C1 (0.9 / 5,000) and C3 (0.7 / 2,000); Maintain holds C2.
-    assert z.tolist() == [[1, 0], [0, 2]]
-    annotations = [a.text for a in fig.layout.annotations]
-    assert any("Act first" in (text or "") for text in annotations)
-    assert any("Maintain" in (text or "") for text in annotations)
-    hover = [str(value) for value in np.asarray(heatmap.customdata).ravel()]
-    assert any("at risk" in value for value in hover)
+    bubbles = next(trace for trace in fig.data if trace.type == "scatter")
+    # Counts per quadrant, ordered (Low value/Low risk, Low value/High risk,
+    # High value/Low risk, High value/High risk). Act first holds C1 and C3.
+    sizes = _trace_values(bubbles.marker.size)
+    assert sizes.tolist() == [1, 0, 0, 2]
+    text = [str(value) for value in _trace_values(bubbles.text)]
+    assert any("Act first" in value for value in text)
+    assert any("Maintain" in value for value in text)
+    # Hover names the quadrant and the money exposed; the template supplies the
+    # "at risk" wording, customdata carries the per-cell values.
+    assert "at risk" in bubbles.hovertemplate
+    hover = [str(value) for value in np.asarray(bubbles.customdata).ravel()]
+    assert any("Act first" in value for value in hover)
     assert len(retention_charts.value_risk_heatmap(pd.DataFrame()).data) == 0
 
 
@@ -661,3 +664,176 @@ def test_geo_treemap_caps_near_unique_levels() -> None:
     # R1 + the kept cities + Other, far below one tile per customer.
     assert len(fig.data[0].ids) <= demographic_charts.TREEMAP_MAX_VALUES_PER_LEVEL + 2
     assert len(fig.data[0].ids) < n / 100
+
+
+def test_segment_share_bar_sorts_largest_first_with_share_labels() -> None:
+    """The donut alternative ranks segments on one baseline, largest on top."""
+    profile = pd.DataFrame(
+        {
+            "segment": ["Small", "Big", "Mid"],
+            "customers": [5, 70, 25],
+            "revenue": [10.0, 900.0, 90.0],
+        }
+    )
+    fig = rfm_charts.segment_share_bar(profile, "segment", "customers")
+    # A trace per segment (color=), each ascending so the largest ends on top.
+    label_by_segment = {trace.name: str(_trace_values(trace.text)[0]) for trace in fig.data}
+    assert label_by_segment["Big"] == "70  (70.0%)"
+    assert label_by_segment["Small"] == "5  (5.0%)"
+    assert len(rfm_charts.segment_share_bar(pd.DataFrame()).data) == 0
+
+
+def test_group_small_segments_folds_tail_and_preserves_totals() -> None:
+    """Segments under the share floor fold into one row without losing totals."""
+    profile = pd.DataFrame(
+        {
+            "segment": ["A", "B", "C", "D", "E"],
+            "customers": [60, 20, 8, 7, 5],
+            "revenue": [100.0, 50.0, 20.0, 15.0, 5.0],
+            "customer_share": [60.0, 20.0, 8.0, 7.0, 5.0],
+            "revenue_share": [52.0, 26.0, 10.0, 8.0, 4.0],
+        }
+    )
+    grouped = rfm_charts.group_small_segments(profile, min_share=10)
+    assert "Other segments" in set(grouped["segment"])
+    assert grouped["customers"].sum() == profile["customers"].sum()
+    assert grouped["revenue"].sum() == pytest.approx(profile["revenue"].sum())
+    assert grouped["customer_share"].sum() == pytest.approx(100.0)
+    other = grouped.loc[grouped["segment"] == "Other segments"].iloc[0]
+    assert other["customers"] == 20  # C + D + E
+    # A floor nothing falls below, or a single small segment, leaves it alone.
+    assert len(rfm_charts.group_small_segments(profile, min_share=1)) == len(profile)
+    single_small = pd.DataFrame(
+        {"segment": ["A", "B", "C"], "customers": [70, 25, 5], "revenue": [1.0, 2.0, 3.0]}
+    )
+    assert len(rfm_charts.group_small_segments(single_small, min_share=10)) == 3
+
+
+def test_biggest_segment_shifts_ranks_moves() -> None:
+    """The largest period-over-period move is surfaced first."""
+    history = pd.DataFrame(
+        {
+            "period": ["2024-Q1"] * 3 + ["2024-Q2"] * 3 + ["2024-Q3"] * 3,
+            "segment": ["Champions", "Lost Customers", "New Customers"] * 3,
+            "customers": [10, 5, 20, 12, 14, 18, 14, 25, 10],
+        }
+    )
+    shifts = rfm_charts.biggest_segment_shifts(history, top_n=3)
+    assert list(shifts.columns) == [
+        "from_period",
+        "to_period",
+        "segment",
+        "delta",
+        "share_delta",
+    ]
+    assert shifts.iloc[0]["segment"] == "Lost Customers"
+    assert shifts.iloc[0]["delta"] == 11.0
+    assert len(rfm_charts.biggest_segment_shifts(pd.DataFrame()).index) == 0
+
+
+def test_segment_trend_lines_share_view_rebases_to_100() -> None:
+    """Share mode normalises every period and suffixes the axis with %."""
+    history = pd.DataFrame(
+        {
+            "period": ["2024-Q1", "2024-Q1", "2024-Q2", "2024-Q2"],
+            "segment": ["Champions", "Lost Customers", "Champions", "Lost Customers"],
+            "customers": [10, 5, 12, 4],
+        }
+    )
+    fig = rfm_charts.segment_trend_lines(history, share=True)
+    assert fig.layout.title.text == "Segment share over time"
+    assert fig.layout.yaxis.ticksuffix == "%"
+    champions = next(trace for trace in fig.data if trace.name == "Champions")
+    assert list(_trace_values(champions.y)) == pytest.approx([200 / 3, 75.0])
+
+
+def test_revenue_trend_fig_adds_context_and_projection() -> None:
+    """Revenue trend carries a secondary driver and a dashed projected tail."""
+    table = pd.DataFrame(
+        {
+            "month": ["2024-01", "2024-02", "2024-03", "2024-04"],
+            "revenue": [100.0, 120.0, 110.0, 150.0],
+            "active_customers": [10, 12, 11, 15],
+        }
+    )
+    fig = executive_dashboard.revenue_trend_fig(
+        table, secondary="active_customers", forecast_periods=3
+    )
+    names = [trace.name for trace in fig.data]
+    assert names == ["Revenue", "Projected", "Active Customers"]
+    projected = next(trace for trace in fig.data if trace.name == "Projected")
+    assert list(projected.x) == ["2024-05", "2024-06", "2024-07"]
+    assert projected.line.dash == "dash"
+
+
+def test_linear_forecast_clips_negative_and_guards_short_input() -> None:
+    """The projection never draws negative revenue and needs two points."""
+    rising = executive_dashboard._linear_forecast(
+        pd.Series(["2024-01", "2024-02", "2024-03"]), pd.Series([1.0, 2.0, 3.0]), 2
+    )
+    assert list(rising["revenue"]) == [4.0, 5.0]
+    falling = executive_dashboard._linear_forecast(
+        pd.Series(["2024-01", "2024-02"]), pd.Series([1.0, 0.0]), 5
+    )
+    assert (falling["revenue"] >= 0).all()
+    assert executive_dashboard._linear_forecast(pd.Series(["2024-01"]), pd.Series([1.0]), 3).empty
+
+
+def test_risk_band_bar_adds_share_labels_and_revenue_overlay() -> None:
+    """Bands keep semantic hues, label their share, and can overlay revenue."""
+    scores = pd.DataFrame(
+        {
+            "risk_band": ["low", "low", "high", "critical"],
+            "revenue_at_risk": [1.0, 2.0, 30.0, 40.0],
+        }
+    )
+    plain = churn_charts.risk_band_bar(scores)
+    # Shades are drawn as one coloured trace per band, in band order.
+    assert [trace.x[0] for trace in plain.data] == list(churn_charts.RISK_BAND_ORDER)
+    low = next(trace for trace in plain.data if trace.x[0] == "low")
+    assert "50%" in str(_trace_values(low.text)[0])  # low band is 2 of 4 customers
+
+    overlay = churn_charts.risk_band_bar(scores, revenue_col="revenue_at_risk")
+    bars = [trace for trace in overlay.data if trace.type == "bar"]
+    assert len(bars) == 1
+    assert len(overlay.data) == 2
+    assert overlay.data[1].name == "Revenue at risk"
+    assert list(_trace_values(overlay.data[1].y)) == [3.0, 0.0, 30.0, 40.0]
+
+
+def test_age_band_bar_orders_chronologically_and_adds_value_overlay() -> None:
+    """Bands read youngest to oldest; a value series can ride a second axis."""
+    bands = pd.DataFrame(
+        {
+            "age_band": ["65+", "25–34", "18–24", "35–44"],
+            "customers": [3, 10, 4, 7],
+            "average_order_value": [900.0, 500.0, 300.0, 700.0],
+        }
+    )
+    ordered = [str(v) for v in _trace_values(demographic_charts.age_band_bar(bands).data[0].x)]
+    assert ordered == ["18–24", "25–34", "35–44", "65+"]
+    with_value = demographic_charts.age_band_bar(bands, value_col="average_order_value")
+    assert len(with_value.data) == 2
+    assert with_value.data[1].name == "Average Order Value"
+    assert list(_trace_values(with_value.data[1].y)) == [300.0, 500.0, 700.0, 900.0]
+
+
+def test_revenue_geo_bar_sorts_and_overlays_secondary_metric() -> None:
+    """Horizontal geo bars rank largest-first and can carry a companion dot."""
+    geo = pd.DataFrame(
+        {
+            "region": ["North", "South", "East"],
+            "revenue": [100.0, 500.0, 300.0],
+            "average_order_value": [10.0, 50.0, 30.0],
+        }
+    )
+    plain = demographic_charts.revenue_geo_bar(geo, "region", horizontal=True)
+    assert list(_trace_values(plain.data[0].y)) == ["North", "East", "South"]
+    overlay = demographic_charts.revenue_geo_bar(
+        geo, "region", horizontal=True, secondary="average_order_value"
+    )
+    assert len(overlay.data) == 2
+    assert overlay.data[1].type == "scatter"
+    # Horizontal bars split the value axis: yaxis = revenue, yaxis2 = companion.
+    assert overlay.layout.yaxis.title.text == "Revenue"
+    assert overlay.layout.yaxis2.title.text == "Average Order Value"

@@ -59,10 +59,10 @@ except CustomerIntelligenceError as exc:
 section_header("Quality scores")
 metric_row(
     [
-        Metric("Completeness", f"{quality.completeness}%"),
-        Metric("Validity", f"{quality.validity}%"),
-        Metric("Uniqueness", f"{quality.uniqueness}%"),
-        Metric("Overall", f"{quality.overall}%"),
+        Metric("Completeness", formatting.fmt_pct100(quality.completeness)),
+        Metric("Validity", formatting.fmt_pct100(quality.validity)),
+        Metric("Uniqueness", formatting.fmt_pct100(quality.uniqueness)),
+        Metric("Overall", formatting.fmt_pct100(quality.overall)),
     ]
 )
 

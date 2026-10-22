@@ -18,6 +18,7 @@ from components.page_header import page_header, section_header
 from components.sidebar import render_sidebar_footer, render_sidebar_nav
 from components.table import render_table
 from services import report_narrative, state_service
+from services.comparison_service import scorecard_for_display
 from services.dashboard_service import mask_customer_id
 from services.report_charts import render_report_charts
 from services.report_service import (
@@ -57,6 +58,7 @@ from visualization.rfm_charts import (
     segment_distribution_bar,
     segment_trend_ribbon,
 )
+from visualization.segmentation_charts import metric_comparison_bar, sankey_mapping
 from visualization.theme import inject_terminal_css, without_title
 
 configure_logging()
@@ -164,8 +166,11 @@ def _render_summary() -> None:
     metric_row(
         [
             Metric("Customers", formatting.fmt_int(kpis.get("total_customers", 0))),
-            Metric("Revenue", formatting.fmt_money(kpis.get("total_revenue", 0.0))),
-            Metric("Avg order value", formatting.fmt_money(kpis.get("average_order_value", 0.0))),
+            Metric("Revenue", formatting.fmt_money_compact(kpis.get("total_revenue", 0.0))),
+            Metric(
+                "Avg order value",
+                formatting.fmt_money_compact(kpis.get("average_order_value", 0.0)),
+            ),
             Metric(
                 "Predicted churn",
                 (
@@ -178,7 +183,7 @@ def _render_summary() -> None:
             Metric(
                 "Revenue at risk",
                 (
-                    formatting.fmt_money(kpis["revenue_at_risk"])
+                    formatting.fmt_money_compact(kpis["revenue_at_risk"])
                     if kpis.get("revenue_at_risk") is not None
                     else "Needs page 08"
                 ),
@@ -361,7 +366,7 @@ def _render_segments() -> None:
                 "Largest segment",
                 f"{top_seg['rfm_segment']} ({formatting.fmt_int(top_seg['customers'])})",
             ),
-            Metric("Top revenue share", f"{top_seg['revenue_share']:.1f}%"),
+            Metric("Top revenue share", formatting.fmt_pct100(top_seg["revenue_share"])),
             Metric(
                 "AI clusters",
                 str(len(ai_portfolio)) if ai_portfolio is not None else "Not run",
@@ -379,8 +384,76 @@ def _render_segments() -> None:
             render_table(ai_portfolio, money_cols=("revenue",))
 
 
+def _render_comparison() -> None:
+    section_header(
+        "4 · Model comparison",
+        "Every candidate model on the same four axes, and the pick the evidence supports.",
+    )
+    comparison = context.get("comparison")
+    if not comparison:
+        empty_state(
+            "Nothing to compare yet",
+            "Score RFM/LRFM and save at least one AI run on Advanced Segmentation first.",
+        )
+        return
+    table = comparison["table"]
+    recommendation = comparison["recommendation"]
+    pair = comparison.get("pair")
+    metric_row(
+        [
+            Metric("Models compared", formatting.fmt_int(len(table))),
+            Metric("AI runs", formatting.fmt_int((table["kind"] == "AI").sum())),
+            Metric("Recommended", str(recommendation["operational_pick"])),
+            Metric(
+                "Pair agreement (ARI)",
+                formatting.fmt_float(pair["ari"], 3) if pair else "–",
+            ),
+        ]
+    )
+    insight_box("Model recommendation", recommendation["rationale"], tone="info")
+    with st.expander("Model scorecard", expanded=True):
+        render_table(scorecard_for_display(table))
+        st.caption(
+            "Silhouette is comparable only among AI runs sharing a feature space; RFM/LRFM "
+            "leave it blank by design. Stability of 1.0 for RFM/LRFM is deterministic, not "
+            "evidence of superiority."
+        )
+    metrics = [
+        ("silhouette", "comparison_separation", "Silhouette by model"),
+        ("stability_ari", "comparison_stability", "Seed stability by model"),
+        ("value_eta2", "comparison_value", "Revenue differentiation by model"),
+        ("evenness", "comparison_evenness", "Size balance by model"),
+    ]
+    for start in range(0, len(metrics), 2):
+        cols = st.columns(2)
+        for col, (metric, chart_key, title) in zip(cols, metrics[start : start + 2], strict=False):
+            with col:
+                with chart_section(title):
+                    st.plotly_chart(
+                        _register(
+                            chart_key,
+                            without_title(metric_comparison_bar(table, metric, title)),
+                        ),
+                        width="stretch",
+                        key=chart_key,
+                    )
+                _explain(chart_key)
+    if pair:
+        with chart_section(f"Customer flow ({pair['reference']} → {pair['target']})"):
+            st.plotly_chart(
+                _register(
+                    "comparison_flow",
+                    without_title(
+                        sankey_mapping(pair["cross_tab"], pair["reference"], pair["target"])
+                    ),
+                ),
+                width="stretch",
+                key="rep_cmp_flow",
+            )
+
+
 def _render_churn() -> None:
-    section_header("4 · Churn risk", "Where the modeled at-risk pool concentrates.")
+    section_header("5 · Churn risk", "Where the modeled at-risk pool concentrates.")
     if scores is None or scores.empty:
         empty_state("No churn scores yet", "Train and score on Churn Prediction first.")
         return
@@ -424,7 +497,7 @@ def _render_churn() -> None:
 
 
 def _render_retention() -> None:
-    section_header("5 · Retention plan", "Ranked, traceable actions — no promises.")
+    section_header("6 · Retention plan", "Ranked, traceable actions — no promises.")
     if retention is None or retention.empty:
         empty_state("No retention actions yet", "Build the table on Retention Strategies first.")
         return
@@ -443,7 +516,7 @@ def _render_retention() -> None:
             Metric(
                 "Revenue at risk",
                 (
-                    formatting.fmt_money(summary.get("total_revenue_at_risk"))
+                    formatting.fmt_money_compact(summary.get("total_revenue_at_risk"))
                     if summary.get("total_revenue_at_risk") is not None
                     else "–"
                 ),
@@ -498,7 +571,7 @@ def _render_retention() -> None:
 
 def _render_recommendations() -> None:
     section_header(
-        "7 · Recommendations & next steps",
+        "8 · Recommendations & next steps",
         "Interpretations recapped, then prioritized actions tied to the evidence.",
     )
     recap = [
@@ -534,7 +607,7 @@ def _render_recommendations() -> None:
 
 def _render_appendix() -> None:
     section_header(
-        "6 · Appendix & data foundation",
+        "7 · Appendix & data foundation",
         "Source profile, coverage, cleaning treatments, and method notes.",
     )
     profile = context.get("data_profile") or {}
@@ -543,7 +616,10 @@ def _render_appendix() -> None:
             Metric("Source rows", formatting.fmt_int(profile.get("rows_in") or 0)),
             Metric("Clean rows", formatting.fmt_int(profile.get("rows", 0))),
             Metric("Rows removed", formatting.fmt_int(profile.get("rows_removed", 0))),
-            Metric("Missing cells", f"{float(profile.get('missing_pct', 0)):.2f}%"),
+            Metric(
+                "Missing cells",
+                formatting.fmt_pct100(profile.get("missing_pct", 0), 2),
+            ),
         ]
     )
     span = profile.get("date_span")
@@ -577,6 +653,8 @@ if "overview" in selected:
     _render_overview()
 if "segments" in selected:
     _render_segments()
+if "comparison" in selected:
+    _render_comparison()
 if "churn" in selected:
     _render_churn()
 if "retention" in selected:

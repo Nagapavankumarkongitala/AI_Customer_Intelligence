@@ -28,6 +28,7 @@ from services.churn_service import (
     train_churn_model,
 )
 from services.export_service import to_csv_bytes, to_json_bytes
+from utils import formatting
 from utils.exceptions import CustomerIntelligenceError
 from utils.logging_config import configure_logging
 from visualization.churn_charts import (
@@ -104,8 +105,8 @@ if st.button("Build churn dataset", type="primary"):
         rate = dataset.frame["churn"].mean()
         metric_row(
             [
-                Metric("Labeled customers", f"{len(dataset.frame):,}"),
-                Metric("Churn rate", f"{rate:.1%}"),
+                Metric("Labeled customers", formatting.fmt_int(len(dataset.frame))),
+                Metric("Churn rate", formatting.fmt_pct(rate)),
                 Metric(
                     "Excluded (short history)",
                     str(dataset.labeling.excluded_short_history),

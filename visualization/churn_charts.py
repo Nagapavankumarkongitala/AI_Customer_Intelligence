@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 from sklearn.metrics import auc, roc_curve
 
 from visualization import tokens
@@ -126,16 +127,76 @@ def importance_bar_fig(importance: pd.DataFrame, top_n: int = 15) -> px.Figure:
 
 
 @styled
-def risk_band_bar(scores: pd.DataFrame) -> px.Figure:
-    """Customer counts per risk band in band order (semantic risk hues)."""
+def risk_band_bar(scores: pd.DataFrame, revenue_col: str | None = None) -> go.Figure:
+    """Customer counts per risk band in band order (semantic risk hues).
+
+    Values ride on the bars as ``count (share%)`` so the card reads exactly
+    without a hover, and the x tick labels are dropped because the bars are
+    already labelled. When ``revenue_col`` is present the money exposed in each
+    band rides a second, right-hand axis as a muted line, so headcount and
+    financial impact read together instead of the count alone.
+    """
     if scores.empty or "risk_band" not in scores.columns:
         return empty_figure("Customers per risk band")
     counts = scores["risk_band"].value_counts().reindex(RISK_BAND_ORDER, fill_value=0)
-    return px.bar(
-        x=counts.index.tolist(),
-        y=counts.tolist(),
-        color=counts.index.tolist(),
-        color_discrete_map={band: tokens.risk_color(band) for band in RISK_BAND_ORDER},
-        title="Customers per risk band",
-        labels={"x": "Risk band", "y": "Customers"},
+    total = int(counts.sum())
+    shares = (counts / total * 100) if total else counts.astype(float)
+    has_revenue = revenue_col is not None and revenue_col in scores.columns
+
+    if not has_revenue:
+        fig = px.bar(
+            x=counts.index.tolist(),
+            y=counts.tolist(),
+            color=counts.index.tolist(),
+            color_discrete_map={band: tokens.risk_color(band) for band in RISK_BAND_ORDER},
+            title="Customers per risk band",
+            labels={"x": "Risk band", "y": "Customers"},
+        )
+        fig.update_traces(
+            text=[
+                f"{count:,}<br>{share:.0f}%" for count, share in zip(counts, shares, strict=True)
+            ],
+            textposition="outside",
+            textfont_size=11,
+            cliponaxis=False,
+        )
+        return fig
+
+    revenue = (
+        scores.groupby("risk_band")[revenue_col]
+        .sum()
+        .reindex(RISK_BAND_ORDER, fill_value=0)
+        .astype(float)
     )
+    fig = make_subplots(specs=[[{"secondary_y": True}]])
+    fig.add_trace(
+        go.Bar(
+            x=counts.index.tolist(),
+            y=counts.tolist(),
+            name="Customers",
+            marker_color=[tokens.risk_color(band) for band in RISK_BAND_ORDER],
+            text=[
+                f"{count:,}<br>{share:.0f}%" for count, share in zip(counts, shares, strict=True)
+            ],
+            textposition="outside",
+            textfont_size=11,
+            cliponaxis=False,
+        ),
+        secondary_y=False,
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=revenue.index.tolist(),
+            y=revenue.tolist(),
+            name="Revenue at risk",
+            mode="lines+markers",
+            line={"color": MUTED, "width": 2, "dash": "dot"},
+            marker={"size": 7, "color": MUTED},
+            hovertemplate="%{x}<br>%{y:,.0f} at risk<extra></extra>",
+        ),
+        secondary_y=True,
+    )
+    fig.update_layout(title="Customers per risk band", xaxis_title="Risk band")
+    fig.update_yaxes(title_text="Customers", secondary_y=False)
+    fig.update_yaxes(title_text="Revenue at risk", secondary_y=True)
+    return fig

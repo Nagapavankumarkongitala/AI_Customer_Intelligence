@@ -122,9 +122,11 @@ def value_risk_heatmap(
     Rather than plotting one bubble per customer, customers are aggregated into
     the four quadrants bounded by the churn-probability threshold (the ``high``
     risk-band floor) and the value threshold (defaults to the median historical
-    value). Cell colour encodes how many customers sit in a quadrant; each cell
-    also carries its count and revenue at risk, so an executive sees where the
-    money is exposed without the scatter clutter.
+    value). Each cell encodes three things at once — bubble **size** is the
+    customer count, **colour intensity** is revenue at risk, and the in-cell
+    label repeats both numbers — so the quadrant that is simultaneously crowded
+    and expensive reads without decoding a legend. Hover carries the full
+    sentence.
     """
     required = ("churn_probability", "expected_value_proxy_historical")
     if table.empty or not set(required).issubset(table.columns):
@@ -150,67 +152,67 @@ def value_risk_heatmap(
     x_cats = [f"Low value<br>< {value_floor}", f"High value<br>≥ {value_floor}"]
     y_cats = [f"Low risk<br>< {churn_threshold:.2f}", f"High risk<br>≥ {churn_threshold:.2f}"]
 
-    counts: list[list[int]] = []
-    labels: list[str] = []
-    hover_labels: list[str] = []
-    label_x: list[str] = []
-    label_y: list[str] = []
+    rows: list[dict] = []
     for risk_index, is_high_risk in enumerate((False, True)):
-        row: list[int] = []
         for value_index, is_high_value in enumerate((False, True)):
             mask = (high_risk if is_high_risk else ~high_risk) & (
                 high_value if is_high_value else ~high_value
             )
             segment = frame[mask]
-            count = int(len(segment))
-            revenue = float(segment["at_risk"].sum())
-            quadrant = _QUADRANT_LABELS[(is_high_value, is_high_risk)]
-            row.append(count)
-            label_x.append(x_cats[value_index])
-            label_y.append(y_cats[risk_index])
-            # Compact in-cell text (quadrant · count · revenue) so labels never
-            # collide in narrow cards; the hover carries the full sentence.
-            labels.append(f"{quadrant}<br>{count:,}<br>{_compact_money(revenue)}")
-            hover_labels.append(
-                f"{quadrant}<br>{count:,} customers<br>{_compact_money(revenue)} at risk"
+            rows.append(
+                {
+                    "x": x_cats[value_index],
+                    "y": y_cats[risk_index],
+                    "count": int(len(segment)),
+                    "revenue": float(segment["at_risk"].sum()),
+                    "quadrant": _QUADRANT_LABELS[(is_high_value, is_high_risk)],
+                }
             )
-        counts.append(row)
+    cells = pd.DataFrame(rows)
 
-    zmax = float(max((c for row in counts for c in row), default=0)) or 1.0
+    zmax = float(cells["revenue"].max()) or 1.0
     scale = tokens.sequential_scale()
     # Per-cell ink: the sequential scale runs light→dark, so each label picks the
     # colour that stays legible on its own cell instead of a single trace-wide hue.
-    inks = [tokens.readable_ink(_blend(scale, count / zmax)) for row in counts for count in row]
+    inks = [tokens.readable_ink(_blend(scale, revenue / zmax)) for revenue in cells["revenue"]]
 
     fig = go.Figure()
     fig.add_trace(
-        go.Heatmap(
-            x=x_cats,
-            y=y_cats,
-            z=counts,
-            colorscale=scale,
-            zmin=0,
-            zmax=zmax,
-            showscale=False,
-            customdata=np.asarray(hover_labels, dtype=object).reshape(len(y_cats), len(x_cats)),
-            hovertemplate="%{customdata}<extra></extra>",
-            hoverongaps=False,
+        go.Scatter(
+            x=cells["x"],
+            y=cells["y"],
+            mode="markers+text",
+            marker={
+                "size": cells["count"],
+                "sizemode": "area",
+                "sizeref": 2.0 * (float(cells["count"].max()) or 1) / (60.0**2),
+                "sizemin": 18,
+                "color": cells["revenue"],
+                "colorscale": scale,
+                "showscale": True,
+                "colorbar": {"title": "Revenue<br>at risk", "thickness": 10},
+                "line": {"color": tokens.color("border"), "width": 1},
+            },
+            text=[
+                f"{row.quadrant}<br>{row.count:,}<br>{_compact_money(row.revenue)}"
+                for row in cells.itertuples(index=False)
+            ],
+            textposition="middle center",
+            textfont={"size": 10, "color": inks},
+            customdata=[
+                [row.quadrant, row.count, _compact_money(row.revenue)]
+                for row in cells.itertuples(index=False)
+            ],
+            hovertemplate="%{customdata[0]}<br>%{customdata[1]:,} customers<br>"
+            "%{customdata[2]} at risk<extra></extra>",
+            cliponaxis=False,
         )
     )
-    # Labels as annotations (not scatter text) so each line break renders and
-    # every cell can pick its own legible ink.
-    for label, x_cat, y_cat, ink in zip(labels, label_x, label_y, inks, strict=True):
-        fig.add_annotation(
-            x=x_cat,
-            y=y_cat,
-            text=label,
-            showarrow=False,
-            yanchor="middle",
-            font={"size": 10, "color": ink},
-        )
     fig.update_layout(
         title="Strategic priority heatmap",
         xaxis_title="Historical value (proxy, not CLV)",
+        xaxis={"gridcolor": tokens.color("grid"), "zeroline": False},
+        yaxis={"gridcolor": tokens.color("grid"), "zeroline": False},
     )
     return fig
 

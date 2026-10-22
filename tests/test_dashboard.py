@@ -10,6 +10,7 @@ from services.dashboard_service import (
     compute_kpis,
     high_value_high_risk,
     mask_customer_id,
+    period_deltas,
     prepare_transactions,
     segment_portfolio,
     trend_tables,
@@ -111,6 +112,37 @@ def test_trends_and_portfolio() -> None:
     portfolio = segment_portfolio(master, "rfm_segment")
     assert portfolio["customer_share"].sum() == 100.0
     assert portfolio["revenue_share"].sum() == 100.0
+
+
+def test_period_deltas_compare_windows() -> None:
+    """KPI deltas split at the latest date and compare equal-length windows."""
+    txns = pd.DataFrame(
+        {
+            "customer_id": ["C1", "C2", "C1", "C2", "C3"],
+            "transaction_date": [
+                "2024-02-01",
+                "2024-02-02",
+                "2024-03-01",
+                "2024-03-02",
+                "2024-03-03",
+            ],
+            "amount_spent": [100.0, 100.0, 200.0, 200.0, 200.0],
+        }
+    )
+    prepared = prepare_transactions(txns)
+    deltas = period_deltas(prepared, build_master(_master()), days=30)
+    # Current window (after 2024-02-02): three 200s = 600. Previous: two 100s = 200.
+    assert deltas["total_revenue"] == pytest.approx(2.0)  # 600 vs 200
+    assert deltas["total_customers"] == pytest.approx(0.5)  # 3 vs 2
+    assert deltas["average_order_value"] == pytest.approx(1.0)  # 200/order vs 100/order
+    assert deltas["days"] == 30
+
+
+def test_period_deltas_empty_without_baseline() -> None:
+    """No earlier window means no delta, not a divide-by-zero or a fake zero."""
+    single = prepare_transactions(_txns().head(1))
+    assert period_deltas(single, build_master(_master()), days=30) == {}
+    assert period_deltas(pd.DataFrame(), build_master(_master())) == {}
 
 
 def test_high_risk_empty_gracefully() -> None:

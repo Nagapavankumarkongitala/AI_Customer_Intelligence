@@ -30,17 +30,42 @@ from visualization import tokens
 
 
 def test_formatting_primitives() -> None:
-    """One spelling for ints, money, percents, compact scale, and dates."""
-    assert formatting.fmt_int(1234567) == "1,234,567"
+    """One spelling for ints, money, percents, compact scale, and dates.
+
+    Defaults to the Indian notation (lakh/crore, 12,34,567 grouping); the
+    international spelling is covered in tests/test_formatting.py.
+    """
+    symbol = formatting.currency_symbol()
+    assert formatting.fmt_int(1234567) == "12,34,567"
     assert formatting.fmt_int(None) == "–"
-    assert formatting.fmt_money(123456) == f"{formatting.currency_symbol()}123,456"
+    assert formatting.fmt_money(123456) == f"{symbol}1,23,456"
     assert formatting.fmt_money(12.345, decimals=2).endswith("12.35")
     assert formatting.fmt_pct(0.123) == "12.3%"
     assert formatting.fmt_pct(None) == "–"
     assert formatting.fmt_compact(1500) == "1.5K"
-    assert formatting.fmt_compact(2_300_000) == "2.3M"
+    assert formatting.fmt_compact(2_300_000) == "23L"
     assert formatting.fmt_compact(999) == "999"
     assert formatting.fmt_compact(None) == "–"
+
+
+def test_fmt_money_compact_abbreviates_at_the_active_scale() -> None:
+    """Money abbreviates at the active notation's steps, behind the symbol."""
+    symbol = formatting.currency_symbol()
+    formatting.set_notation(formatting.NOTATION_INDIAN)
+    assert formatting.fmt_money_compact(5_830_732_766) == f"{symbol}583.07Cr"
+    assert formatting.fmt_money_compact(2_300_000) == f"{symbol}23L"
+    assert formatting.fmt_money_compact(1_500) == f"{symbol}1.5K"
+    # Below the first step it falls back to grouped units, so small amounts keep
+    # their precision instead of collapsing to "₹0.001K".
+    assert formatting.fmt_money_compact(999) == f"{symbol}999"
+    assert formatting.fmt_money_compact(0) == f"{symbol}0"
+    assert formatting.fmt_money_compact(None) == "–"
+    assert formatting.fmt_money_compact("not-a-number") == "–"
+
+    formatting.set_notation(formatting.NOTATION_INTERNATIONAL)
+    assert formatting.fmt_money_compact(5_830_732_766) == f"{symbol}5.83B"
+    assert formatting.fmt_money_compact(2_300_000) == f"{symbol}2.3M"
+    formatting.set_notation(formatting.NOTATION_INDIAN)
 
 
 def test_formatting_degrades_on_bad_input() -> None:
@@ -49,6 +74,7 @@ def test_formatting_degrades_on_bad_input() -> None:
     assert formatting.fmt_money("not-a-number") == "–"
     assert formatting.fmt_pct("not-a-number") == "–"
     assert formatting.fmt_compact("not-a-number") == "–"
+    assert formatting.fmt_money_compact("not-a-number") == "–"
     assert formatting.fmt_date(None) == "–"
     assert formatting.fmt_date("not-a-date") == "not-a-date"
 

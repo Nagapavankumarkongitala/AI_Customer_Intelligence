@@ -7,11 +7,6 @@ from analytics.segmentation_comparison import (
     agreement_ari,
     churn_rate_by_segment,
     crosstab_counts,
-    interpretability_checklist,
-    recommend_model,
-    revenue_concentration,
-    size_balance,
-    value_separation,
 )
 from components.empty_state import chart_section, empty_state
 from components.filters import controls_expander
@@ -21,7 +16,9 @@ from components.metric_guides import render_metric_guides
 from components.page_header import page_header, section_header
 from components.sidebar import render_sidebar_footer, render_sidebar_nav, sidebar_filters
 from services import state_service
+from services.comparison_service import build_comparison, scorecard_for_display
 from services.export_service import to_csv_bytes, to_json_bytes
+from utils import formatting
 from utils.logging_config import configure_logging
 from visualization.segmentation_charts import metric_comparison_bar, sankey_mapping
 from visualization.theme import inject_terminal_css, without_title
@@ -38,11 +35,10 @@ page_header(
     "feature space — the operational pick never comes from one metric alone.",
 )
 
-features = st.session_state.get("customer_features")
 rfm = st.session_state.get("rfm_results")
 lrfm = st.session_state.get("lrfm_results")
 ai_runs = [r for r in (st.session_state.get("segmentation_runs") or []) if "labels" in r]
-if features is None or (rfm is None and lrfm is None):
+if st.session_state.get("customer_features") is None or (rfm is None and lrfm is None):
     empty_state("No scores yet", "Score RFM/LRFM on page 03 first.")
     st.stop()
 if not ai_runs:
@@ -52,97 +48,18 @@ if not ai_runs:
     )
     st.stop()
 
-money = features.set_index("customer_id")["monetary_value"]
-churn_scores = st.session_state.get("churn_scores")
-churn = None
-if isinstance(churn_scores, pd.DataFrame):
-    if "predicted_class" in churn_scores.columns:
-        churn = churn_scores.set_index("customer_id")["predicted_class"]
-    elif "churn_probability" in churn_scores.columns:
-        churn = churn_scores.set_index("customer_id")["churn_probability"] >= 0.5
+# The scorecard is computed once in services.comparison_service so this page and
+# the report's Model comparison section can never disagree about the same run.
+comparison = build_comparison(st.session_state)
+if comparison is None:
+    empty_state("Nothing to compare", "Score RFM/LRFM and save an AI run first.")
+    st.stop()
+table = comparison["table"]
+labelings = comparison["labelings"]
+churn = comparison["churn_labels"]
 
-# --- Candidate rows: AI runs + traditional labelings -------------------------
-rows: list[dict] = []
-labelings: dict[str, pd.Series] = {}
-for run in ai_runs:
-    name = f"AI:{run['model']}"
-    ids = run["customer_ids"]
-    labels = pd.Series(run["labels"], index=ids, name="cluster")
-    names = {int(k): v for k, v in run.get("names", {}).items()}
-    display = pd.Series(
-        [names.get(int(v), str(v)) for v in labels], index=labels.index, name="segment"
-    )
-    labelings[name] = display
-    metrics, stability = run["metrics"], run["stability"]
-    sizes = labels.value_counts().to_dict()
-    balance = size_balance({int(k): int(v) for k, v in sizes.items()})
-    revenues = money.reindex(ids).groupby(display.values).sum().to_dict()
-    checklist = interpretability_checklist(
-        metrics["n_clusters"],
-        bool(names),
-        metrics["noise_pct"],
-        stability.get("mean_pairwise_ari"),
-        balance["min_share"],
-    )
-    rows.append(
-        {
-            "model": name,
-            "kind": "AI",
-            "n_segments": metrics["n_clusters"],
-            "silhouette": metrics["silhouette"],
-            "davies_bouldin": metrics["davies_bouldin"],
-            "stability_ari": stability.get("mean_pairwise_ari"),
-            "value_eta2": value_separation(money.reindex(ids), display),
-            "min_share": balance["min_share"],
-            "evenness": balance["evenness"],
-            "top_revenue_share": revenue_concentration(
-                {str(k): float(v) for k, v in revenues.items()}
-            )["top_segment_share"],
-            "noise_pct": metrics["noise_pct"],
-            "interpretability_passes": sum(1 for i in checklist if i["pass"]),
-            "checklist": checklist,
-        }
-    )
-
-for label, scored in (("RFM", rfm), ("LRFM", lrfm)):
-    if scored is None:
-        continue
-    display = scored.set_index("customer_id")["segment"]
-    labelings[label] = display
-    ids = display.index.tolist()
-    sizes = display.value_counts().to_dict()
-    balance = size_balance({str(k): int(v) for k, v in sizes.items()})
-    revenues = money.reindex(ids).groupby(display.values).sum().to_dict()
-    checklist = interpretability_checklist(
-        display.nunique(),
-        True,
-        0.0,
-        1.0,
-        balance["min_share"],
-    )
-    rows.append(
-        {
-            "model": label,
-            "kind": "Traditional",
-            "n_segments": display.nunique(),
-            "silhouette": None,
-            "davies_bouldin": None,
-            "stability_ari": 1.0,
-            "value_eta2": value_separation(money.reindex(ids), display),
-            "min_share": balance["min_share"],
-            "evenness": balance["evenness"],
-            "top_revenue_share": revenue_concentration(
-                {str(k): float(v) for k, v in revenues.items()}
-            )["top_segment_share"],
-            "noise_pct": 0.0,
-            "interpretability_passes": sum(1 for i in checklist if i["pass"]),
-            "checklist": checklist,
-        }
-    )
-
-table = pd.DataFrame(rows)
 with st.expander("Model scorecard", expanded=False):
-    st.dataframe(table.drop(columns=["checklist"]), width="stretch")
+    st.dataframe(scorecard_for_display(table), width="stretch")
     st.caption(
         "RFM/LRFM silhouette is blank by design: different feature space, not comparable. "
         "Stability 1.0 for RFM/LRFM: deterministic rules on fixed features."
@@ -167,8 +84,8 @@ for i in range(0, len(metrics), 2):
                 )
 
 # --- Pairwise agreement: traditional vs selected AI ---------------------------
-ai_names = [r["model"] for r in rows if r["kind"] == "AI"]
-traditional = [r["model"] for r in rows if r["kind"] == "Traditional"]
+ai_names = [r["model"] for r in table.to_dict("records") if r["kind"] == "AI"]
+traditional = [r["model"] for r in table.to_dict("records") if r["kind"] == "Traditional"]
 with sidebar_filters("Comparison Pair"):
     ref = st.selectbox("Traditional reference", traditional)
     target = st.selectbox("AI model", ai_names)
@@ -180,7 +97,9 @@ with agree_l:
         "Pair agreement",
         "1.0 = identical groupings, 0 = chance-level agreement.",
     ):
-        metric_row([Metric(f"Adjusted Rand Index ({ref} vs {target})", f"{ari:.3f}")])
+        metric_row(
+            [Metric(f"Adjusted Rand Index ({ref} vs {target})", formatting.fmt_float(ari, 3))]
+        )
 with agree_r:
     with chart_section(f"Customer flow ({ref} → {target})"):
         st.plotly_chart(without_title(sankey_mapping(ct, ref, target)), width="stretch")
@@ -197,7 +116,7 @@ render_metric_guides()
 
 # --- Per-model checklists ------------------------------------------------------
 with st.expander("Interpretability checklists"):
-    for row in rows:
+    for row in table.to_dict("records"):
         st.markdown(f"**{row['model']}** — {row['interpretability_passes']} checks pass")
         st.dataframe(
             pd.DataFrame(row["checklist"]),
@@ -216,7 +135,7 @@ else:
         st.dataframe(churn_table, width="stretch")
 
 # --- Recommendation ------------------------------------------------------------
-recommendation = recommend_model(table.rename(columns={"model": "name"}).to_dict(orient="records"))
+recommendation = comparison["recommendation"]
 insight_box(
     "Model recommendation",
     recommendation["rationale"],
@@ -237,7 +156,7 @@ st.success(
 
 st.download_button(
     "Download scorecard (CSV)",
-    data=to_csv_bytes(table.drop(columns=["checklist"])),
+    data=to_csv_bytes(scorecard_for_display(table)),
     file_name="segmentation_comparison.csv",
     mime="text/csv",
 )

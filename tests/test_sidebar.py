@@ -62,6 +62,34 @@ def test_theme_preference_survives_outside_the_contract() -> None:
     assert THEME_KEY not in _DEFAULTS
 
 
+def test_notation_resolution_defaults_to_indian() -> None:
+    """No stored preference (or garbage) resolves to the Indian notation."""
+    from components.theme import NOTATION_KEY, resolve_notation
+    from utils import formatting
+
+    assert resolve_notation({}) == formatting.NOTATION_INDIAN
+    assert resolve_notation({NOTATION_KEY: "Indian"}) == formatting.NOTATION_INDIAN
+    assert resolve_notation({NOTATION_KEY: "International"}) == formatting.NOTATION_INTERNATIONAL
+    assert resolve_notation({NOTATION_KEY: "nonsense"}) == formatting.NOTATION_INDIAN
+    # Raw notation strings also resolve, mirroring the theme toggle.
+    assert resolve_notation({NOTATION_KEY: "international"}) == formatting.NOTATION_INTERNATIONAL
+
+
+def test_notation_preference_survives_outside_the_contract() -> None:
+    """The notation preference is session UI state, not pipeline state."""
+    from components.theme import NOTATION_KEY
+    from services.state_service import _DEFAULTS
+
+    assert NOTATION_KEY not in _DEFAULTS
+
+
+def test_notation_toggle_persists_by_session() -> None:
+    """The notation radio carries the key and session persistence, like theme."""
+    source = Path("components/theme.py").read_text(encoding="utf-8")
+    assert "key=NOTATION_KEY" in source
+    assert source.count('persist_state="session"') >= 2
+
+
 def test_toggle_reads_durable_labels_with_session_persistence() -> None:
     """Display labels resolve from plain mappings; the radio persists by design.
 

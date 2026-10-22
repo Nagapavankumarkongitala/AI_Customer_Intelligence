@@ -18,6 +18,11 @@ import pandas as pd
 
 from analytics.demographics import DEFAULT_AGE_BANDS, assign_age_band
 from services import report_charts, report_narrative
+from services.comparison_service import (
+    build_comparison,
+    scorecard_as_text,
+    scorecard_for_display,
+)
 from services.dashboard_service import (
     build_master,
     compute_kpis,
@@ -37,6 +42,7 @@ REPORT_SECTIONS: tuple[str, ...] = (
     "summary",
     "overview",
     "segments",
+    "comparison",
     "churn",
     "retention",
     "appendix",
@@ -48,6 +54,7 @@ SECTION_LABELS: dict[str, str] = {
     "summary": "Executive summary",
     "overview": "Business & customer trends",
     "segments": "Segments & demographics",
+    "comparison": "Model comparison",
     "churn": "Churn risk",
     "retention": "Retention plan",
     "appendix": "Appendix & data foundation",
@@ -56,6 +63,18 @@ SECTION_LABELS: dict[str, str] = {
 
 #: Sections whose interpretation is recapped in the closing section.
 ANALYTICAL_SECTIONS: Final[tuple[str, ...]] = ("overview", "segments", "churn", "retention")
+
+#: Sections rendered from :data:`SECTION_CHARTS` by the PDF and Word exporters, in
+#: report order. Superset of :data:`ANALYTICAL_SECTIONS` — the comparison section
+#: carries computed evidence (a table and charts) but no narrative insights, so it
+#: renders like an analytical section without being recapped at the close.
+CHARTED_SECTIONS: Final[tuple[str, ...]] = (
+    "overview",
+    "segments",
+    "comparison",
+    "churn",
+    "retention",
+)
 
 #: Chart keys per section, in reading order. Shared by HTML, PDF, and Word so
 #: the three exports can never drift apart.
@@ -68,6 +87,12 @@ SECTION_CHARTS: Final[dict[str, tuple[str, ...]]] = {
         "demographics_age",
         "demographics_gender",
         "demographics_region",
+    ),
+    "comparison": (
+        "comparison_separation",
+        "comparison_stability",
+        "comparison_value",
+        "comparison_evenness",
     ),
     "churn": ("risk_bands",),
     "retention": (
@@ -197,6 +222,40 @@ CHART_EXPLANATIONS: dict[str, dict[str, str]] = {
         "how_to_read": "Geography is an optional attribute; missing values stay "
         "visible as 'Unknown'.",
         "action": "Compare regional headcount against regional revenue before " "shifting spend.",
+    },
+    "comparison_separation": {
+        "title": "Silhouette by model (AI runs)",
+        "what": "Cluster separation for each AI run, measured in the shared feature "
+        "space. Blank for RFM/LRFM by design — a different space is not comparable.",
+        "how_to_read": "Higher is tighter, better-separated clusters. It is a "
+        "geometry score, not a business verdict, and it is one voice among four.",
+        "action": "Never pick on silhouette alone: a high score with an unstable or "
+        "ill-sized split is a trap the recommendation gates are there to catch.",
+    },
+    "comparison_stability": {
+        "title": "Seed stability by model (ARI)",
+        "what": "Agreement between runs of the same model under different random "
+        "seeds. RFM/LRFM are 1.0 by construction — deterministic rules.",
+        "how_to_read": "1.0 means the grouping barely moves when the seed changes. "
+        "Low values mean any segmentation you read here could reshuffle tomorrow.",
+        "action": "Treat a model below the stability gate as a research result, not "
+        "a production segmentation, however strong its other metrics look.",
+    },
+    "comparison_value": {
+        "title": "Revenue differentiation by model (eta²)",
+        "what": "Share of monetary-value variance explained by segment membership.",
+        "how_to_read": "Higher means segments actually separate customers by historical "
+        "value. Value is a past-spend proxy, never a predicted CLV.",
+        "action": "Prefer the model with real value separation when the spend "
+        "differences are what the campaign will act on.",
+    },
+    "comparison_evenness": {
+        "title": "Size balance by model (evenness)",
+        "what": "How evenly customers are spread across segments (1 = perfectly even).",
+        "how_to_read": "Low evenness means one giant segment and a long tail, which "
+        "usually means an under-specified or too-fine split.",
+        "action": "Check the smallest-segment share against the size gate before "
+        "committing outreach capacity to a lopsided split.",
     },
 }
 
@@ -443,6 +502,13 @@ def build_report_context(state: Mapping[str, Any]) -> dict[str, Any]:
     if isinstance(hist_state, dict) and hist_state.get("table"):
         history = pd.DataFrame(hist_state["table"])
 
+    # Model comparison reuses the same computation page 06 shows, so the report
+    # and the page can never disagree about which model won and why.
+    try:
+        comparison = build_comparison(state)
+    except (KeyError, ValueError, TypeError):
+        comparison = None
+
     return {
         "generated_at": datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC"),
         "readiness": readiness,
@@ -454,6 +520,7 @@ def build_report_context(state: Mapping[str, Any]) -> dict[str, Any]:
         "segmented": segmented,
         "scores": scores,
         "retention": retention,
+        "comparison": comparison,
         "segment_portfolio": segment_portfolio,
         "lrfm_portfolio": lrfm_portfolio,
         "ai_portfolio": ai_portfolio,
@@ -490,6 +557,14 @@ def context_tables(
     ai_portfolio = context.get("ai_portfolio")
     if ai_portfolio is not None and not ai_portfolio.empty:
         tables["AI_Portfolio"] = ai_portfolio.copy()
+    comparison = context.get("comparison") or {}
+    scorecard = comparison.get("table")
+    if isinstance(scorecard, pd.DataFrame) and not scorecard.empty:
+        tables["Model_Scorecard"] = scorecard_for_display(scorecard)
+    pair = comparison.get("pair") or {}
+    cross = pair.get("cross_tab")
+    if isinstance(cross, pd.DataFrame) and not cross.empty:
+        tables["Model_Flow"] = cross.reset_index()
     trends = context.get("trends") or {}
     revenue_trend = trends.get("revenue")
     if isinstance(revenue_trend, pd.DataFrame) and not revenue_trend.empty:
@@ -725,6 +800,58 @@ def render_html_report(
             f"{_fig('demographics_gender')}{_explain('demographics_gender')}"
             f"{_fig('demographics_region')}{_explain('demographics_region')}</section>"
         )
+    if "comparison" in sections:
+        comparison = context.get("comparison") or {}
+        if comparison:
+            rec = comparison.get("recommendation") or {}
+            pair = comparison.get("pair") or {}
+            scorecard = scorecard_as_text(comparison.get("table"))
+            scorecard_html = (
+                scorecard.to_html(index=False, border=0, classes="tbl")
+                if not scorecard.empty
+                else "<p class='muted'>No comparable models yet.</p>"
+            )
+            rec_html = (
+                f"<div class='explain'><strong>Recommended model. </strong>"
+                f"{html.escape(str(rec.get('rationale', '')))}</div>"
+                if rec.get("rationale")
+                else ""
+            )
+            pair_html = ""
+            if pair:
+                cross = pair.get("cross_tab")
+                cross_html = ""
+                if isinstance(cross, pd.DataFrame) and not cross.empty:
+                    cross_html = (
+                        "<details><summary>Customer flow (counts)</summary>"
+                        f"{cross.to_html(border=0, classes='tbl')}</details>"
+                    )
+                pair_html = (
+                    f"<p>Pair agreement: <strong>{html.escape(str(pair.get('reference')))}</strong> "
+                    f"vs <strong>{html.escape(str(pair.get('target')))}</strong> · "
+                    f"Adjusted Rand Index {html.escape(formatting.fmt_float(pair.get('ari'), 3))} "
+                    "(1.0 = identical groupings, 0 = chance-level).</p>"
+                    f"{cross_html}"
+                )
+            built.append(
+                f"<section><h2>{_section_heading('comparison', 'Model comparison')}</h2>"
+                f"{pair_html}{rec_html}"
+                f"<h3>Model scorecard</h3>{scorecard_html}"
+                f"<p class='muted'>Silhouette is comparable only among AI runs sharing a "
+                "feature space; RFM/LRFM leave it blank by design. Stability of 1.0 for "
+                "RFM/LRFM is deterministic, not evidence of superiority.</p>"
+                f"{_fig('comparison_separation')}{_explain('comparison_separation')}"
+                f"{_fig('comparison_stability')}{_explain('comparison_stability')}"
+                f"{_fig('comparison_value')}{_explain('comparison_value')}"
+                f"{_fig('comparison_evenness')}{_explain('comparison_evenness')}</section>"
+            )
+        else:
+            built.append(
+                f"<section><h2>{_section_heading('comparison', 'Model comparison')}</h2>"
+                "<p class='muted'>No models to compare yet — score RFM/LRFM and save at "
+                "least one AI run on the Segmentation Comparison page first."
+                "</p></section>"
+            )
     if "churn" in sections:
         model_line = ""
         if metadata:
@@ -979,7 +1106,7 @@ def build_pdf_bytes(
         data = [
             [Paragraph(html.escape(str(name)), head_style) for name in view.columns],
             *[
-                [Paragraph(html.escape(value), cell_style) for value in row]
+                [Paragraph(html.escape(str(value)), cell_style) for value in row]
                 for row in view.itertuples(index=False)
             ],
         ]
@@ -1051,7 +1178,7 @@ def build_pdf_bytes(
         for item in report_narrative.summary_insights(context):
             _insight(item)
 
-    for section in ANALYTICAL_SECTIONS:
+    for section in CHARTED_SECTIONS:
         if section not in sections:
             continue
         story.append(
@@ -1070,6 +1197,31 @@ def build_pdf_bytes(
                 )
             )
             story.append(Spacer(1, 4))
+        if section == "comparison":
+            comparison = context.get("comparison") or {}
+            if comparison:
+                rec = comparison.get("recommendation") or {}
+                pair = comparison.get("pair") or {}
+                if pair:
+                    story.append(
+                        Paragraph(
+                            f"Pair agreement: <b>{html.escape(str(pair.get('reference')))}</b> vs "
+                            f"<b>{html.escape(str(pair.get('target')))}</b> · Adjusted Rand Index "
+                            f"{html.escape(formatting.fmt_float(pair.get('ari'), 3))} "
+                            "(1.0 = identical, 0 = chance-level).",
+                            styles["Normal"],
+                        )
+                    )
+                if rec.get("rationale"):
+                    story.append(
+                        Paragraph(html.escape(str(rec.get("rationale", ""))), styles["Normal"])
+                    )
+                scorecard = scorecard_as_text(comparison.get("table"))
+                if not scorecard.empty:
+                    _table(scorecard, "Model scorecard", max_rows=20, level=3)
+                cross = pair.get("cross_tab") if pair else None
+                if isinstance(cross, pd.DataFrame) and not cross.empty:
+                    _table(cross.astype(str), "Customer flow (counts)", max_rows=12, level=3)
         for item in report_narrative.section_insights(context, section):
             _insight(item)
         for key in SECTION_CHARTS[section]:
@@ -1287,7 +1439,7 @@ def build_docx_bytes(
         for item in report_narrative.summary_insights(context):
             _insight(item)
 
-    for section in ANALYTICAL_SECTIONS:
+    for section in CHARTED_SECTIONS:
         if section not in sections:
             continue
         document.add_heading(_section_heading(section, SECTION_LABELS[section]), level=1)
@@ -1298,6 +1450,25 @@ def build_docx_bytes(
                 f"cutoff {metadata.get('cutoff', '–')}. Predictors use transactions on or before "
                 "the cutoff only; the label is activity after it — leakage-safe by construction."
             ).italic = True
+        if section == "comparison":
+            comparison = context.get("comparison") or {}
+            if comparison:
+                rec = comparison.get("recommendation") or {}
+                pair = comparison.get("pair") or {}
+                if pair:
+                    document.add_paragraph(
+                        f"Pair agreement: {pair.get('reference')} vs {pair.get('target')} · "
+                        f"Adjusted Rand Index {formatting.fmt_float(pair.get('ari'), 3)} "
+                        "(1.0 = identical, 0 = chance-level)."
+                    )
+                if rec.get("rationale"):
+                    document.add_paragraph(str(rec.get("rationale", "")))
+                scorecard = scorecard_as_text(comparison.get("table"))
+                if not scorecard.empty:
+                    _table(scorecard, "Model scorecard", level=3)
+                cross = pair.get("cross_tab") if pair else None
+                if isinstance(cross, pd.DataFrame) and not cross.empty:
+                    _table(cross.astype(str), "Customer flow (counts)", level=3)
         for item in report_narrative.section_insights(context, section):
             _insight(item)
         for key in SECTION_CHARTS[section]:
@@ -1416,6 +1587,7 @@ def report_readiness_lines(context: dict[str, Any]) -> list[tuple[str, bool, str
 
 __all__ = [
     "ANALYTICAL_SECTIONS",
+    "CHARTED_SECTIONS",
     "CHART_EXPLANATIONS",
     "REPORT_SECTIONS",
     "SECTION_CHARTS",

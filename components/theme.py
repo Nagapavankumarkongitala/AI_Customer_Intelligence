@@ -1,16 +1,22 @@
-"""Theme preference: resolve, apply, and toggle between the two skins.
+"""Theme and money-notation preferences: resolve, apply, and toggle.
 
-The preference lives in ``st.session_state["theme_mode"]`` as the radio's
-display value (``"Light"``/``"Dark"``). It is deliberately *outside* the data
-pipeline contract in ``services/state_service.py``: ``initialize`` and
-``reset`` only touch contract keys, so the appearance choice survives data
-resets. ``resolve_theme_mode`` is pure over any mapping and fully tested.
+Both preferences live in session state as their radio's display value and sit
+deliberately *outside* the data pipeline contract in ``services/state_service.py``:
+``initialize`` and ``reset`` only touch contract keys, so the appearance and
+notation choices survive data resets. The ``resolve_*`` helpers are pure over
+any mapping and fully tested.
 
-The radio carries ``key=`` **and** ``persist_state="session"``. Streamlit
-drops page-scoped widget values on every page switch (verified live: the
-choice reset to Light on navigation without it); the session scope keeps the
-value for the whole session. A keyless radio was tried and rejected — without
-a key the framework cannot deliver the new value before the script runs.
+* Appearance — ``"Light"``/``"Dark"`` in ``st.session_state["theme_mode"]``.
+* Money notation — ``"Indian"``/``"International"`` in
+  ``st.session_state["money_notation"]``; :func:`apply_notation` pushes the
+  choice into ``utils.formatting`` once per run, before any page formats a
+  number, so one switch re-spells every card, table, chart, and export.
+
+The radios carry ``key=`` **and** ``persist_state="session"``. Streamlit drops
+page-scoped widget values on every page switch (verified live: the choice reset
+to Light on navigation without it); the session scope keeps the value for the
+whole session. A keyless radio was tried and rejected — without a key the
+framework cannot deliver the new value before the script runs.
 """
 
 from __future__ import annotations
@@ -19,10 +25,11 @@ from collections.abc import Mapping
 
 import streamlit as st
 
+from utils import formatting
 from visualization import tokens
 from visualization.theme import load_theme
 
-#: Session key holding the radio's display value.
+#: Session key holding the appearance radio's display value.
 THEME_KEY = "theme_mode"
 
 #: Radio labels, in order. The first is the default before any interaction.
@@ -30,6 +37,18 @@ THEME_OPTIONS = ("Light", "Dark")
 
 _OPTION_TO_MODE = {"Light": tokens.MODE_LIGHT, "Dark": tokens.MODE_DARK}
 _MODE_TO_OPTION = {mode: option for option, mode in _OPTION_TO_MODE.items()}
+
+#: Session key holding the money-notation radio's display value.
+NOTATION_KEY = "money_notation"
+
+#: Notation labels, in order. Indian is the default (see utils.formatting).
+NOTATION_OPTIONS = ("Indian", "International")
+
+_OPTION_TO_NOTATION = {
+    "Indian": formatting.NOTATION_INDIAN,
+    "International": formatting.NOTATION_INTERNATIONAL,
+}
+_NOTATION_TO_OPTION = {value: option for option, value in _OPTION_TO_NOTATION.items()}
 
 
 def resolve_theme_mode(state: Mapping) -> str:
@@ -45,6 +64,25 @@ def resolve_theme_mode(state: Mapping) -> str:
 def ensure_theme() -> str:
     """Inject the stylesheet for the stored preference. Returns the mode."""
     return load_theme(resolve_theme_mode(st.session_state))
+
+
+def resolve_notation(state: Mapping) -> str:
+    """Map stored preference (or garbage, or nothing) onto a valid notation."""
+    stored = state.get(NOTATION_KEY, NOTATION_OPTIONS[0])
+    if stored in _OPTION_TO_NOTATION:
+        return _OPTION_TO_NOTATION[stored]
+    if stored in formatting.NOTATIONS:
+        return stored
+    return formatting.NOTATION_INDIAN
+
+
+def apply_notation() -> str:
+    """Push the stored notation into ``utils.formatting``. Returns it.
+
+    Called at the rail head on every run, before any page formats a number, so
+    the switch lands on the same rerun that changed it.
+    """
+    return formatting.set_notation(resolve_notation(st.session_state))
 
 
 def theme_toggle() -> str:
@@ -79,3 +117,23 @@ def _stored_label(state: Mapping | None = None) -> str:
     if stored in THEME_OPTIONS:
         return stored
     return _MODE_TO_OPTION.get(stored, THEME_OPTIONS[0])
+
+
+def notation_toggle() -> str:
+    """Sidebar radio for money notation. Returns the selected notation.
+
+    Keyed with session persistence for the same reason as ``theme_toggle``. The
+    value is pushed into ``utils.formatting`` by ``apply_notation`` at the rail
+    head, so charts and tables rendered later in the run already agree.
+    """
+    stored_label = _NOTATION_TO_OPTION.get(resolve_notation(st.session_state), NOTATION_OPTIONS[0])
+    st.radio(
+        "Money notation",
+        NOTATION_OPTIONS,
+        index=NOTATION_OPTIONS.index(stored_label),
+        key=NOTATION_KEY,
+        horizontal=True,
+        persist_state="session",
+        help="Indian uses lakh/crore (₹1.5L, ₹5.83Cr); International uses K/M/B.",
+    )
+    return resolve_notation(st.session_state)

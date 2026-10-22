@@ -95,6 +95,7 @@ def test_chart_explanations_have_no_causal_claims() -> None:
         "summary",
         "overview",
         "segments",
+        "comparison",
         "churn",
         "retention",
         "recommendations",
@@ -205,3 +206,102 @@ def test_context_carries_foundation_and_narrative_inputs() -> None:
     assert context["retention_summary"]["customers"] == 3
     assert context["treatments"] == []
     assert "Monthly_Trends" in context_tables(context)
+
+
+def _state_with_ai_runs() -> dict:
+    """Sample state plus two saved AI runs, enough to build the comparison."""
+    state = _sample_state()
+    state["segmentation_runs"] = [
+        {
+            "model": "kmeans",
+            "labels": [0, 0, 1],
+            "customer_ids": ["C00001", "C00002", "C00003"],
+            "names": {"0": "Core", "1": "Light"},
+            "metrics": {
+                "n_clusters": 2,
+                "silhouette": 0.61,
+                "davies_bouldin": 0.9,
+                "noise_pct": 0.0,
+            },
+            "stability": {"mean_pairwise_ari": 0.95},
+        },
+        {
+            "model": "gmm",
+            "labels": [0, 1, 1],
+            "customer_ids": ["C00001", "C00002", "C00003"],
+            "names": {},
+            "metrics": {
+                "n_clusters": 2,
+                "silhouette": 0.42,
+                "davies_bouldin": 1.2,
+                "noise_pct": 0.0,
+            },
+            "stability": {"mean_pairwise_ari": 0.88},
+        },
+    ]
+    return state
+
+
+def test_comparison_section_builds_from_ai_runs() -> None:
+    """The report context carries the same scorecard page 06 shows."""
+    context = build_report_context(_state_with_ai_runs())
+    comparison = context["comparison"]
+    assert comparison is not None
+    models = set(comparison["table"]["model"])
+    assert {"AI:kmeans", "AI:gmm", "RFM"} <= models
+    assert comparison["recommendation"]["operational_pick"] in models
+    assert comparison["pair"] is not None
+    assert "Model_Scorecard" in context_tables(context)
+
+
+def test_comparison_without_ai_runs_has_no_pairwise() -> None:
+    """Traditional scoring alone still lists, but pairwise agreement needs an AI run."""
+    context = build_report_context(_sample_state())
+    comparison = context["comparison"]
+    assert comparison is not None
+    assert set(comparison["table"]["model"]) == {"RFM"}
+    assert comparison["pair"] is None
+    html_report = render_html_report(context, figures_html={}, mask_ids=True)
+    assert "Model comparison" in html_report
+
+
+def test_comparison_absent_with_nothing_to_compare() -> None:
+    """With no features at all there is no comparison, and the report says so."""
+    context = build_report_context({})
+    assert context["comparison"] is None
+    html_report = render_html_report(context, figures_html={}, mask_ids=True)
+    assert "Model comparison" in html_report
+    assert "No models to compare yet" in html_report
+
+
+def test_comparison_scorecard_renders_in_every_export() -> None:
+    """Page, HTML, PDF, Word, and Excel all carry the model comparison section."""
+    context = build_report_context(_state_with_ai_runs())
+    html_report = render_html_report(context, figures_html={}, mask_ids=True)
+    assert "Model comparison" in html_report
+    assert "Model scorecard" in html_report
+
+    pdf = build_pdf_bytes(context, chart_images={})
+    assert pdf[:4] == b"%PDF"
+    docx = build_docx_bytes(context, chart_images={})
+    archive = zipfile.ZipFile(io.BytesIO(docx))
+    document = archive.read("word/document.xml").decode("utf-8")
+    assert "Model comparison" in document
+    assert "Model scorecard" in document
+
+    excel = context_to_excel_bytes(context, mask_ids=True)
+    workbook = pd.read_excel(io.BytesIO(excel), sheet_name=None)
+    assert "Model_Scorecard" in workbook
+    # The pairwise flow travels with the pack when a pair exists.
+    assert "Model_Flow" in workbook
+
+
+def test_comparison_scorecard_text_blanks_missing_metrics() -> None:
+    """A blank silhouette becomes an empty cell, not 'nan', in text exports."""
+    from services.comparison_service import build_comparison, scorecard_as_text
+
+    comparison = build_comparison(_state_with_ai_runs())
+    text = scorecard_as_text(comparison["table"])
+    rfm_row = text.loc[text["model"] == "RFM"].iloc[0]
+    assert rfm_row["silhouette"] == ""
+    assert "nan" not in text.to_string().lower()
