@@ -275,7 +275,7 @@ def _kpi_value(key: str, value: Any) -> str:
     if "rate" in label:
         return formatting.fmt_pct(value)
     if any(word in label for word in ("revenue", "value", "amount", "spend")):
-        return formatting.fmt_money(value)
+        return formatting.fmt_money_compact(value)
     if isinstance(value, (int, float)) and not isinstance(value, bool):
         return formatting.fmt_int(value)
     return str(value)
@@ -547,16 +547,30 @@ def context_tables(
     tables: dict[str, pd.DataFrame] = {}
     kpis = context.get("kpis") or {}
     if kpis:
-        tables["KPIs"] = pd.DataFrame([{"metric": k, "value": v} for k, v in kpis.items()])
+        tables["KPIs"] = pd.DataFrame(
+            [
+                {"metric": str(k).replace("_", " "), "value": _kpi_value(k, v)}
+                for k, v in kpis.items()
+            ]
+        )
     portfolio = context.get("segment_portfolio")
     if portfolio is not None and not portfolio.empty:
-        tables["RFM_Portfolio"] = portfolio.copy()
+        p = portfolio.copy()
+        if "revenue" in p.columns:
+            p["revenue"] = [formatting.fmt_money_compact(v) for v in p["revenue"]]
+        tables["RFM_Portfolio"] = p
     lrfm_portfolio = context.get("lrfm_portfolio")
     if lrfm_portfolio is not None and not lrfm_portfolio.empty:
-        tables["LRFM_Portfolio"] = lrfm_portfolio.copy()
+        p = lrfm_portfolio.copy()
+        if "revenue" in p.columns:
+            p["revenue"] = [formatting.fmt_money_compact(v) for v in p["revenue"]]
+        tables["LRFM_Portfolio"] = p
     ai_portfolio = context.get("ai_portfolio")
     if ai_portfolio is not None and not ai_portfolio.empty:
-        tables["AI_Portfolio"] = ai_portfolio.copy()
+        p = ai_portfolio.copy()
+        if "revenue" in p.columns:
+            p["revenue"] = [formatting.fmt_money_compact(v) for v in p["revenue"]]
+        tables["AI_Portfolio"] = p
     comparison = context.get("comparison") or {}
     scorecard = comparison.get("table")
     if isinstance(scorecard, pd.DataFrame) and not scorecard.empty:
@@ -575,6 +589,8 @@ def context_tables(
         activity = trends.get("activity")
         if isinstance(activity, pd.DataFrame) and not activity.empty:
             monthly = monthly.merge(activity, on="month", how="left")
+        if "revenue" in monthly.columns:
+            monthly["revenue"] = [formatting.fmt_money_compact(v) for v in monthly["revenue"]]
         tables["Monthly_Trends"] = monthly
     demographics = context.get("demographics") or {}
     for name, key in (("Demographics_Gender", "gender"), ("Demographics_Age", "age_bands")):
@@ -584,7 +600,7 @@ def context_tables(
     risk_mix = context.get("risk_mix") or {}
     if risk_mix:
         tables["Risk_Bands"] = pd.DataFrame(
-            [{"risk_band": band, "customers": count} for band, count in risk_mix.items()]
+            [{"risk_band": band, "customers": formatting.fmt_int(count)} for band, count in risk_mix.items()]
         )
     retention = context.get("retention")
     if retention is not None and not retention.empty:
@@ -593,17 +609,27 @@ def context_tables(
             if "retention_priority_score" in retention.columns
             else retention.head(top_n)
         )
-        tables["Retention_Top"] = _mask_frame(ranked) if mask_ids else ranked.copy()
+        r = _mask_frame(ranked) if mask_ids else ranked.copy()
+        for col in ("revenue_at_risk", "expected_value_proxy_historical", "monetary_value"):
+            if col in r.columns:
+                r[col] = [formatting.fmt_money_compact(v) for v in r[col]]
+        if "retention_priority_score" in r.columns:
+            r["retention_priority_score"] = [formatting.fmt_float(v, 3) for v in r["retention_priority_score"]]
+        if "churn_probability" in r.columns:
+            r["churn_probability"] = [formatting.fmt_pct(v, 1) for v in r["churn_probability"]]
+        tables["Retention_Top"] = r
     scores = context.get("scores")
     if scores is not None and not scores.empty:
         cols = [c for c in ("customer_id", "churn_probability", "risk_band") if c in scores.columns]
-        top_risk = scores.sort_values("churn_probability", ascending=False).head(top_n)[cols]
-        tables["Churn_Top_Risk"] = _mask_frame(top_risk) if mask_ids else top_risk.copy()
+        top_risk = scores.sort_values("churn_probability", ascending=False).head(top_n)[cols].copy()
+        if "churn_probability" in top_risk.columns:
+            top_risk["churn_probability"] = [formatting.fmt_pct(v, 1) for v in top_risk["churn_probability"]]
+        tables["Churn_Top_Risk"] = _mask_frame(top_risk) if mask_ids else top_risk
     summary = context.get("retention_summary") or {}
     if summary.get("strategy_mix"):
         tables["Strategy_Mix"] = pd.DataFrame(
             [
-                {"action": action, "customers": count}
+                {"action": action, "customers": formatting.fmt_int(count)}
                 for action, count in summary["strategy_mix"].items()
             ]
         )
@@ -743,7 +769,7 @@ def render_html_report(
 
     kpi_cards = (
         "".join(
-            f"<div class='kpi'><div class='kpi-label'>{html.escape(str(k))}</div>"
+            f"<div class='kpi'><div class='kpi-label'>{html.escape(str(k).replace('_', ' '))}</div>"
             f"<div class='kpi-value'>{html.escape(_kpi_value(k, v))}</div></div>"
             for k, v in kpis.items()
         )
