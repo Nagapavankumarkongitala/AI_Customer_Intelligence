@@ -1,28 +1,63 @@
 # AI Customer Intelligence Platform
 
-Production-oriented customer intelligence built with Python + Streamlit:
-transaction upload & validation → data quality & cleaning → customer features →
-RFM/LRFM → demographic profiling → advanced segmentation → comparison →
-leakage-safe churn prediction → retention strategies → executive dashboard.
+A production-oriented, end-to-end customer intelligence platform built with Python 3.12, Streamlit, scikit-learn and a modular ML stack. It transforms raw transaction data into actionable customer segmentation, leakage-safe churn prediction, and data-driven retention strategies — with a filterable executive dashboard and multi-format reporting.
 
-Full phase specification: `OPEN_CODE_BUILD_INSTRUCTIONS.md`.
-Live build tracker: `PROJECT_STATUS.md`.
+**Entry point:** `app.py`  
+**Default dataset:** `data.csv` (auto-loaded via `services/bootstrap_service.py`)  
+**Generated:** 2026-10-24 09:30:35
 
-## Implemented phases
-- [x] Phase 0 — Repository initialization (config, logging, sample data, tooling)
-- [x] Phase 1 — Data foundation (upload, mapping, quality, cleaning, export)
-- [x] Phase 2 — Customer features and RFM/LRFM
-- [x] Phase 3 — Demographic and geographic profiling
-- [x] Phase 4 — Advanced segmentation
-- [x] Phase 5 — Segmentation comparison
-- [x] Phase 6 — Leakage-safe churn prediction
-- [x] Phase 7 — Retention intelligence
-- [x] Phase 8 — Executive dashboard and production readiness
+## Overview
+Implements: ingestion → validation/mapping → data quality & cleaning (audited) → customer features → RFM/LRFM → demographic profiling → advanced segmentation (multi-model + ensemble) → segmentation comparison → leakage-safe churn prediction (time-aware, cohort splits) → retention intelligence (value-risk + strategy rules) → executive dashboard → systematic report (HTML/Excel/PDF/Word).
 
-## Input schema
-Required: `customer_id` (text), `transaction_date` (date), `amount_spent` (number).
-Optional: `gender`, `age`, `city`, `state`, `country`, `region`.
-Column names need not match exactly — the upload page auto-detects common variants.
+## Architecture
+- **Pages** (`pages/NN_*.py`): UI/orchestration only
+- **Services** (`services/`): pipeline/business logic
+- **Analytics** (`analytics/`): stats/analysis
+- **Feature Engineering** (`feature_engineering/`): prep/scaling
+- **Segmentation** (`segmentation/`): clustering/profiling/stability/ensemble
+- **Churn** (`churn/`): labeling/training/eval/calibration/explainability
+- **Retention Engine** (`retention_engine/`): priority/value/strategy mapping
+- **Visualization** (`visualization/`): charts/themes/tokens
+- **Components** (`components/`): reusable UI
+- **Utils** (`utils/`): formatting/config/logging/helpers
+
+Session state contract (owned by `services/state_service.py`): raw_data, clean_data, column_mapping, cleaning_config, cleaning_audit, data_dictionary, customer_features, rfm_results, lrfm_results, demographic_profile, segmentation_runs, selected_segmentation_model, segmented_customers, churn_dataset, churn_model, churn_model_metadata, churn_scores, retention_results, global_filters.
+
+## Data Schema
+**Required:** `customer_id`, `transaction_date`, `amount_spent`  
+**Optional:** `gender`, `age`, `city`, `state`, `country`, `region`  
+Encoding fallbacks: UTF-8 BOM → UTF-8 → CP1252 → Latin-1. Never silently drop rows; all actions audited.
+
+## Workflow (Idea → Execution)
+1. Bootstrap (load/cache full pipeline from data.csv)  
+2. Upload & mapping (auto-detect + validate)  
+3. Data quality & cleaning (audit)  
+4. Customer features & RFM/LRFM  
+5. Demographics  
+6. Advanced segmentation (KMeans/GMM/Hierarchical/HDBSCAN/Autoencoder/Ensemble)  
+7. Segmentation comparison (metrics/stability/value/evenness)  
+8. Churn prediction (leakage-safe labeling, cohort splits, calibration)  
+9. Retention strategies (value-risk, priority, YAML rules)  
+10. Dashboard & Report (narratives, insights, exports)
+
+## ML Models
+
+### Segmentation (Unsupervised)
+- **KMeans** (sklearn) — centroid, fast/interpretable (default)
+- **GMM** (sklearn.mixture) — probabilistic, elliptical clusters
+- **Hierarchical/Agglomerative Ward** (sklearn) — dendrogram, O(n²)
+- **HDBSCAN** (hdbscan, optional) — density-based, noise
+- **Autoencoder + Clustering** (PyTorch, optional) — non-linear embeddings
+- **Ensemble/Consensus** (segmentation/ensemble.py) — co-association consensus
+
+### Churn (Supervised, Leakage-Safe)
+- **Logistic Regression** (sklearn) — interpretable baseline
+- **Random Forest** (sklearn) — robust bagged trees
+- **HistGradientBoosting** (sklearn) — efficient boosting (default)
+- **LightGBM** (lightgbm, optional) — fast boosting
+- **XGBoost** (xgboost, optional) — regularized boosting
+
+Labeling: predictors ≤ cutoff, label in (cutoff, cutoff+horizon]; cohort-ordered splits by first transaction. Calibration via PlattCalibrator.
 
 ## Installation
 ```powershell
@@ -30,19 +65,16 @@ py -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
 pip install -r requirements.txt
-pip install -r requirements-dev.txt   # lint/format/test tooling
+pip install -r requirements-dev.txt
 ```
-Linux/macOS: `bash run_linux_mac.sh` (Windows: `run_windows.ps1`).
+Linux/macOS: `bash run_linux_mac.sh`
 
 ## Run
 ```powershell
 streamlit run app.py
 ```
-Docker: `docker build -t customer-intelligence .` then
-`docker run -p 8501:8501 customer-intelligence`.
-See `DEPLOYMENT.md` for clean-install, restart behavior, privacy, and access notes.
 
-## Test & quality gates (run at the end of every phase)
+## Testing & Quality
 ```powershell
 python -m compileall .
 ruff check .
@@ -50,18 +82,8 @@ black --check .
 pytest -q
 ```
 
-## Application workflow
-Upload → correct mapping → clean (audit recorded) → customer features → RFM/LRFM →
-demographics → AI segmentation → comparison → time-aware churn dataset → train &
-evaluate → score & explain → retention actions → filterable executive dashboard →
-export. No step requires editing source code.
+## Exports
+HTML, Excel (openpyxl), PDF (reportlab + matplotlib), Word (python-docx). Indian notation default; IDs masked by default.
 
-## Known limitations
-- Heavy models (`hdbscan`, autoencoder, `lightgbm`/`xgboost`, SHAP) degrade gracefully
-  when their optional packages are absent; pages show install guidance instead.
-- Sample data under `data/sample/` is synthetic demo data, never real customers.
-
-## Privacy notes
-- Raw `customer_id` values never appear in executive views except an explicit
-  authorized drill-down. Cleaning never silently drops records — every action is
-  audited. No credentials are committed (see `.env.example`).
+## Guardrails
+Leakage-safe churn, no silent row drops (audited), ID masking, deterministic seeds (42), graceful optional deps, historical value = proxy (not CLV), non-causal retention reasons.

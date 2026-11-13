@@ -86,9 +86,23 @@ for i in range(0, len(metrics), 2):
 # --- Pairwise agreement: traditional vs selected AI ---------------------------
 ai_names = [r["model"] for r in table.to_dict("records") if r["kind"] == "AI"]
 traditional = [r["model"] for r in table.to_dict("records") if r["kind"] == "Traditional"]
+# Default the pair to the model the comparison actually recommends (or the human
+# pick already recorded). Defaulting to the first saved run made the chart read
+# "kmeans" while the recommendation said "gmm" — the evidence contradicted itself.
+pair_defaults = comparison.get("pair") or {}
+default_ref = pair_defaults.get("reference", traditional[0])
+default_target = pair_defaults.get("target", ai_names[0])
 with sidebar_filters("Comparison Pair"):
-    ref = st.selectbox("Traditional reference", traditional)
-    target = st.selectbox("AI model", ai_names)
+    ref = st.selectbox(
+        "Traditional reference",
+        traditional,
+        index=traditional.index(default_ref) if default_ref in traditional else 0,
+    )
+    target = st.selectbox(
+        "AI model",
+        ai_names,
+        index=ai_names.index(default_target) if default_target in ai_names else 0,
+    )
 ct = crosstab_counts(labelings[ref], labelings[target])
 ari = agreement_ari(labelings[ref], labelings[target])
 agree_l, agree_r = st.columns([1, 2])
@@ -142,10 +156,15 @@ insight_box(
     tone="info",
 )
 with controls_expander("Operational Pick"):
+    models = table["model"].tolist()
+    # Honour a previously recorded override, so the pick, the pair summary, and the
+    # report stay on the same model across reruns instead of snapping back.
+    recorded_pick = (st.session_state.get("comparison_report") or {}).get("human_pick")
+    default_pick = recorded_pick if recorded_pick in models else recommendation["operational_pick"]
     choice = st.selectbox(
         "Operational model (evidence above — disagree if it says otherwise)",
-        table["model"].tolist(),
-        index=table["model"].tolist().index(recommendation["operational_pick"]),
+        models,
+        index=models.index(default_pick) if default_pick in models else 0,
     )
 st.session_state["comparison_report"] = {**recommendation, "human_pick": choice}
 st.success(

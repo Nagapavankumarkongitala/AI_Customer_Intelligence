@@ -169,6 +169,60 @@ def test_build_comparison_pair_and_churn() -> None:
     assert len(comparison["churn_labels"]) == 4
 
 
+def _comparison_state_with_two_runs() -> dict:
+    """Two AI runs where the second wins the operational pick but the first is saved first."""
+    state = _comparison_state()
+    state["segmentation_runs"] = [
+        {
+            "model": "kmeans",
+            "labels": [0, 0, 1, 1],
+            "customer_ids": ["C00001", "C00002", "C00003", "C00004"],
+            "names": {"0": "Low", "1": "High"},
+            "metrics": {
+                "n_clusters": 2,
+                "silhouette": 0.8,
+                "davies_bouldin": 0.8,
+                "noise_pct": 0.0,
+            },
+            "stability": {"mean_pairwise_ari": 0.6},
+        },
+        {
+            "model": "gmm",
+            "labels": [0, 0, 1, 1],
+            "customer_ids": ["C00001", "C00002", "C00003", "C00004"],
+            "names": {"0": "Low", "1": "High"},
+            "metrics": {
+                "n_clusters": 2,
+                "silhouette": 0.6,
+                "davies_bouldin": 0.9,
+                "noise_pct": 0.0,
+            },
+            "stability": {"mean_pairwise_ari": 0.95},
+        },
+    ]
+    return state
+
+
+def test_pair_defaults_to_the_operational_pick() -> None:
+    """The pair chart must show the recommended model, not whichever run saved first."""
+    from services.comparison_service import build_comparison
+
+    comparison = build_comparison(_comparison_state_with_two_runs())
+    assert comparison["recommendation"]["operational_pick"] == "AI:gmm"
+    assert comparison["pair"]["target"] == "AI:gmm"
+
+
+def test_pair_follows_a_recorded_human_pick() -> None:
+    """An explicit human override still drives the pair summary and exports."""
+    from services.comparison_service import build_comparison
+
+    state = _comparison_state_with_two_runs()
+    state["comparison_report"] = {"human_pick": "AI:kmeans"}
+    comparison = build_comparison(state)
+    assert comparison["recommendation"]["operational_pick"] == "AI:gmm"
+    assert comparison["pair"]["target"] == "AI:kmeans"
+
+
 def test_build_comparison_needs_candidates() -> None:
     """Without features or any labeling there is nothing to compare."""
     from services.comparison_service import build_comparison

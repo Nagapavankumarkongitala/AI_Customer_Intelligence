@@ -181,11 +181,19 @@ def build_comparison(state: Mapping[str, Any]) -> dict[str, Any] | None:
     )
 
     # Pairwise agreement: the recorded human pick when it is an AI model, else the
-    # operational pick. The traditional reference is the first available one.
+    # operational pick (never an arbitrary first run — the page's default view must
+    # match the recommendation it just made). The traditional reference is the
+    # first available one.
     traditional = [r["model"] for r in rows if r["kind"] == "Traditional"]
     ai_names = [r["model"] for r in rows if r["kind"] == "AI"]
     recorded = (state.get("comparison_report") or {}).get("human_pick")
-    target = recorded if recorded in ai_names else (ai_names[0] if ai_names else None)
+    operational = recommendation["operational_pick"]
+    if recorded in ai_names:
+        target = recorded
+    elif operational in ai_names:
+        target = operational
+    else:
+        target = ai_names[0] if ai_names else None
     reference = traditional[0] if traditional else None
 
     pair: dict[str, Any] | None = None
