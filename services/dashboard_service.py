@@ -260,6 +260,85 @@ class SegmentTrendView:
     customer_filtered: bool
 
 
+def fixed_label_history(
+    period_labels: pd.DataFrame | None,
+    labeled: pd.DataFrame | None,
+    model: str,
+    base_model: str = "RFM",
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Put a fixed customer labeling on the stored RFM/LRFM period grid.
+
+    Saved AI clusters keep one assignment per customer; re-scoring them per
+    period would silently swap cluster identity. For a trend or Sankey, the
+    honest view is therefore the saved label counted over the same period grid
+    that page 03 already scored. This helper reuses the per-period customer
+    presence in ``period_labels`` and attaches the fixed ``labeled`` names, so
+    the dashboard can filter and draw the AI flow without re-clustering.
+
+    Returns ``(history, labels)`` in the usual trend shape. Empty inputs return
+    empty frames rather than guessing a period grid.
+    """
+    empty_history = pd.DataFrame(columns=["period", "model", "segment", "customers"])
+    empty_labels = pd.DataFrame(columns=["period", "model", "customer_id", "segment"])
+    if (
+        period_labels is None
+        or period_labels.empty
+        or labeled is None
+        or labeled.empty
+        or not {"period", "model", "customer_id"}.issubset(period_labels.columns)
+        or "customer_id" not in labeled.columns
+    ):
+        return empty_history, empty_labels
+
+    label_col = (
+        "business_name"
+        if "business_name" in labeled.columns
+        else "cluster_id" if "cluster_id" in labeled.columns else None
+    )
+    if label_col is None:
+        return empty_history, empty_labels
+
+    base = period_labels[period_labels["model"] == base_model]
+    if base.empty:
+        available = period_labels["model"].dropna().astype(str)
+        if available.empty:
+            return empty_history, empty_labels
+        base = period_labels[period_labels["model"] == available.iloc[0]]
+    base = base[["period", "customer_id"]].copy()
+    base["customer_id"] = base["customer_id"].astype(str)
+    base = base.drop_duplicates(["period", "customer_id"])
+
+    fixed = labeled[["customer_id", label_col]].copy()
+    fixed["customer_id"] = fixed["customer_id"].astype(str)
+    fixed[label_col] = fixed[label_col].astype("string").str.strip()
+    fixed = fixed[fixed[label_col].notna() & (fixed[label_col] != "")]
+    fixed = fixed.drop_duplicates("customer_id")
+    if fixed.empty:
+        return empty_history, empty_labels
+
+    merged = base.merge(
+        fixed.rename(columns={label_col: "segment"}),
+        on="customer_id",
+        how="inner",
+    )
+    if merged.empty:
+        return empty_history, empty_labels
+
+    merged["model"] = model
+    merged["period"] = merged["period"].astype(str)
+    labels = merged[["period", "model", "customer_id", "segment"]].copy()
+    labels = labels.sort_values(["period", "customer_id"]).reset_index(drop=True)
+    history = (
+        labels.groupby(["period", "model", "segment"], observed=True)
+        .size()
+        .rename("customers")
+        .reset_index()
+        .sort_values(["period", "segment"])
+        .reset_index(drop=True)
+    )
+    return history, labels
+
+
 def _periods_in_range(
     periods: list[str], date_start: object = None, date_end: object = None
 ) -> list[str]:

@@ -20,14 +20,20 @@ from components.insight_box import insight_box
 from components.metric_card import Metric, metric_row
 from components.page_header import page_header, section_header
 from components.panels import download_panel
-from components.segment_trends import render_trend_pair, transition_frame
+from components.segment_cards import render_segment_cards
+from components.segment_trends import render_sankey_pair, transition_frame
 from components.sidebar import render_sidebar_footer, render_sidebar_nav, sidebar_filters
 from components.strategy_cards import render_strategy_playbook
 from components.table import render_table
 from retention_engine.strategy_mapper import StrategyMatrix
 from services import state_service
-from services.dashboard_service import filter_segment_trends, mask_customer_id
+from services.dashboard_service import (
+    filter_segment_trends,
+    fixed_label_history,
+    mask_customer_id,
+)
 from services.retention_service import default_matrix_report
+from services.segment_explain_service import build_segment_explanations
 from utils import formatting
 from utils.config import load_config
 from utils.exceptions import ConfigurationError
@@ -52,7 +58,6 @@ from visualization.rfm_charts import (
     group_small_segments,
     revenue_by_segment_bar,
     segment_share_bar,
-    segment_trend_lines,
 )
 from visualization.theme import apply_chart_theme, inject_terminal_css, without_title
 
@@ -291,20 +296,47 @@ with overview_tab:
                     "Widen a filter to see how segments moved.",
                 )
             else:
-                share_view = st.toggle(
-                    "Show share of base (%)",
-                    value=False,
-                    key="overview_segment_share",
-                    help=(
-                        "Percentages re-base every period to 100%, so a segment can "
-                        "lose ground even while its customer count grows."
-                    ),
+                # AI clusters are fixed labels, so their flow uses the RFM
+                # period grid and carries the same group forward. The right
+                # Sankey keeps the re-scored RFM moves for comparison.
+                ai_history, ai_labels = fixed_label_history(
+                    st.session_state.get("segment_history_labels"),
+                    st.session_state.get("segmented_customers"),
+                    model="AI:selected",
                 )
-                render_trend_pair(
-                    _compact(segment_trend_lines(trend.history, share=share_view)),
+                ai_trend = filter_segment_trends(
+                    ai_labels,
+                    history=ai_history,
+                    transitions=pd.DataFrame(),
+                    model="AI:selected",
+                    customer_ids=set(master_f["customer_id"]),
+                    date_start=date_start,
+                    date_end=date_end,
+                )
+                period_count = (
+                    int(ai_trend.history["period"].nunique()) if not ai_trend.history.empty else 0
+                )
+                period_word = (
+                    "quarters"
+                    if hist_state.get("granularity", "quarterly") == "quarterly"
+                    else "periods"
+                )
+                left_title = (
+                    f"AI segments · {period_count} {period_word}" if period_count else "AI segments"
+                )
+                render_sankey_pair(
+                    ai_trend.transitions,
                     trend.transitions,
-                    model="RFM",
-                    key_prefix="overview_segment_trends",
+                    left_title=left_title,
+                    right_title="RFM transitions",
+                    key_prefix="overview_segment_sankey",
+                    left_empty_message=(
+                        "No AI segment flow yet. Save an AI segmentation run on "
+                        "page 05 and rebuild segment trends on page 03."
+                    ),
+                    right_empty_message=(
+                        "No RFM transitions yet. Rebuild segment trends on page 03."
+                    ),
                 )
                 if not trend.customer_filtered:
                     st.caption(
@@ -346,6 +378,17 @@ with overview_tab:
             fig = _compact(shade_quarters(fig, rev_frame["month"]))
             st.plotly_chart(fig, width="stretch")
     with row1_b:
+        has_ai_segments = "ai_segment" in master_f.columns and master_f["ai_segment"].notna().any()
+        use_ai_segments = st.toggle(
+            "Use AI segments",
+            value=False,
+            key="overview_ai_segment_source",
+            disabled=not has_ai_segments,
+            help=(
+                "Show the saved AI segmentation instead of RFM segments. "
+                "Save a run on page 05 to enable this switch."
+            ),
+        )
         group_small = st.toggle(
             "Group small segments",
             value=False,
@@ -353,16 +396,33 @@ with overview_tab:
             help="Fold segments under 5% of customers into one 'Other' bucket.",
         )
         with chart_section("Customers per segment"):
-            if portfolio is not None:
-                shown = group_small_segments(portfolio, "rfm_segment") if group_small else portfolio
+            segment_col = "ai_segment" if use_ai_segments and has_ai_segments else "rfm_segment"
+            chart_portfolio = (
+                cached_segment_portfolio(master_f, segment_col)
+                if segment_col in master_f.columns
+                else None
+            )
+            if chart_portfolio is not None and not chart_portfolio.empty:
+                shown = (
+                    group_small_segments(chart_portfolio, segment_col)
+                    if group_small
+                    else chart_portfolio
+                )
                 st.plotly_chart(
-                    _compact(segment_share_bar(shown, "rfm_segment", "customers")),
+                    _compact(segment_share_bar(shown, segment_col, "customers")),
                     width="stretch",
                 )
-                if group_small and len(shown) < len(portfolio):
+                if group_small and len(shown) < len(chart_portfolio):
                     with st.expander("Segments in 'Other'", expanded=False):
-                        folded = portfolio[~portfolio["rfm_segment"].isin(shown["rfm_segment"])]
+                        folded = chart_portfolio[
+                            ~chart_portfolio[segment_col].isin(shown[segment_col])
+                        ]
                         render_table(folded, money_cols=("revenue",))
+            elif segment_col == "ai_segment":
+                empty_state(
+                    "No AI segments yet",
+                    "Save an AI segmentation run on page 05 to see this mix.",
+                )
             else:
                 empty_state(
                     "No RFM segments yet",
@@ -544,6 +604,24 @@ with trends_tab:
     with trend_right:
         with chart_section("New vs returning customers"):
             st.plotly_chart(without_title(new_returning_fig(trends["cohort"])), width="stretch")
+    # The same group explainers page 06 shows under the AI customer flow. They
+    # follow the global filters, so "who is in this group" matches the cards.
+    ai_segment_notes = (
+        build_segment_explanations(master_f) if "ai_segment" in master_f.columns else []
+    )
+    if ai_segment_notes:
+        section_header(
+            "AI segment groups",
+            "What the selected AI segmentation means. Tiers are relative thirds within "
+            "the AI run; A/B suffixes separate clusters sharing a grid cell. Shares are "
+            "within the filtered base.",
+        )
+        render_segment_cards(ai_segment_notes)
+    else:
+        empty_state(
+            "No AI segment groups yet",
+            "Save an AI segmentation run on page 05 to explain its groups here.",
+        )
     with st.expander("Monthly revenue table", expanded=False):
         render_table(trends["revenue"], money_cols=("revenue",))
 

@@ -2,7 +2,7 @@
 
 import pandas as pd
 
-from services.dashboard_service import filter_segment_trends
+from services.dashboard_service import filter_segment_trends, fixed_label_history
 from services.feature_service import period_bounds
 
 
@@ -167,3 +167,62 @@ def test_empty_selection_returns_empty_frames() -> None:
     assert view.history.empty
     assert view.transitions.empty
     assert list(view.history.columns) == ["period", "model", "segment", "customers"]
+
+
+def test_fixed_label_history_reuses_rfm_period_presence() -> None:
+    """AI labels use the RFM grid, so no customer is invented per period."""
+    segmented = pd.DataFrame(
+        {
+            "customer_id": ["A", "B", "C"],
+            "business_name": ["Premium Active", "Core Dormant", "Premium Active"],
+        }
+    )
+    history, labels = fixed_label_history(_labels(), segmented, model="AI:selected")
+
+    assert set(history["model"]) == {"AI:selected"}
+    assert set(labels["model"]) == {"AI:selected"}
+    assert labels.groupby("period")["customer_id"].nunique().to_dict() == {
+        "2024-Q1": 2,
+        "2024-Q2": 3,
+        "2024-Q3": 3,
+    }
+    counts = history.pivot_table(
+        index="period", columns="segment", values="customers", aggfunc="sum", fill_value=0
+    )
+    assert counts.loc["2024-Q1", "Premium Active"] == 1
+    assert counts.loc["2024-Q1", "Core Dormant"] == 1
+    assert counts.loc["2024-Q2", "Premium Active"] == 2
+
+
+def test_fixed_label_flow_stays_diagonal() -> None:
+    """Fixed AI labels cannot move between groups, so every link is a stay."""
+    segmented = pd.DataFrame(
+        {
+            "customer_id": ["A", "B", "C"],
+            "business_name": ["Premium Active", "Core Dormant", "Premium Active"],
+        }
+    )
+    history, labels = fixed_label_history(_labels(), segmented, model="AI:selected")
+    view = filter_segment_trends(
+        labels,
+        history=history,
+        transitions=pd.DataFrame(),
+        model="AI:selected",
+        customer_ids={"A", "B", "C"},
+    )
+
+    assert not view.transitions.empty
+    assert (view.transitions["segment_from"] == view.transitions["segment_to"]).all()
+    assert view.transitions["model"].eq("AI:selected").all()
+
+
+def test_fixed_label_history_accepts_cluster_ids_and_empty_inputs() -> None:
+    """Cluster IDs are usable labels, and missing inputs never invent a grid."""
+    segmented = pd.DataFrame({"customer_id": ["A", "B", "C"], "cluster_id": [0, 1, 0]})
+    history, labels = fixed_label_history(_labels(), segmented, model="AI:selected")
+    assert set(labels["segment"]) == {"0", "1"}
+    assert not history.empty
+
+    empty_history, empty_labels = fixed_label_history(None, segmented, model="AI:selected")
+    assert empty_history.empty
+    assert empty_labels.empty

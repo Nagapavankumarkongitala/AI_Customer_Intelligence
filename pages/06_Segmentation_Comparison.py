@@ -14,10 +14,12 @@ from components.insight_box import insight_box
 from components.metric_card import Metric, metric_row
 from components.metric_guides import render_metric_guides
 from components.page_header import page_header, section_header
+from components.segment_cards import render_segment_cards
 from components.sidebar import render_sidebar_footer, render_sidebar_nav, sidebar_filters
 from services import state_service
 from services.comparison_service import build_comparison, scorecard_for_display
 from services.export_service import to_csv_bytes, to_json_bytes
+from services.segment_explain_service import build_segment_explanations
 from utils import formatting
 from utils.logging_config import configure_logging
 from visualization.segmentation_charts import metric_comparison_bar, sankey_mapping
@@ -64,6 +66,14 @@ with st.expander("Model scorecard", expanded=False):
         "RFM/LRFM silhouette is blank by design: different feature space, not comparable. "
         "Stability 1.0 for RFM/LRFM: deterministic rules on fixed features."
     )
+
+# --- Scorecard glossary: reading guide for the columns in the table above ------
+section_header(
+    "How to read the scorecard",
+    "Every column the scorecard emits, with its direction, its range, and the gate it "
+    "carries in the recommendation below.",
+)
+render_metric_guides()
 
 metrics = [
     ("silhouette", "Silhouette (AI runs, shared space)"),
@@ -120,13 +130,23 @@ with agree_r:
 with st.expander("Cross-tabulation (counts)", expanded=False):
     st.dataframe(ct, width="stretch")
 
-# --- Scorecard glossary: reading guide for the columns charted above -----------
-section_header(
-    "How to read the scorecard",
-    "Every column the scorecard emits, with its direction, its range, and the gate it "
-    "carries in the recommendation below.",
-)
-render_metric_guides()
+# --- What the AI groups mean ---------------------------------------------------
+# The flow says where customers moved; these cards say what the destination
+# groups actually are. They read from the same run labels the pair chart uses.
+features = st.session_state.get("customer_features")
+if features is not None and "customer_id" in features.columns:
+    labeled = features.set_index("customer_id").reindex(labelings[target].index)
+    labeled["ai_segment"] = labelings[target].to_numpy()
+    segment_notes = build_segment_explanations(labeled)
+else:
+    segment_notes = []
+if segment_notes:
+    section_header(
+        "What the AI segment groups mean",
+        "Value and activity tiers are relative thirds within this AI run; A/B suffixes "
+        "separate clusters sharing a grid cell. Cards are ordered by revenue contribution.",
+    )
+    render_segment_cards(segment_notes)
 
 # --- Per-model checklists ------------------------------------------------------
 with st.expander("Interpretability checklists"):
