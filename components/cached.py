@@ -31,6 +31,8 @@ from services.dashboard_service import (
     high_value_high_risk,
     period_deltas,
     prepare_transactions,
+    segment_activity_trend,
+    segment_mom_bridge,
     segment_portfolio,
     trend_tables,
 )
@@ -87,6 +89,20 @@ def cached_period_deltas(txns: pd.DataFrame, master: pd.DataFrame, days: int = 3
 def cached_trend_tables(txns: pd.DataFrame, master: pd.DataFrame) -> dict[str, pd.DataFrame]:
     """Monthly revenue, activity, and new-vs-returning tables."""
     return trend_tables(txns, master)
+
+
+@st.cache_data(show_spinner=False)
+def cached_segment_activity_trend(
+    txns: pd.DataFrame, master: pd.DataFrame, segment_col: str
+) -> pd.DataFrame:
+    """Monthly active customers per fixed segment label."""
+    return segment_activity_trend(txns, master, segment_col)
+
+
+@st.cache_data(show_spinner=False)
+def cached_segment_mom_bridge(table: pd.DataFrame, month: str, segment_col: str) -> pd.DataFrame:
+    """Waterfall rows for one month-over-month segment bridge."""
+    return segment_mom_bridge(table, month, segment_col)
 
 
 @st.cache_data(show_spinner=False)

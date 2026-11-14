@@ -8,12 +8,14 @@ import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
+from utils import formatting
 from visualization import tokens
 from visualization.theme import (
     MUTED,
     PRIMARY,
     PRIMARY_DISCRETE,
     RISK_GREEN,
+    RISK_RED,
     empty_figure,
     styled,
 )
@@ -185,6 +187,36 @@ def activity_trend_fig(table: pd.DataFrame) -> px.Figure:
         labels={"month": "Month", "active_customers": "Active customers"},
         color_discrete_sequence=[PRIMARY],
     )
+
+
+@styled
+def segment_mom_waterfall_fig(bridge: pd.DataFrame) -> go.Figure:
+    """Waterfall bridging last month's active base to this month's, by segment."""
+    if bridge.empty:
+        return empty_figure("Month-over-month segment bridge")
+    text = [
+        formatting.fmt_int(value) if measure in ("absolute", "total") else f"{value:+,.0f}"
+        for value, measure in zip(bridge["value"], bridge["measure"], strict=False)
+    ]
+    fig = go.Figure(
+        go.Waterfall(
+            x=bridge["label"],
+            y=bridge["value"],
+            measure=bridge["measure"],
+            text=text,
+            textposition="outside",
+            increasing={"marker": {"color": RISK_GREEN}},
+            decreasing={"marker": {"color": RISK_RED}},
+            totals={"marker": {"color": PRIMARY}},
+            connector={"line": {"color": tokens.color("border")}},
+        )
+    )
+    fig.update_layout(
+        title="Month-over-month segment bridge",
+        xaxis={"title": ""},
+        yaxis={"title": "Active customers"},
+    )
+    return fig
 
 
 @styled

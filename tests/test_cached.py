@@ -17,6 +17,8 @@ from services.dashboard_service import (
     compute_kpis,
     high_value_high_risk,
     prepare_transactions,
+    segment_activity_trend,
+    segment_mom_bridge,
     segment_portfolio,
     trend_tables,
 )
@@ -77,6 +79,18 @@ def test_dashboard_path_parity() -> None:
     pd.testing.assert_frame_equal(
         cached.cached_segment_portfolio(master_seg, "rfm_segment"),
         segment_portfolio(master_seg, "rfm_segment"),
+    )
+    pd.testing.assert_frame_equal(
+        cached.cached_segment_activity_trend(txns_f, master_seg, "rfm_segment"),
+        segment_activity_trend(txns_f, master_seg, "rfm_segment"),
+    )
+    pd.testing.assert_frame_equal(
+        cached.cached_segment_mom_bridge(
+            segment_activity_trend(txns_f, master_seg, "rfm_segment"), "2024-02", "rfm_segment"
+        ),
+        segment_mom_bridge(
+            segment_activity_trend(txns_f, master_seg, "rfm_segment"), "2024-02", "rfm_segment"
+        ),
     )
     pd.testing.assert_frame_equal(
         cached.cached_high_value_high_risk(master_seg), high_value_high_risk(master_seg)

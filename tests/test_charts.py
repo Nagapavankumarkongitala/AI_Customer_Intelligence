@@ -129,6 +129,13 @@ def test_churn_retention_executive_charts_render() -> None:
     portfolio = pd.DataFrame(
         {"seg": ["A", "B"], "customer_share": [50.0, 50.0], "revenue_share": [30.0, 70.0]}
     )
+    segment_bridge = pd.DataFrame(
+        {
+            "label": ["2024-01 total", "Champions", "Lost Customers", "2024-02 total"],
+            "value": [3.0, 1.0, 0.0, 4.0],
+            "measure": ["absolute", "relative", "relative", "total"],
+        }
+    )
     for fig in (
         churn_charts.roc_curve_fig(y, proba),
         churn_charts.confusion_fig({"tn": 1, "fp": 1, "fn": 0, "tp": 2}),
@@ -141,6 +148,7 @@ def test_churn_retention_executive_charts_render() -> None:
         retention_charts.priority_histogram(table),
         executive_dashboard.revenue_trend_fig(trend),
         executive_dashboard.activity_trend_fig(trend),
+        executive_dashboard.segment_mom_waterfall_fig(segment_bridge),
         executive_dashboard.new_returning_fig(trend),
         executive_dashboard.portfolio_bar_fig(portfolio, "seg"),
         latent_scatter(np.random.default_rng(1).normal(size=(10, 4)), np.array([0] * 5 + [1] * 5)),
@@ -408,6 +416,10 @@ def test_empty_inputs_return_titled_placeholders() -> None:
         (retention_charts.priority_histogram(pd.DataFrame()), "Priority score distribution"),
         (executive_dashboard.revenue_trend_fig(pd.DataFrame()), "Revenue trend"),
         (executive_dashboard.activity_trend_fig(pd.DataFrame()), "Customer activity trend"),
+        (
+            executive_dashboard.segment_mom_waterfall_fig(pd.DataFrame()),
+            "Month-over-month segment bridge",
+        ),
         (executive_dashboard.new_returning_fig(pd.DataFrame()), "New vs returning customers"),
         (
             executive_dashboard.portfolio_bar_fig(pd.DataFrame()),
@@ -448,7 +460,7 @@ def test_empty_inputs_return_titled_placeholders() -> None:
         ),
         (rfm_charts.segment_trend_heatmap(pd.DataFrame()), "Segment activity by period"),
     ]
-    assert len(cases) == 32
+    assert len(cases) == 33
     for fig, title in cases:
         assert len(fig.data) == 0, title
         assert fig.layout.title.text == title, title

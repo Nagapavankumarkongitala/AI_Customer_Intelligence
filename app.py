@@ -10,6 +10,8 @@ from components.cached import (
     cached_high_value_high_risk,
     cached_period_deltas,
     cached_prepare_transactions,
+    cached_segment_activity_trend,
+    cached_segment_mom_bridge,
     cached_segment_portfolio,
     cached_trend_tables,
 )
@@ -45,6 +47,7 @@ from visualization.executive_dashboard import (
     new_returning_fig,
     portfolio_bar_fig,
     revenue_trend_fig,
+    segment_mom_waterfall_fig,
     shade_quarters,
 )
 from visualization.retention_charts import (
@@ -55,7 +58,6 @@ from visualization.retention_charts import (
 )
 from visualization.rfm_charts import (
     biggest_segment_shifts,
-    group_small_segments,
     revenue_by_segment_bar,
     segment_share_bar,
 )
@@ -119,6 +121,59 @@ def _strategy_matrix() -> StrategyMatrix | None:
 def _compact(fig):
     """Reflow a factory figure to the compact overview height, without its title."""
     return without_title(apply_chart_theme(fig, compact=True), compact=True)
+
+
+def _segment_portfolio_section(
+    title: str,
+    subtitle: str,
+    table: pd.DataFrame | None,
+    segment_col: str,
+    *,
+    empty_title: str,
+    empty_body: str,
+    key_prefix: str,
+) -> None:
+    """One segment source's portfolio block: KPIs, two charts, and its table.
+
+    The dashboard's Segments tab repeats this block once per labeling (RFM and
+    AI), so each source keeps its own KPI row and chart pair rather than being
+    averaged into one mixed view.
+    """
+    section_header(title, subtitle)
+    if table is None or table.empty:
+        empty_state(empty_title, empty_body)
+        return
+    top_seg = table.loc[table["revenue_share"].idxmax()]
+    metric_row(
+        [
+            Metric("Segments", str(len(table))),
+            Metric(
+                "Largest segment",
+                f"{top_seg[segment_col]} ({formatting.fmt_int(top_seg['customers'])})",
+            ),
+            Metric(
+                "Top revenue share",
+                formatting.fmt_pct100(top_seg["revenue_share"]),
+            ),
+        ]
+    )
+    left, right = st.columns(2)
+    with left:
+        with chart_section("Customer vs revenue share by segment"):
+            st.plotly_chart(
+                without_title(portfolio_bar_fig(table, segment_col)),
+                width="stretch",
+                key=f"{key_prefix}_share",
+            )
+    with right:
+        with chart_section("Revenue per segment"):
+            st.plotly_chart(
+                without_title(revenue_by_segment_bar(table, segment_col)),
+                width="stretch",
+                key=f"{key_prefix}_revenue",
+            )
+    with st.expander("Segment portfolio table", expanded=False):
+        render_table(table, money_cols=("revenue",))
 
 
 #: Metrics where a rise is bad news, so the delta pill takes the negative tone.
@@ -206,6 +261,8 @@ ret_f = (
 portfolio = (
     cached_segment_portfolio(master_f, "rfm_segment") if "rfm_segment" in master_f.columns else None
 )
+has_ai_segments = "ai_segment" in master_f.columns and master_f["ai_segment"].notna().any()
+ai_portfolio = cached_segment_portfolio(master_f, "ai_segment") if has_ai_segments else None
 hvhr = cached_high_value_high_risk(master_f)
 
 overview_tab, trends_tab, segments_tab, churn_tab, retention_tab = st.tabs(
@@ -378,7 +435,6 @@ with overview_tab:
             fig = _compact(shade_quarters(fig, rev_frame["month"]))
             st.plotly_chart(fig, width="stretch")
     with row1_b:
-        has_ai_segments = "ai_segment" in master_f.columns and master_f["ai_segment"].notna().any()
         use_ai_segments = st.toggle(
             "Use AI segments",
             value=False,
@@ -389,12 +445,6 @@ with overview_tab:
                 "Save a run on page 05 to enable this switch."
             ),
         )
-        group_small = st.toggle(
-            "Group small segments",
-            value=False,
-            key="overview_group_segments",
-            help="Fold segments under 5% of customers into one 'Other' bucket.",
-        )
         with chart_section("Customers per segment"):
             segment_col = "ai_segment" if use_ai_segments and has_ai_segments else "rfm_segment"
             chart_portfolio = (
@@ -403,21 +453,10 @@ with overview_tab:
                 else None
             )
             if chart_portfolio is not None and not chart_portfolio.empty:
-                shown = (
-                    group_small_segments(chart_portfolio, segment_col)
-                    if group_small
-                    else chart_portfolio
-                )
                 st.plotly_chart(
-                    _compact(segment_share_bar(shown, segment_col, "customers")),
+                    _compact(segment_share_bar(chart_portfolio, segment_col, "customers")),
                     width="stretch",
                 )
-                if group_small and len(shown) < len(chart_portfolio):
-                    with st.expander("Segments in 'Other'", expanded=False):
-                        folded = chart_portfolio[
-                            ~chart_portfolio[segment_col].isin(shown[segment_col])
-                        ]
-                        render_table(folded, money_cols=("revenue",))
             elif segment_col == "ai_segment":
                 empty_state(
                     "No AI segments yet",
@@ -604,6 +643,81 @@ with trends_tab:
     with trend_right:
         with chart_section("New vs returning customers"):
             st.plotly_chart(without_title(new_returning_fig(trends["cohort"])), width="stretch")
+    activity_months = sorted(str(month) for month in trends["activity"]["month"].unique())
+    bridge_months = activity_months[1:]
+    bridge_month = (
+        st.selectbox(
+            "Month-over-month pair",
+            bridge_months,
+            index=len(bridge_months) - 1,
+            key="trends_segment_mom_month",
+            help=(
+                "The waterfall bridges from the month before the selection to the "
+                "selection itself."
+            ),
+        )
+        if bridge_months
+        else None
+    )
+    with chart_section("RFM segment month-over-month change"):
+        rfm_activity = cached_segment_activity_trend(txns_f, master_f, "rfm_segment")
+        rfm_bridge = (
+            cached_segment_mom_bridge(rfm_activity, bridge_month, "rfm_segment")
+            if bridge_month is not None
+            else pd.DataFrame()
+        )
+        if rfm_bridge.empty:
+            empty_state(
+                "Not enough RFM history yet",
+                "A month-over-month bridge needs two months with RFM segment labels.",
+            )
+        else:
+            st.plotly_chart(
+                without_title(segment_mom_waterfall_fig(rfm_bridge)),
+                width="stretch",
+                key="trends_rfm_segment_mom",
+            )
+    with chart_section("AI segment month-over-month change"):
+        ai_activity = cached_segment_activity_trend(txns_f, master_f, "ai_segment")
+        ai_bridge = (
+            cached_segment_mom_bridge(ai_activity, bridge_month, "ai_segment")
+            if bridge_month is not None
+            else pd.DataFrame()
+        )
+        if ai_bridge.empty:
+            empty_state(
+                "Not enough AI history yet",
+                "A month-over-month bridge needs two months with AI segment labels.",
+            )
+        else:
+            st.plotly_chart(
+                without_title(segment_mom_waterfall_fig(ai_bridge)),
+                width="stretch",
+                key="trends_ai_segment_mom",
+            )
+    with st.expander("Monthly revenue table", expanded=False):
+        render_table(trends["revenue"], money_cols=("revenue",))
+
+with segments_tab:
+    section_header("Segments", "Portfolio mix and revenue contribution.")
+    _segment_portfolio_section(
+        "RFM segments",
+        "Rule-based RFM groups from the page 03 scoring.",
+        portfolio,
+        "rfm_segment",
+        empty_title="No RFM segments yet",
+        empty_body="RFM segments appear here after page 03 scoring.",
+        key_prefix="segments_rfm",
+    )
+    _segment_portfolio_section(
+        "AI segments",
+        "Saved AI clustering from page 05, shown with the same portfolio view.",
+        ai_portfolio,
+        "ai_segment",
+        empty_title="No AI segments yet",
+        empty_body="Save an AI segmentation run on page 05 to see this mix.",
+        key_prefix="segments_ai",
+    )
     # The same group explainers page 06 shows under the AI customer flow. They
     # follow the global filters, so "who is in this group" matches the cards.
     ai_segment_notes = (
@@ -622,46 +736,6 @@ with trends_tab:
             "No AI segment groups yet",
             "Save an AI segmentation run on page 05 to explain its groups here.",
         )
-    with st.expander("Monthly revenue table", expanded=False):
-        render_table(trends["revenue"], money_cols=("revenue",))
-
-with segments_tab:
-    section_header("Segments", "Portfolio mix and revenue contribution.")
-    if portfolio is None or portfolio.empty:
-        empty_state(
-            "No RFM segments yet",
-            "RFM segments appear here after page 03 scoring.",
-        )
-    else:
-        top_seg = portfolio.loc[portfolio["revenue_share"].idxmax()]
-        metric_row(
-            [
-                Metric("Segments", str(len(portfolio))),
-                Metric(
-                    "Largest segment",
-                    f"{top_seg['rfm_segment']} ({formatting.fmt_int(top_seg['customers'])})",
-                ),
-                Metric(
-                    "Top revenue share",
-                    formatting.fmt_pct100(top_seg["revenue_share"]),
-                ),
-            ]
-        )
-        seg_left, seg_right = st.columns(2)
-        with seg_left:
-            with chart_section("Customer vs revenue share by segment"):
-                st.plotly_chart(
-                    without_title(portfolio_bar_fig(portfolio, "rfm_segment")),
-                    width="stretch",
-                )
-        with seg_right:
-            with chart_section("Revenue per segment"):
-                st.plotly_chart(
-                    without_title(revenue_by_segment_bar(portfolio, "rfm_segment")),
-                    width="stretch",
-                )
-        with st.expander("Segment portfolio table", expanded=False):
-            render_table(portfolio, money_cols=("revenue",))
 
 with churn_tab:
     section_header("Churn risk", "Where predicted churn concentrates.")

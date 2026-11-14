@@ -187,6 +187,82 @@ def trend_tables(txns: pd.DataFrame, master: pd.DataFrame) -> dict[str, pd.DataF
     return {"revenue": revenue, "activity": activity, "cohort": cohort}
 
 
+def segment_activity_trend(
+    txns: pd.DataFrame, master: pd.DataFrame, segment_col: str = "rfm_segment"
+) -> pd.DataFrame:
+    """Monthly active customers per segment, using each customer's fixed label.
+
+    Labels are not re-scored per month: they come from the current RFM/AI
+    assignment on ``master``, so each line shows how activity moves inside an
+    existing group. Customers without a label are left out rather than shown
+    as a phantom segment.
+    """
+    empty = pd.DataFrame(columns=["month", segment_col, "active_customers"])
+    if txns.empty or segment_col not in master.columns:
+        return empty
+    labels = master.loc[master[segment_col].notna(), ["customer_id", segment_col]]
+    if labels.empty:
+        return empty
+    active = txns[["_month", "customer_id"]].drop_duplicates()
+    active = active.merge(labels, on="customer_id", how="inner")
+    if active.empty:
+        return empty
+    return (
+        active.groupby(["_month", segment_col], observed=True)["customer_id"]
+        .nunique()
+        .reset_index()
+        .rename(columns={"_month": "month", "customer_id": "active_customers"})
+        .sort_values(["month", segment_col])
+        .reset_index(drop=True)
+    )
+
+
+def segment_mom_bridge(
+    table: pd.DataFrame, month: str | None = None, segment_col: str = "segment"
+) -> pd.DataFrame:
+    """Waterfall rows bridging the previous month to ``month`` by segment.
+
+    The bridge starts at the previous month's active total, walks through each
+    segment's change (additions first, then losses, then zero moves), and ends
+    at the selected month's total. ``month`` defaults to the latest month in the
+    table. Returns the empty contract when there are fewer than two months or
+    the requested month has no earlier comparison.
+    """
+    empty = pd.DataFrame(columns=["label", "value", "measure"])
+    if table.empty or segment_col not in table.columns or "month" not in table.columns:
+        return empty
+    months = sorted(str(value) for value in table["month"].unique())
+    if len(months) < 2:
+        return empty
+    current = months[-1] if month is None else str(month)
+    if current not in months:
+        return empty
+    position = months.index(current)
+    if position == 0:
+        return empty
+    previous = months[position - 1]
+    window = table.assign(month=table["month"].astype(str))
+    window = window[window["month"].isin([previous, current])]
+    pivot = (
+        window.groupby([segment_col, "month"], observed=True)["active_customers"]
+        .sum()
+        .unstack(fill_value=0)
+        .reindex(columns=[previous, current], fill_value=0)
+    )
+    deltas = (pivot[current] - pivot[previous]).sort_values(ascending=False)
+    rows = [
+        {"label": f"{previous} total", "value": float(pivot[previous].sum()), "measure": "absolute"}
+    ]
+    rows.extend(
+        {"label": str(segment), "value": float(delta), "measure": "relative"}
+        for segment, delta in deltas.items()
+    )
+    rows.append(
+        {"label": f"{current} total", "value": float(pivot[current].sum()), "measure": "total"}
+    )
+    return pd.DataFrame(rows)
+
+
 def segment_portfolio(
     master: pd.DataFrame, segment_col: str, monetary_col: str = "monetary_value"
 ) -> pd.DataFrame:

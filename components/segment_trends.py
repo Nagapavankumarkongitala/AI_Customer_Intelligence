@@ -2,8 +2,8 @@
 
 The dashboard and page 03 show the same "Customer segments over time" story.
 Keeping the two-column compositions here means both render the same heights,
-empty states, and honesty captions, and neither page has to know how a stored
-history dict is shaped.
+empty states, and shared guidance text, and neither page has to know how a
+stored history dict is shaped.
 """
 
 from __future__ import annotations
@@ -20,12 +20,6 @@ TRANSITION_CAPTION = (
     "Transitions count customers present at both consecutive period ends, by the "
     "segment they held at each. Customers who joined or left between snapshots "
     "are not flows."
-)
-
-AI_TRANSITION_CAPTION = (
-    "AI labels are fixed, so a customer keeps their group between period ends. Links "
-    "carry the same group forward and widths show the recurring base; no re-clustering "
-    "happens per period, so the mix moves with who arrived."
 )
 
 DEFAULT_EMPTY_MESSAGE = (
@@ -79,7 +73,6 @@ def render_sankey_pair(
                 width="stretch",
                 key=f"{key_prefix}_left",
             )
-        st.caption(AI_TRANSITION_CAPTION)
     with right:
         st.markdown(f"**{right_title}**")
         if right_transitions.empty:
@@ -90,7 +83,6 @@ def render_sankey_pair(
                 width="stretch",
                 key=f"{key_prefix}_right",
             )
-        st.caption(TRANSITION_CAPTION)
 
 
 def render_trend_pair(

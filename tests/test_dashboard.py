@@ -12,6 +12,8 @@ from services.dashboard_service import (
     mask_customer_id,
     period_deltas,
     prepare_transactions,
+    segment_activity_trend,
+    segment_mom_bridge,
     segment_portfolio,
     trend_tables,
 )
@@ -112,6 +114,35 @@ def test_trends_and_portfolio() -> None:
     portfolio = segment_portfolio(master, "rfm_segment")
     assert portfolio["customer_share"].sum() == 100.0
     assert portfolio["revenue_share"].sum() == 100.0
+
+
+def test_segment_activity_trend_counts_fixed_labels_by_month() -> None:
+    """Monthly activity follows each customer's current label, not a re-score."""
+    txns, master = prepare_transactions(_txns()), build_master(_master())
+    trend = segment_activity_trend(txns, master, "rfm_segment")
+    assert set(trend["month"]) == {"2024-01", "2024-02", "2024-03"}
+    feb = trend[trend["month"] == "2024-02"].set_index("rfm_segment")["active_customers"]
+    assert feb["Champions"] == 1  # C1
+    assert feb["Lost Customers"] == 1  # C2
+    # A segment column that is absent yields the empty contract, not a crash.
+    assert segment_activity_trend(txns, master, "missing_segment").empty
+
+
+def test_segment_mom_bridge_walks_previous_to_selected_month() -> None:
+    """The bridge starts at the prior total, sums segment deltas, ends at the new total."""
+    txns, master = prepare_transactions(_txns()), build_master(_master())
+    activity = segment_activity_trend(txns, master, "rfm_segment")
+    bridge = segment_mom_bridge(activity, "2024-02", "rfm_segment")
+    assert list(bridge["measure"]) == ["absolute", "relative", "relative", "total"]
+    assert bridge.loc[0, "label"] == "2024-01 total"
+    assert bridge.loc[0, "value"] == 1
+    relative = bridge[bridge["measure"] == "relative"].set_index("label")["value"]
+    assert relative["Lost Customers"] == 1
+    assert relative["Champions"] == 0
+    assert bridge.iloc[-1]["value"] == 2
+    # No earlier month, or a single-month table, has nothing to bridge.
+    assert segment_mom_bridge(activity, "2024-01", "rfm_segment").empty
+    assert segment_mom_bridge(activity.head(1), "2024-02", "rfm_segment").empty
 
 
 def test_period_deltas_compare_windows() -> None:
