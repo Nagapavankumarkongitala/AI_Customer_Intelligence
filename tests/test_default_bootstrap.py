@@ -52,6 +52,20 @@ def test_load_preserves_user_data() -> None:
     assert state["raw_data"] == "user-frame"
 
 
+@needs_cache
+def test_cached_selection_follows_gated_recommendation() -> None:
+    """The rail's Segments value is the gated pick, not the silhouette leader."""
+    index = json.loads(
+        (bootstrap_service.CACHE_DIR / "segmentation_index.json").read_text(encoding="utf-8")
+    )
+    if "recommendation" not in index:
+        pytest.skip("cache predates the gated selection; rebuild to refresh")
+    operational = index["recommendation"]["operational_pick"]
+    if not operational.startswith("AI:"):
+        pytest.skip("operational pick is traditional; the cache keeps an AI run")
+    assert index["selected"] == operational.removeprefix("AI:")
+
+
 def test_manifest_shape() -> None:
     """The manifest carries every field the landing page renders."""
     if not _MANIFEST.exists():

@@ -265,6 +265,8 @@ div[data-baseweb="menu"] {
     color: $text;
     border-color: $border;
 }
+/* The size/type hint is a nested span the light server theme inks dark. */
+[data-testid="stFileUploaderDropzone"] :where(span, p, small) { color: inherit; }
 /* Buttons: console surface by default, lime for primary actions. */
 [data-testid="stButton"] button, [data-testid="stDownloadButton"] button {
     background-color: $surface;
@@ -283,8 +285,33 @@ div[data-baseweb="menu"] {
 }
 /* Native radio/checkbox dots follow the accent. */
 input[type="radio"], input[type="checkbox"] { accent-color: $primary; }
-/* Sidebar page links: quiet until current. */
-[data-testid="stPageLink"] { color: $muted; }
+/* Streamlit's light server theme paints nested text nodes with its own dark
+   ink, set directly on <p>/<span> where inheritance from the rail cannot reach
+   them. Re-assert ink on those nodes or page links, radio options, and date
+   fields render in the server theme's ink on the dark rail. */
+[data-testid="stSidebar"] [data-testid="stMarkdownContainer"],
+[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] :where(p, span, li, strong, em) {
+    color: inherit;
+}
+[data-testid="stSidebar"] [data-testid="stRadioOption"] { color: $text; }
+[data-testid="stSidebar"] [data-testid="stRadioOption"] :where(div, span, p) { color: inherit; }
+[data-testid="stSidebar"] [data-testid="stDateInputField"] :where(span, input) { color: $text; }
+[data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"],
+[data-testid="stSidebar"] [data-testid="stIconMaterial"] { color: $muted; }
+/* Sidebar page links: quiet until current. Streamlit marks the current page
+   with a generated anchor class (no aria-current), which also supplies its
+   background, so the rail only owns the readable ink and hover affordance. */
+[data-testid="stSidebar"] [data-testid="stPageLink"],
+[data-testid="stSidebar"] [data-testid="stPageLink-NavLink"] { color: $muted; }
+[data-testid="stSidebar"] [data-testid="stPageLink"] :where(span, div, p, strong, em),
+[data-testid="stSidebar"] [data-testid="stPageLink-NavLink"] :where(span, div, p, strong, em) {
+    color: inherit;
+}
+[data-testid="stSidebar"] [data-testid="stPageLink"]:hover,
+[data-testid="stSidebar"] [data-testid="stPageLink-NavLink"]:hover {
+    color: $text;
+    background-color: $hover;
+}
 [data-testid="stPageLink"][aria-current="page"] {
     color: $primary;
     background-color: $hover;

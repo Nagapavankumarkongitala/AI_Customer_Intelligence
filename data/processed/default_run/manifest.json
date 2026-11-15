@@ -1,6 +1,6 @@
 {
   "source": "data.csv",
-  "cache_version": 5,
+  "cache_version": 6,
   "source_mtime": 1792501887.0295424,
   "source_size": 17557335,
   "built_at": "2026-10-20T23:46:30.169986",
@@ -20,7 +20,7 @@
     "autoencoder",
     "ensemble"
   ],
-  "selected_segmentation_model": "kmeans",
+  "selected_segmentation_model": "gmm",
   "churn_models": [
     "histgb",
     "logreg",
@@ -31,6 +31,10 @@
   "churn_auc": 0.5117,
   "churn_rate": 0.8604,
   "retention_customers": 39903,
-  "segmentation_path": "models\\segmentation\\default_kmeans_k5.joblib",
-  "churn_path": "models\\churn\\default_histgb_2026-07-08.joblib"
+  "segmentation_path": "models\\segmentation\\default_gmm_k5.joblib",
+  "churn_path": "models\\churn\\default_histgb_2026-07-08.joblib",
+  "segmentation_recommendation": {
+    "operational_pick": "AI:gmm",
+    "rationale": "Best statistical separation: AI:kmeans. Best stability: AI:gmm. Best interpretability: AI:gmm. Best revenue differentiation: AI:kmeans. Operational pick: AI:gmm (cleared stability \u2265 0.5, min share \u2265 0.05, noise < 15.0%). A silhouette-only rule would have chosen AI:kmeans; override it below if the evidence says otherwise."
+  }
 }

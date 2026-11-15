@@ -53,10 +53,10 @@ DEFAULT_SEGMENTATION_MODELS = (
 )
 DEFAULT_CHURN_MODELS = ("logreg", "histgb", "random_forest", "lightgbm", "xgboost")
 DEFAULT_N_CLUSTERS = 5
-#: Bumped whenever the cached artifact set changes shape (here: all segmentation
-#: and churn models preloaded, plus per-customer segment-history labels), so
-#: stale caches rebuild once instead of loading without the new files.
-CACHE_VERSION = 5
+#: Bumped whenever the cached artifact set changes shape (here: the segmentation
+#: index now carries the gated recommendation it was selected by), so stale
+#: caches rebuild once instead of loading without the new fields.
+CACHE_VERSION = 6
 #: Segment-trend preload for the default run (page 03 defaults).
 DEFAULT_HISTORY_GRANULARITY = "quarterly"
 
@@ -249,19 +249,37 @@ def build_default_run(force: bool = False) -> dict:
     ok_runs = [r for r in runs if r.get("status") == "ok"]
     if not ok_runs:
         raise RuntimeError("Default segmentation produced no successful runs.")
-    best = max(
-        ok_runs,
-        key=lambda r: (
-            r["metrics"].get("silhouette") is not None,
-            r["metrics"].get("silhouette") or -9,
-        ),
+    # Select with the same gated, multi-metric rule page 06 and the report use
+    # (never silhouette alone). Otherwise the rail's "Segments" value would
+    # contradict the comparison page's own recommendation.
+    from services.comparison_service import build_comparison
+
+    comparison = build_comparison(
+        {
+            "customer_features": features,
+            "rfm_results": rfm,
+            "lrfm_results": lrfm,
+            "segmentation_runs": ok_runs,
+        }
     )
-    labeled = features[["customer_id"]].copy()
-    label_map = dict(zip(best["customer_ids"], best["labels"], strict=True))
-    labeled["cluster_id"] = labeled["customer_id"].map(label_map).fillna(-1).astype(int)
-    labeled["business_name"] = (
-        labeled["cluster_id"].map({int(k): v for k, v in best["names"].items()}).fillna("Cluster")
-    )
+    if comparison is None:
+        raise RuntimeError("Default segmentation comparison produced no candidates.")
+    recommendation = comparison["recommendation"]
+    operational = recommendation["operational_pick"]
+    best = next((r for r in ok_runs if f"AI:{r['model']}" == operational), None)
+    if best is None:
+        log.warning(
+            "Operational pick %s is not an AI run; materializing the silhouette leader.",
+            operational,
+        )
+        best = max(
+            ok_runs,
+            key=lambda r: (
+                r["metrics"].get("silhouette") is not None,
+                r["metrics"].get("silhouette") or -9,
+            ),
+        )
+    labeled = segmentation_service.segmented_frame(best)
     _write_frame(labeled, "segmented")
     _write_json(
         {
@@ -270,6 +288,7 @@ def build_default_run(force: bool = False) -> dict:
                 for r in runs
             ],
             "selected": best["model"],
+            "recommendation": recommendation,
         },
         "segmentation_index",
     )

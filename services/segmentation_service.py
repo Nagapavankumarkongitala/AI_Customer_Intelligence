@@ -202,6 +202,21 @@ def labeling_series(run: dict) -> pd.Series:
     ).rename("segment")
 
 
+def segmented_frame(run: dict) -> pd.DataFrame:
+    """A saved run as the ``customer_id, cluster_id, business_name`` cache frame."""
+    names = {int(k): str(v) for k, v in (run.get("names") or {}).items()}
+    frame = pd.DataFrame(
+        {
+            "customer_id": list(run["customer_ids"]),
+            "cluster_id": [int(value) for value in run["labels"]],
+        }
+    )
+    frame["business_name"] = frame["cluster_id"].map(
+        lambda value: names.get(value, "Noise" if value == NOISE_LABEL else f"Cluster {value}")
+    )
+    return frame
+
+
 def save_segmentation_run(
     model: object,
     pipeline: object,

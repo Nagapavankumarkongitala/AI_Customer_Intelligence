@@ -600,7 +600,10 @@ def context_tables(
     risk_mix = context.get("risk_mix") or {}
     if risk_mix:
         tables["Risk_Bands"] = pd.DataFrame(
-            [{"risk_band": band, "customers": formatting.fmt_int(count)} for band, count in risk_mix.items()]
+            [
+                {"risk_band": band, "customers": formatting.fmt_int(count)}
+                for band, count in risk_mix.items()
+            ]
         )
     retention = context.get("retention")
     if retention is not None and not retention.empty:
@@ -614,7 +617,9 @@ def context_tables(
             if col in r.columns:
                 r[col] = [formatting.fmt_money_compact(v) for v in r[col]]
         if "retention_priority_score" in r.columns:
-            r["retention_priority_score"] = [formatting.fmt_float(v, 3) for v in r["retention_priority_score"]]
+            r["retention_priority_score"] = [
+                formatting.fmt_float(v, 3) for v in r["retention_priority_score"]
+            ]
         if "churn_probability" in r.columns:
             r["churn_probability"] = [formatting.fmt_pct(v, 1) for v in r["churn_probability"]]
         tables["Retention_Top"] = r
@@ -623,7 +628,9 @@ def context_tables(
         cols = [c for c in ("customer_id", "churn_probability", "risk_band") if c in scores.columns]
         top_risk = scores.sort_values("churn_probability", ascending=False).head(top_n)[cols].copy()
         if "churn_probability" in top_risk.columns:
-            top_risk["churn_probability"] = [formatting.fmt_pct(v, 1) for v in top_risk["churn_probability"]]
+            top_risk["churn_probability"] = [
+                formatting.fmt_pct(v, 1) for v in top_risk["churn_probability"]
+            ]
         tables["Churn_Top_Risk"] = _mask_frame(top_risk) if mask_ids else top_risk
     summary = context.get("retention_summary") or {}
     if summary.get("strategy_mix"):

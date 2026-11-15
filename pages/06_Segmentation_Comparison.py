@@ -16,7 +16,7 @@ from components.metric_guides import render_metric_guides
 from components.page_header import page_header, section_header
 from components.segment_cards import render_segment_cards
 from components.sidebar import render_sidebar_footer, render_sidebar_nav, sidebar_filters
-from services import state_service
+from services import segmentation_service, state_service
 from services.comparison_service import build_comparison, scorecard_for_display
 from services.export_service import to_csv_bytes, to_json_bytes
 from services.segment_explain_service import build_segment_explanations
@@ -187,6 +187,15 @@ with controls_expander("Operational Pick"):
         index=models.index(default_pick) if default_pick in models else 0,
     )
 st.session_state["comparison_report"] = {**recommendation, "human_pick": choice}
+# Sync an AI override back into the segmentation state the rail, dashboard, and
+# report read, so page 06's recorded pick and the rest of the app cannot drift.
+if choice.startswith("AI:"):
+    picked = choice.removeprefix("AI:")
+    if picked != st.session_state.get("selected_segmentation_model"):
+        run = next((r for r in ai_runs if r.get("model") == picked), None)
+        if run is not None:
+            st.session_state["selected_segmentation_model"] = picked
+            st.session_state["segmented_customers"] = segmentation_service.segmented_frame(run)
 st.success(
     f"Recorded operational pick: {choice} "
     f"({'agrees' if choice == recommendation['operational_pick'] else 'overrides'} "

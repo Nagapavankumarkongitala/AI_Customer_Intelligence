@@ -325,5 +325,16 @@
       "labels": null
     }
   ],
-  "selected": "kmeans"
+  "selected": "gmm",
+  "recommendation": {
+    "best_statistical": "AI:kmeans",
+    "best_stability": "AI:gmm",
+    "best_interpretability": "AI:gmm",
+    "best_revenue": "AI:kmeans",
+    "operational_pick": "AI:gmm",
+    "gated_pool": [
+      "AI:gmm"
+    ],
+    "rationale": "Best statistical separation: AI:kmeans. Best stability: AI:gmm. Best interpretability: AI:gmm. Best revenue differentiation: AI:kmeans. Operational pick: AI:gmm (cleared stability \u2265 0.5, min share \u2265 0.05, noise < 15.0%). A silhouette-only rule would have chosen AI:kmeans; override it below if the evidence says otherwise."
+  }
 }

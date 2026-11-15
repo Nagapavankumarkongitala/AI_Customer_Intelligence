@@ -362,6 +362,26 @@ def test_dark_native_pack_skins_server_widgets() -> None:
     assert tokens.DARK["primary"] in DARK_CSS
 
 
+def test_dark_reinks_nested_text_nodes() -> None:
+    """Dark mode re-inks text the light server theme leaves dark.
+
+    Streamlit sets explicit dark ink on the <p>/<span> inside page links, radio
+    options, date fields, the collapse control, and the uploader hint. Those
+    colours are on the text nodes themselves, so they beat inheritance from the
+    container; the dark sheet must target them, not only the container.
+    """
+    for hook in (
+        '[data-testid="stSidebar"] [data-testid="stPageLink-NavLink"]',
+        '[data-testid="stSidebar"] [data-testid="stRadioOption"]',
+        '[data-testid="stSidebar"] [data-testid="stDateInputField"]',
+        '[data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"]',
+        '[data-testid="stFileUploaderDropzone"] :where(span, p, small)',
+    ):
+        assert hook in DARK_CSS, f"dark sheet misses {hook}"
+        assert hook not in LIGHT_CSS, f"light sheet leaked {hook}"
+    assert ":where(p, span, li, strong, em)" in DARK_CSS
+
+
 def test_sheets_carry_no_colour_outside_tokens() -> None:
     """Every hex in either stylesheet is a palette value (no drifting literals)."""
     palette_values = {v.upper() for v in (*tokens.LIGHT.values(), *tokens.DARK.values())}

@@ -22,6 +22,7 @@ from segmentation.stability import bootstrap_stability, seed_stability
 from services.segmentation_service import (
     labeling_series,
     run_model,
+    segmented_frame,
     sweep_clusters,
     train_all_models,
 )
@@ -232,3 +233,20 @@ def test_labeling_series_uses_run_names_and_noise_label() -> None:
     assert series.name == "segment"
     assert series.tolist() == ["Core Active", "7", "Noise"]
     assert labeling_series({"customer_ids": ["a"], "labels": [3]}).tolist() == ["3"]
+
+
+def test_segmented_frame_keeps_customer_ids_and_names() -> None:
+    """The cache frame round-trips a saved run without losing the noise label."""
+    run = {
+        "model": "kmeans",
+        "customer_ids": ["a", "b", "c"],
+        "labels": [0, 7, -1],
+        "names": {"0": "Core Active"},
+    }
+    frame = segmented_frame(run)
+    assert frame.columns.tolist() == ["customer_id", "cluster_id", "business_name"]
+    assert frame.to_dict("records") == [
+        {"customer_id": "a", "cluster_id": 0, "business_name": "Core Active"},
+        {"customer_id": "b", "cluster_id": 7, "business_name": "Cluster 7"},
+        {"customer_id": "c", "cluster_id": -1, "business_name": "Noise"},
+    ]
