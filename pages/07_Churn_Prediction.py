@@ -23,6 +23,7 @@ from components.table import render_table
 from services import state_service
 from services.churn_service import (
     available_models,
+    model_selection_rows,
     save_churn_run,
     score_all_customers,
     train_churn_model,
@@ -181,6 +182,7 @@ if st.button("Train selected models"):
             "calibration": bundles[best]["calibration"],
             "cutoff": bundles[best]["cutoff"],
             "horizon_days": bundles[best]["horizon_days"],
+            "candidates": model_selection_rows(bundles),
         }
         st.success(f"Trained {len(bundles)} model(s). Best test ROC-AUC: {best}.")
 

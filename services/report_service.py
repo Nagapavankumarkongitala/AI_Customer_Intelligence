@@ -18,6 +18,7 @@ import pandas as pd
 
 from analytics.demographics import DEFAULT_AGE_BANDS, assign_age_band
 from services import report_charts, report_narrative
+from services.churn_service import model_selection_rows
 from services.comparison_service import (
     build_comparison,
     scorecard_as_text,
@@ -395,6 +396,82 @@ def _treatments(audit: Mapping[str, Any]) -> list[dict[str, Any]]:
     return out
 
 
+def churn_selection_display(table: pd.DataFrame) -> pd.DataFrame:
+    """Readable candidate table shared by the HTML, PDF, Word, and Excel exports."""
+    display = table.copy()
+    for column in ("roc_auc", "pr_auc", "f1", "recall"):
+        if column in display.columns:
+            display[column] = [formatting.fmt_float(v, 3) for v in display[column]]
+    if "threshold" in display.columns:
+        display["threshold"] = [formatting.fmt_float(v, 2) for v in display["threshold"]]
+    if "selected" in display.columns:
+        display["selected"] = ["yes" if value else "" for value in display["selected"]]
+    return display
+
+
+def _churn_selection(metadata: Mapping[str, Any], bundles: Any) -> dict[str, Any] | None:
+    """Candidate comparison plus the scored churn model, when recorded.
+
+    Fresh sessions carry ``churn_bundles`` (every trained estimator); cached
+    runs carry the same flat rows under ``churn_model_metadata['candidates']``.
+    Both go through :func:`model_selection_rows`, so the report never invents a
+    metric or a winner.
+    """
+    stored = metadata.get("candidates")
+    if isinstance(bundles, Mapping) and bundles:
+        records: dict[str, Any] = dict(bundles)
+    elif isinstance(stored, list):
+        records = {
+            str(row["model"]): row
+            for row in stored
+            if isinstance(row, Mapping) and row.get("model")
+        }
+    else:
+        records = {}
+    rows = model_selection_rows(records) if records else []
+    if not rows:
+        return None
+    table = pd.DataFrame(rows)
+    selected = str(metadata.get("model") or "")
+    table["selected"] = table["model"].astype(str) == selected
+    table = table.sort_values(
+        ["roc_auc", "model"], ascending=[False, True], na_position="last"
+    ).reset_index(drop=True)
+    top = table.iloc[0]
+    if not selected:
+        selected = str(top["model"])
+        table.loc[table["model"].astype(str) == selected, "selected"] = True
+    selected_rows = table[table["selected"]]
+    selected_auc = selected_rows.iloc[0]["roc_auc"] if not selected_rows.empty else None
+    if selected == str(top["model"]):
+        rationale = (
+            f"{selected} has the highest test ROC-AUC "
+            f"({formatting.fmt_float(selected_auc, 3)}) among {len(table)} candidate(s)."
+        )
+    elif top["roc_auc"] is not None:
+        rationale = (
+            f"{selected} is the scored model; {top['model']} had the highest test "
+            f"ROC-AUC ({formatting.fmt_float(top['roc_auc'], 3)})."
+        )
+    else:
+        rationale = f"{selected} is the scored model; candidate test scores were unavailable."
+    near_chance = selected_auc is not None and float(selected_auc) < 0.55
+    if near_chance:
+        rationale += (
+            " The selected model's test ROC-AUC is close to the 0.5 chance line, so treat "
+            "scores as prioritization signals rather than confident individual risk."
+        )
+    return {
+        "selected": selected,
+        "criterion": "highest test ROC-AUC",
+        "n_candidates": int(len(table)),
+        "best_auc": selected_auc,
+        "near_chance": near_chance,
+        "rationale": rationale,
+        "table": table,
+    }
+
+
 def build_report_context(state: Mapping[str, Any]) -> dict[str, Any]:
     """Collect every report input from session state into one dict.
 
@@ -509,6 +586,11 @@ def build_report_context(state: Mapping[str, Any]) -> dict[str, Any]:
     except (KeyError, ValueError, TypeError):
         comparison = None
 
+    churn_selection = _churn_selection(
+        metadata if isinstance(metadata, Mapping) else {},
+        state.get("churn_bundles"),
+    )
+
     return {
         "generated_at": datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC"),
         "readiness": readiness,
@@ -530,6 +612,7 @@ def build_report_context(state: Mapping[str, Any]) -> dict[str, Any]:
         "history": history,
         "retention_summary": retention_summary,
         "churn_metadata": dict(metadata) if isinstance(metadata, dict) else {},
+        "churn_selection": churn_selection,
         "cleaning_audit": dict(audit) if isinstance(audit, dict) else {},
         "column_mapping": dict(mapping) if isinstance(mapping, dict) else {},
         "treatments": _treatments(audit if isinstance(audit, Mapping) else {}),
@@ -605,6 +688,10 @@ def context_tables(
                 for band, count in risk_mix.items()
             ]
         )
+    selection = context.get("churn_selection") or {}
+    selection_table = selection.get("table")
+    if isinstance(selection_table, pd.DataFrame) and not selection_table.empty:
+        tables["Churn_Model_Selection"] = churn_selection_display(selection_table)
     retention = context.get("retention")
     if retention is not None and not retention.empty:
         ranked = (
@@ -751,7 +838,6 @@ def render_html_report(
     figures_html = figures_html or {}
     kpis = context.get("kpis") or {}
     readiness = context.get("readiness") or {}
-    metadata = context.get("churn_metadata") or {}
     masked_note = (
         "Customer IDs are masked in this report."
         if mask_ids
@@ -886,18 +972,19 @@ def render_html_report(
                 "</p></section>"
             )
     if "churn" in sections:
-        model_line = ""
-        if metadata:
-            model_line = (
-                f"<p>Model: <strong>{html.escape(str(metadata.get('model', '–')))}</strong> · "
-                f"threshold {html.escape(str(metadata.get('threshold', '–')))} · "
-                f"cutoff {html.escape(str(metadata.get('cutoff', '–')))}. Predictors use "
-                "transactions on or before the cutoff only; the label is activity after the "
-                "cutoff (leakage-safe by construction).</p>"
+        selection = context.get("churn_selection") or {}
+        selection_table = selection.get("table")
+        selection_html = ""
+        if isinstance(selection_table, pd.DataFrame) and not selection_table.empty:
+            selection_html = (
+                "<h3>Model selection</h3>"
+                "<p class='muted'>Candidate metrics are from the held-out test split; "
+                "the selected row is the scored model.</p>"
+                f"{churn_selection_display(selection_table).to_html(index=False, border=0, classes='tbl')}"
             )
         built.append(
             f"<section><h2>{_section_heading('churn', 'Churn risk calculated')}</h2>"
-            f"{model_line}{_insights('churn')}"
+            f"{_insights('churn')}{selection_html}"
             f"{_fig('risk_bands')}{_explain('risk_bands')}</section>"
         )
     if "retention" in sections:

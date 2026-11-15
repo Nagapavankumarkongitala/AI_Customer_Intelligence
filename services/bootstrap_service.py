@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Mapping
 from datetime import datetime
 from pathlib import Path
 
@@ -489,6 +490,9 @@ def load_default_into_state(state: dict) -> dict | None:
         "calibration": churn_meta[best]["calibration"],
         "cutoff": churn_meta[best]["cutoff"],
         "horizon_days": churn_meta[best]["horizon_days"],
+        "candidates": churn_service.model_selection_rows(
+            {name: meta for name, meta in churn_meta.items() if isinstance(meta, Mapping)}
+        ),
     }
     # Restore the persisted pipeline object so downstream code can reuse it.
     # load_model returns the stored object itself (no tuple to unpack).

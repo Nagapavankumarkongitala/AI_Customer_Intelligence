@@ -7,6 +7,9 @@ training data only. Calibration learns on validation only.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+from typing import Any
+
 import numpy as np
 import pandas as pd
 
@@ -147,6 +150,45 @@ def train_churn_model(
         "cutoff": str(dataset.labeling.cutoff.date()) if dataset.labeling else "",
         "horizon_days": dataset.labeling.horizon_days if dataset.labeling else 0,
     }
+
+
+def model_selection_rows(models: Mapping[str, Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """Normalize trained or persisted churn models into comparable selection rows.
+
+    Accepts in-session training bundles (``test_metrics`` + ``suggested_threshold``)
+    and persisted metadata (``metrics`` + ``threshold``), so the training page,
+    the cached default run, and the report all present the same candidate set.
+    """
+    rows: list[dict[str, Any]] = []
+    for name in sorted(models):
+        record = models[name]
+        if not isinstance(record, Mapping):
+            continue
+        metrics = record.get("test_metrics") or record.get("metrics") or record
+        if not isinstance(metrics, Mapping):
+            metrics = record
+        rows.append(
+            {
+                "model": str(name),
+                "roc_auc": _optional_float(metrics.get("roc_auc")),
+                "pr_auc": _optional_float(metrics.get("pr_auc")),
+                "f1": _optional_float(metrics.get("f1")),
+                "recall": _optional_float(metrics.get("recall")),
+                "threshold": _optional_float(
+                    record.get("suggested_threshold", record.get("threshold"))
+                ),
+            }
+        )
+    return rows
+
+
+def _optional_float(value: Any) -> float | None:
+    """Return a finite float or None for optional metric fields."""
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if np.isfinite(number) else None
 
 
 def score_all_customers(
