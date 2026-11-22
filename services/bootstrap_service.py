@@ -20,6 +20,7 @@ import logging
 from collections.abc import Mapping
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 import yaml
@@ -367,6 +368,7 @@ def build_default_run(force: bool = False) -> dict:
                 "calibration": b["calibration"],
                 "cutoff": b["cutoff"],
                 "horizon_days": b["horizon_days"],
+                "evaluation": churn_service.evaluation_payload(b),
             }
             for name, b in bundles.items()
         },
@@ -412,6 +414,53 @@ def build_default_run(force: bool = False) -> dict:
     MANIFEST.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     log.info("Default run built: %s", manifest)
     return manifest
+
+
+def _restore_churn_dataset(state: dict, summary: Mapping[str, Any]) -> None:
+    """Rebuild the live churn dataset object from the cached labeled frame.
+
+    Page 07 gates its whole workflow on ``churn_dataset_obj``, while the default
+    run only cached the frame and its summary dict. Without this restore the
+    Churn page alone showed "No churn dataset yet" on every fresh session, even
+    though scores, model, and evaluation were already loaded.
+    """
+    from churn.churn_labeling import LabelingResult
+    from churn.dataset_builder import CATEGORICAL_FEATURES, ChurnDataset
+
+    try:
+        frame = _read_frame("churn_frame")
+        clean = state.get("clean_data")
+        if clean is None or frame.empty:
+            return
+        cutoff = pd.Timestamp(summary["cutoff"])
+        horizon = int(summary["horizon_days"])
+        dates = pd.to_datetime(clean["transaction_date"], errors="coerce")
+        max_date = dates.max()
+        predictor_max = dates[dates <= cutoff].max()
+        outcome_end = cutoff + pd.Timedelta(days=horizon)
+        observed = max(0, int((max_date - cutoff).days))
+        state["churn_dataset_obj"] = ChurnDataset(
+            frame=frame,
+            feature_cols=[
+                column
+                for column in frame.select_dtypes(include="number").columns
+                if column != "churn"
+            ],
+            categorical_cols=[column for column in CATEGORICAL_FEATURES if column in frame],
+            labeling=LabelingResult(
+                labels=frame[["customer_id", "churn"]].copy(),
+                cutoff=cutoff,
+                horizon_days=horizon,
+                outcome_end=outcome_end,
+                observed_outcome_days=observed,
+                partial_window=observed < horizon,
+                excluded_short_history=int(summary.get("excluded_short_history") or 0),
+            ),
+            predictor_max_date=predictor_max,
+            leakage_ok=bool(summary.get("leakage_ok", False)),
+        )
+    except (FileNotFoundError, KeyError, TypeError, ValueError) as exc:
+        log.warning("Cached churn dataset could not be restored: %s", exc)
 
 
 def load_default_into_state(state: dict) -> dict | None:
@@ -481,8 +530,14 @@ def load_default_into_state(state: dict) -> dict | None:
     state["selected_segmentation_model"] = seg_index["selected"]
     state["segmented_customers"] = _read_frame("segmented")
     state["churn_dataset"] = _read_json("churn_summary")
+    _restore_churn_dataset(state, state["churn_dataset"])
     churn_meta = _read_json("churn_metadata")
     best = manifest["selected_churn_model"]
+    evaluations = {
+        name: meta["evaluation"]
+        for name, meta in churn_meta.items()
+        if isinstance(meta, Mapping) and isinstance(meta.get("evaluation"), Mapping)
+    }
     state["churn_model_metadata"] = {
         "model": best,
         "threshold": churn_meta[best]["threshold"],
@@ -493,6 +548,10 @@ def load_default_into_state(state: dict) -> dict | None:
         "candidates": churn_service.model_selection_rows(
             {name: meta for name, meta in churn_meta.items() if isinstance(meta, Mapping)}
         ),
+        # Cached evaluation detail keeps the report's churn charts populated
+        # without retraining on every fresh session.
+        "evaluation": evaluations.get(best, {}),
+        "evaluations": evaluations,
     }
     # Restore the persisted pipeline object so downstream code can reuse it.
     # load_model returns the stored object itself (no tuple to unpack).

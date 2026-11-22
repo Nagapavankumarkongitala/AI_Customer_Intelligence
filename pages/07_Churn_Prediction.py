@@ -23,12 +23,14 @@ from components.table import render_table
 from services import state_service
 from services.churn_service import (
     available_models,
+    evaluation_payload,
     model_selection_rows,
     save_churn_run,
     score_all_customers,
     train_churn_model,
 )
 from services.export_service import to_csv_bytes, to_json_bytes
+from services.report_service import churn_selection_table
 from utils import formatting
 from utils.exceptions import CustomerIntelligenceError
 from utils.logging_config import configure_logging
@@ -39,6 +41,7 @@ from visualization.churn_charts import (
     importance_bar_fig,
     risk_band_bar,
     roc_curve_fig,
+    roc_points_fig,
 )
 from visualization.theme import inject_terminal_css, without_title
 
@@ -102,6 +105,7 @@ if st.button("Build churn dataset", type="primary"):
             "churn_rate": round(float(dataset.frame["churn"].mean()), 4),
             "customers": len(dataset.frame),
             "excluded_short_history": dataset.labeling.excluded_short_history,
+            "leakage_ok": bool(dataset.leakage_ok),
         }
         rate = dataset.frame["churn"].mean()
         metric_row(
@@ -183,10 +187,25 @@ if st.button("Train selected models"):
             "cutoff": bundles[best]["cutoff"],
             "horizon_days": bundles[best]["horizon_days"],
             "candidates": model_selection_rows(bundles),
+            # Full evaluation detail for the report: the report page rebuilds
+            # from current session state, so writing this payload here is what
+            # makes its churn charts and metrics update on every retrain.
+            "evaluation": evaluation_payload(bundles[best]),
+            "evaluations": {name: evaluation_payload(b) for name, b in bundles.items()},
         }
         st.success(f"Trained {len(bundles)} model(s). Best test ROC-AUC: {best}.")
 
 bundles = st.session_state.get("churn_bundles")
+metadata = st.session_state.get("churn_model_metadata") or {}
+selection_table = churn_selection_table(metadata, bundles)
+if not selection_table.empty:
+    section_header(
+        "Model comparison",
+        "Held-out test scores for every trained candidate; the operational pick "
+        "is the model used to score customers.",
+    )
+    render_table(selection_table)
+
 if bundles:
     with st.expander("Test metrics (validation-max-F1 threshold)", expanded=False):
         st.dataframe(
@@ -281,9 +300,58 @@ if bundles:
             **st.session_state.get("churn_model_metadata", {}),
             "threshold": threshold,
             "model": detail,
+            "evaluation": evaluation_payload(bundle),
         }
         path = save_churn_run(bundle, f"{detail}_{bundle['cutoff']}")
         st.success(f"Scored {len(scores)} customers. Model saved at {path}.")
+
+elif cached_evaluation := metadata.get("evaluation"):
+    # The default run persists evaluation payloads but not live training bundles.
+    # Draw the same quality charts from that payload so a fresh session sees the
+    # churn model's evidence, not just its scores.
+    section_header(
+        "Cached model evaluation",
+        "Cached from the last scored model — train here to refresh with new results.",
+    )
+    cached_metrics = cached_evaluation.get("test_metrics") or {}
+    if cached_metrics:
+        metric_row(
+            [
+                Metric("Test ROC-AUC", formatting.fmt_float(cached_metrics.get("roc_auc"), 3)),
+                Metric("Test PR-AUC", formatting.fmt_float(cached_metrics.get("pr_auc"), 3)),
+                Metric("Recall at threshold", formatting.fmt_pct(cached_metrics.get("recall"))),
+                Metric("Brier score", formatting.fmt_float(cached_metrics.get("brier"), 3)),
+            ]
+        )
+    cached_curves = (
+        ("ROC curve", "roc", lambda frame: roc_points_fig(frame, cached_metrics.get("roc_auc"))),
+        ("Calibration curve", "calibration_curve", calibration_curve_fig),
+        ("Cumulative gain", "gain", gain_chart_fig),
+    )
+    for title, key, factory in cached_curves:
+        frame = pd.DataFrame(cached_evaluation.get(key) or [])
+        if frame.empty:
+            continue
+        with chart_section(title):
+            st.plotly_chart(
+                without_title(factory(frame)), width="stretch", key=f"churn_cached_{key}"
+            )
+    cached_confusion = cached_metrics.get("confusion") or {}
+    if cached_confusion:
+        with chart_section("Confusion matrix"):
+            st.plotly_chart(
+                without_title(confusion_fig(cached_confusion)),
+                width="stretch",
+                key="churn_cached_confusion",
+            )
+    importance = pd.DataFrame(cached_evaluation.get("importance") or [])
+    if not importance.empty:
+        with chart_section("Global feature importance"):
+            st.plotly_chart(
+                without_title(importance_bar_fig(importance)),
+                width="stretch",
+                key="churn_cached_importance",
+            )
 
 scores = st.session_state.get("churn_scores")
 if scores is not None:

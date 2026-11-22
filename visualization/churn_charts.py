@@ -44,6 +44,37 @@ def roc_curve_fig(y_true: np.ndarray, proba: np.ndarray) -> go.Figure:
 
 
 @styled
+def roc_points_fig(table: pd.DataFrame, auc_value: float | None = None) -> go.Figure:
+    """ROC curve from precomputed FPR/TPR points (report-safe, label-free).
+
+    The churn page draws its ROC from the raw test labels, but the report only
+    carries the serialized curve. This factory lets both read the same shape
+    without the report holding onto the estimator or the test split.
+    """
+    needed = {"fpr", "tpr"}
+    if table.empty or not needed <= set(table.columns):
+        return empty_figure("ROC curve")
+    name = f"AUC {auc_value:.3f}" if auc_value is not None else "model"
+    fig = go.Figure()
+    fig.add_trace(
+        go.Scatter(
+            x=table["fpr"],
+            y=table["tpr"],
+            mode="lines",
+            line={"color": PRIMARY},
+            name=name,
+        )
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=[0, 1], y=[0, 1], mode="lines", line={"dash": "dash", "color": MUTED}, name="chance"
+        )
+    )
+    fig.update_layout(title="ROC curve", xaxis_title="FPR", yaxis_title="TPR")
+    return fig
+
+
+@styled
 def calibration_curve_fig(table: pd.DataFrame) -> go.Figure:
     """Observed rate vs mean predicted per bin, sized by bin count."""
     if table.empty:

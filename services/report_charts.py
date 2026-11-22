@@ -130,12 +130,15 @@ def _horizontal_bars(
     values: list[float],
     colors: list[str],
     money: bool = False,
+    number_format: str = "int",
 ) -> bytes:
     """Horizontal bar chart with value labels (long category names stay legible).
 
     ``money`` picks the axis and label format: compact currency when the values
     are revenue, whole integers when they are counts. The figure grows with the
     category count so ten segments stay legible instead of crushing the labels.
+    ``number_format='float'`` labels small fractional values (feature importance)
+    to three decimals instead of rounding them to zero.
     """
     height = min(5.2, max(_FIGSIZE[1], 0.32 * len(values) + 1.0))
     fig, ax = _axes((_FIGSIZE[0], height))
@@ -151,8 +154,10 @@ def _horizontal_bars(
         ax.xaxis.set_major_formatter(FuncFormatter(lambda value, _pos: _compact_money(value)))
         end_labels = [_compact_money(value) for value in values]
     else:
-        ax.xaxis.set_major_locator(MaxNLocator(integer=True))
-        end_labels = [fmt_int(value) for value in values]
+        ax.xaxis.set_major_locator(MaxNLocator(integer=True if number_format == "int" else False))
+        end_labels = [
+            f"{value:.3f}" if number_format == "float" else fmt_int(value) for value in values
+        ]
     ax.bar_label(bars, labels=end_labels, padding=3, fontsize=7)
     top = max(values, default=0.0) * 1.18
     ax.set_xlim(0, top if top > 0 else 1)
@@ -346,7 +351,7 @@ def _demographics_region(context: dict[str, Any]) -> bytes | None:
 
 
 def _risk_bands(context: dict[str, Any]) -> bytes | None:
-    """Scored customers per churn risk band."""
+    """Scored customers per churn risk band, with revenue at risk when available."""
     mix = context.get("risk_mix") or {}
     if not isinstance(mix, dict) or not mix:
         return None
@@ -365,7 +370,165 @@ def _risk_bands(context: dict[str, Any]) -> bytes | None:
     ax.set_ylim(0, max(values, default=0) * 1.16)
     ax.yaxis.set_major_locator(MaxNLocator(integer=True))
     ax.yaxis.set_major_formatter(FuncFormatter(lambda value, _pos: fmt_int(value)))
+    revenue = context.get("risk_revenue") or {}
+    if isinstance(revenue, dict) and revenue:
+        twin = ax.twinx()
+        twin.plot(
+            x,
+            [float(revenue.get(band, 0.0)) for band in ordered],
+            color=_MUTED,
+            linestyle=":",
+            linewidth=1.8,
+            marker="o",
+            markersize=4,
+        )
+        twin.set_ylim(bottom=0)
+        twin.yaxis.set_major_formatter(FuncFormatter(lambda value, _pos: _compact_money(value)))
+        twin.tick_params(colors=_MUTED, labelsize=7.5)
+        twin.spines["top"].set_visible(False)
+        twin.spines["right"].set_color(_BORDER)
+        twin.set_ylabel("Revenue at risk", color=_MUTED, fontsize=8)
     return _save(fig)
+
+
+def _churn_evaluation(context: dict[str, Any]) -> dict[str, Any]:
+    """Evaluation detail block from the report context (empty dict when absent)."""
+    evaluation = context.get("churn_evaluation")
+    return evaluation if isinstance(evaluation, dict) else {}
+
+
+def _churn_roc(context: dict[str, Any]) -> bytes | None:
+    """ROC curve from the evaluation payload with chance diagonal."""
+    evaluation = _churn_evaluation(context)
+    table = _as_frame(evaluation.get("roc"))
+    if table is None or not {"fpr", "tpr"} <= set(table.columns):
+        return None
+    fig, ax = _axes((_FIGSIZE[0], 3.4))
+    ax.plot(table["fpr"], table["tpr"], color=_PRIMARY, linewidth=2)
+    ax.plot([0, 1], [0, 1], color=_MUTED, linestyle="--", linewidth=1)
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, 1.02)
+    ax.grid(axis="x", color=_GRID, linewidth=0.9)
+    ax.set_xlabel("False-positive rate", color=_MUTED, fontsize=8)
+    ax.set_ylabel("True-positive rate", color=_MUTED, fontsize=8)
+    auc = (evaluation.get("test_metrics") or {}).get("roc_auc")
+    label = f"ROC-AUC {float(auc):.3f}" if isinstance(auc, (int, float)) else "ROC"
+    ax.text(0.98, 0.04, label, ha="right", va="bottom", color=_MUTED, fontsize=8)
+    return _save(fig)
+
+
+def _churn_calibration(context: dict[str, Any]) -> bytes | None:
+    """Observed churn rate against mean predicted probability per bin."""
+    table = _as_frame(_churn_evaluation(context).get("calibration_curve"))
+    if table is None or not {"mean_predicted", "observed_rate"} <= set(table.columns):
+        return None
+    counts = (
+        pd.to_numeric(table["count"], errors="coerce").fillna(1.0)
+        if "count" in table.columns
+        else pd.Series(1.0, index=table.index)
+    )
+    sizes = 24 + 260 * np.sqrt(counts / max(float(counts.max()), 1.0))
+    fig, ax = _axes((_FIGSIZE[0], 3.4))
+    ax.plot([0, 1], [0, 1], color=_MUTED, linestyle="--", linewidth=1)
+    ax.scatter(
+        table["mean_predicted"],
+        table["observed_rate"],
+        s=sizes.to_numpy(),
+        color=_PRIMARY,
+        alpha=0.7,
+        edgecolors="white",
+        linewidths=0.5,
+    )
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, 1)
+    ax.grid(axis="x", color=_GRID, linewidth=0.9)
+    ax.set_xlabel("Mean predicted probability", color=_MUTED, fontsize=8)
+    ax.set_ylabel("Observed churn rate", color=_MUTED, fontsize=8)
+    return _save(fig)
+
+
+def _churn_confusion(context: dict[str, Any]) -> bytes | None:
+    """2×2 confusion matrix at the chosen decision threshold."""
+    confusion = _churn_evaluation(context).get("confusion") or {}
+    needed = {"tn", "fp", "fn", "tp"}
+    if not isinstance(confusion, dict) or not needed <= set(confusion):
+        return None
+    matrix = np.array(
+        [[int(confusion["tn"]), int(confusion["fp"])], [int(confusion["fn"]), int(confusion["tp"])]]
+    )
+    fig, ax = _axes((_FIGSIZE[0] * 0.62, 3.0))
+    ax.imshow(matrix, cmap="Blues", aspect="auto")
+    ax.set_xticks([0, 1], ["Pred 0", "Pred 1"])
+    ax.set_yticks([0, 1], ["True 0", "True 1"])
+    ax.grid(False)
+    peak = max(int(matrix.max()), 1)
+    for row in range(2):
+        for col in range(2):
+            value = int(matrix[row, col])
+            ax.text(
+                col,
+                row,
+                f"{value:,}",
+                ha="center",
+                va="center",
+                fontsize=11,
+                color="white" if value > peak * 0.6 else _LIGHT["text"],
+            )
+    ax.tick_params(colors=_MUTED, labelsize=8)
+    return _save(fig)
+
+
+def _churn_gain(context: dict[str, Any]) -> bytes | None:
+    """Cumulative gain by decile against random targeting."""
+    table = _as_frame(_churn_evaluation(context).get("gain"))
+    if table is None or not {"decile", "cum_gain"} <= set(table.columns):
+        return None
+    data = table[["decile", "cum_gain"]].copy()
+    data["decile"] = pd.to_numeric(data["decile"], errors="coerce")
+    data["cum_gain"] = pd.to_numeric(data["cum_gain"], errors="coerce")
+    data = data.dropna()
+    if data.empty:
+        return None
+    fig, ax = _axes((_FIGSIZE[0], 3.4))
+    ax.plot(
+        data["decile"],
+        data["cum_gain"] * 100,
+        color=_PRIMARY,
+        linewidth=2,
+        marker="o",
+        markersize=4,
+        label="Model",
+    )
+    ax.plot(
+        data["decile"],
+        data["decile"] / max(float(data["decile"].max()), 1.0) * 100,
+        color=_MUTED,
+        linestyle="--",
+        linewidth=1,
+        label="Random targeting",
+    )
+    ax.legend(frameon=False, fontsize=7, loc="lower right", labelcolor=_MUTED)
+    ax.set_ylim(0, 102)
+    ax.grid(axis="x", color=_GRID, linewidth=0.9)
+    ax.set_xlabel("Decile (highest risk first)", color=_MUTED, fontsize=8)
+    ax.set_ylabel("Share of churners captured (%)", color=_MUTED, fontsize=8)
+    return _save(fig)
+
+
+def _churn_importance(context: dict[str, Any]) -> bytes | None:
+    """Top permutation importances for the scored churn model."""
+    table = _as_frame(_churn_evaluation(context).get("importance"))
+    if table is None or not {"feature", "importance"} <= set(table.columns):
+        return None
+    data = table.head(12).copy()
+    data["importance"] = pd.to_numeric(data["importance"], errors="coerce").fillna(0.0)
+    data = data.sort_values("importance", ascending=True)
+    return _horizontal_bars(
+        [_short(str(value), 28) for value in data["feature"]],
+        [float(value) for value in data["importance"]],
+        [_PRIMARY] * len(data),
+        number_format="float",
+    )
 
 
 def _value_risk_matrix(context: dict[str, Any]) -> bytes | None:
@@ -605,6 +768,11 @@ CHART_BUILDERS: dict[str, Callable[[dict[str, Any]], bytes | None]] = {
     "comparison_value": _comparison_value,
     "comparison_evenness": _comparison_evenness,
     "risk_bands": _risk_bands,
+    "churn_roc": _churn_roc,
+    "churn_calibration": _churn_calibration,
+    "churn_confusion": _churn_confusion,
+    "churn_gain": _churn_gain,
+    "churn_importance": _churn_importance,
     "value_risk_matrix": _value_risk_matrix,
     "revenue_at_risk": _revenue_at_risk,
     "strategy_distribution": _strategy_distribution,

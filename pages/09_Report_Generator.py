@@ -32,6 +32,8 @@ from services.report_service import (
     build_docx_bytes,
     build_pdf_bytes,
     build_report_context,
+    churn_details_table,
+    churn_selection_display,
     context_tables,
     context_to_excel_bytes,
     render_html_report,
@@ -40,7 +42,14 @@ from services.report_service import (
 from utils import formatting
 from utils.exceptions import CustomerIntelligenceError
 from utils.logging_config import configure_logging
-from visualization.churn_charts import risk_band_bar
+from visualization.churn_charts import (
+    calibration_curve_fig,
+    confusion_fig,
+    gain_chart_fig,
+    importance_bar_fig,
+    risk_band_bar,
+    roc_points_fig,
+)
 from visualization.demographic_charts import age_band_bar, gender_bar, top_geo_bar
 from visualization.executive_dashboard import (
     activity_trend_fig,
@@ -82,6 +91,11 @@ if clean_data is None:
     st.stop()
 
 context = build_report_context(st.session_state)
+st.caption(
+    f"Rebuilt from current session results at {context['generated_at']} · source revision "
+    f"{context['input_fingerprint']}. Any data, model, threshold, or scoring change on the "
+    "upstream pages is reflected here and in every download on the next render."
+)
 
 with st.expander("Readiness", expanded=False):
     for label, ready, hint in report_readiness_lines(context):
@@ -453,11 +467,17 @@ def _render_comparison() -> None:
 
 
 def _render_churn() -> None:
-    section_header("5 · Churn risk", "Where the modeled at-risk pool concentrates.")
+    section_header(
+        "5 · Churn risk",
+        "Where the modeled at-risk pool concentrates, and how well the model separates it.",
+    )
     if scores is None or scores.empty:
         empty_state("No churn scores yet", "Train and score on Churn Prediction first.")
         return
     bands = scores["risk_band"] if "risk_band" in scores.columns else None
+    selection = context.get("churn_selection") or {}
+    evaluation = context.get("churn_evaluation") or {}
+    metrics = evaluation.get("test_metrics") or {}
     metric_row(
         [
             Metric(
@@ -479,14 +499,128 @@ def _render_churn() -> None:
             ),
         ]
     )
+    if selection:
+        metric_row(
+            [
+                Metric("Churn model", str(selection.get("selected") or "–")),
+                Metric(
+                    "Candidates compared",
+                    formatting.fmt_int(selection.get("n_candidates", 0)),
+                ),
+                Metric(
+                    "Selected ROC-AUC",
+                    formatting.fmt_float(selection.get("best_auc"), 3),
+                ),
+            ]
+        )
+    if metrics:
+        metric_row(
+            [
+                Metric("Test ROC-AUC", formatting.fmt_float(metrics.get("roc_auc"), 3)),
+                Metric("Test PR-AUC", formatting.fmt_float(metrics.get("pr_auc"), 3)),
+                Metric("Recall at threshold", formatting.fmt_pct(metrics.get("recall"))),
+                Metric("Brier score", formatting.fmt_float(metrics.get("brier"), 3)),
+            ]
+        )
+    risk_view = scores
+    if (
+        retention is not None
+        and {"customer_id", "revenue_at_risk"} <= set(retention.columns)
+        and "customer_id" in scores.columns
+    ):
+        risk_view = scores.merge(
+            retention[["customer_id", "revenue_at_risk"]], on="customer_id", how="left"
+        )
     with chart_section("Customers per risk band"):
         st.plotly_chart(
-            _register("risk_bands", without_title(risk_band_bar(scores))),
+            _register(
+                "risk_bands",
+                without_title(
+                    risk_band_bar(
+                        risk_view,
+                        revenue_col=("revenue_at_risk" if "revenue_at_risk" in risk_view else None),
+                    )
+                ),
+            ),
             width="stretch",
             key="rep_risk",
         )
     _explain("risk_bands")
+
+    def _eval_card(column, key: str, title: str, figure) -> None:
+        """One evaluation chart with its shared reading guide."""
+        with column:
+            with chart_section(title):
+                st.plotly_chart(
+                    _register(key, without_title(figure)),
+                    width="stretch",
+                    key=f"rep_{key}",
+                )
+            _explain(key)
+
+    roc = evaluation.get("roc")
+    calibration = evaluation.get("calibration_curve")
+    roc_ready = isinstance(roc, pd.DataFrame) and not roc.empty
+    calibration_ready = isinstance(calibration, pd.DataFrame) and not calibration.empty
+    if roc_ready or calibration_ready:
+        left, right = st.columns(2)
+        if roc_ready:
+            _eval_card(
+                left,
+                "churn_roc",
+                "ROC curve",
+                roc_points_fig(roc, metrics.get("roc_auc")),
+            )
+        else:
+            with left:
+                empty_state("No ROC curve", "Retrain the churn model to record test predictions.")
+        if calibration_ready:
+            _eval_card(
+                right, "churn_calibration", "Calibration curve", calibration_curve_fig(calibration)
+            )
+        else:
+            with right:
+                empty_state(
+                    "No calibration curve", "Retrain the churn model to record test predictions."
+                )
+
+    confusion = evaluation.get("confusion") or {}
+    gain = evaluation.get("gain")
+    gain_ready = isinstance(gain, pd.DataFrame) and not gain.empty
+    if confusion or gain_ready:
+        left, right = st.columns(2)
+        if confusion:
+            _eval_card(left, "churn_confusion", "Confusion matrix", confusion_fig(confusion))
+        else:
+            with left:
+                empty_state("No confusion matrix", "Retrain and score to record test predictions.")
+        if gain_ready:
+            _eval_card(right, "churn_gain", "Cumulative gain", gain_chart_fig(gain))
+        else:
+            with right:
+                empty_state("No gain table", "Retrain the churn model to record test predictions.")
+
+    importance = evaluation.get("importance")
+    if isinstance(importance, pd.DataFrame) and not importance.empty:
+        with chart_section("Global feature importance"):
+            st.plotly_chart(
+                _register(
+                    "churn_importance",
+                    without_title(importance_bar_fig(importance)),
+                ),
+                width="stretch",
+                key="rep_churn_importance",
+            )
+        _explain("churn_importance")
+
     _insights("churn")
+    details = churn_details_table(context)
+    if not details.empty:
+        with st.expander("Scored model detail (threshold, window, splits, test metrics)"):
+            render_table(details)
+    if selection:
+        with st.expander("Churn model scores & operational pick", expanded=True):
+            render_table(churn_selection_display(selection["table"]))
     with st.expander("Top-risk customers (IDs masked unless authorized)", expanded=False):
         top_risk = scores.sort_values("churn_probability", ascending=False).head(int(top_n))
         render_table(_maybe_mask(top_risk), risk_cols=("risk_band",))

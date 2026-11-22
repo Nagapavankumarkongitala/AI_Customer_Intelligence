@@ -13,9 +13,12 @@ from services.report_service import (
     build_docx_bytes,
     build_pdf_bytes,
     build_report_context,
+    churn_details_table,
+    churn_selection_table,
     context_tables,
     context_to_excel_bytes,
     render_html_report,
+    report_readiness_lines,
 )
 
 
@@ -65,7 +68,29 @@ def _sample_state() -> dict:
         "segmented_customers": None,
         "churn_scores": scores,
         "retention_results": {"table": retention.to_dict(orient="records"), "summary": {}},
-        "churn_model_metadata": {"model": "rf", "threshold": 0.5, "cutoff": "2024-06-01"},
+        "churn_model_metadata": {
+            "model": "rf",
+            "threshold": 0.5,
+            "cutoff": "2024-06-01",
+            "candidates": [
+                {
+                    "model": "rf",
+                    "roc_auc": 0.71,
+                    "pr_auc": 0.62,
+                    "f1": 0.55,
+                    "recall": 0.4,
+                    "threshold": 0.5,
+                },
+                {
+                    "model": "logreg",
+                    "roc_auc": 0.66,
+                    "pr_auc": 0.58,
+                    "f1": 0.52,
+                    "recall": 0.35,
+                    "threshold": 0.45,
+                },
+            ],
+        },
         "cleaning_audit": {},
         "column_mapping": {},
     }
@@ -80,6 +105,52 @@ def test_build_report_context_flags_and_kpis() -> None:
     assert context["kpis"]["total_customers"] == 3
     assert context["segment_portfolio"] is not None
     assert context["risk_mix"]["critical"] == 1
+    assert context["churn_selection"]["selected"] == "rf"
+    assert context["churn_selection"]["n_candidates"] == 2
+
+
+def test_churn_model_selection_reaches_every_export() -> None:
+    """The scored model and its candidate comparison are reportable, not implicit."""
+    context = build_report_context(_sample_state())
+    selection = context["churn_selection"]
+    assert selection["table"]["selected"].sum() == 1
+    assert selection["table"].iloc[0]["model"] == "rf"
+    assert "highest test ROC-AUC" in selection["rationale"]
+
+    tables = context_tables(context, mask_ids=True)
+    assert "Churn_Model_Selection" in tables
+    assert set(tables["Churn_Model_Selection"]["Model"]) == {"rf", "logreg"}
+
+    html_report = render_html_report(context, figures_html={}, mask_ids=True)
+    assert "Model selection" in html_report
+    assert "Candidate metrics are from the held-out test split" in html_report
+
+    pdf = build_pdf_bytes(context, chart_images={})
+    assert pdf[:4] == b"%PDF"
+
+    docx = build_docx_bytes(context, chart_images={})
+    archive = zipfile.ZipFile(io.BytesIO(docx))
+    assert "Model selection" in archive.read("word/document.xml").decode("utf-8")
+
+
+def test_churn_selection_table_flags_operational_pick() -> None:
+    """The candidate table marks exactly the model used for scoring."""
+    state = _sample_state()
+    table = churn_selection_table(state["churn_model_metadata"])
+    assert list(table["Model"]) == ["rf", "logreg"]  # best score first
+    assert table["Operational pick"].eq("yes").sum() == 1
+    assert table.iloc[0]["Operational pick"] == "yes"
+    assert table.iloc[1]["Operational pick"] == ""
+
+
+def test_near_chance_churn_selection_is_flagged() -> None:
+    """A top ROC-AUC close to 0.5 is called out as prioritization-only signal."""
+    state = _sample_state()
+    state["churn_model_metadata"]["candidates"][0]["roc_auc"] = 0.51
+    context = build_report_context(state)
+    selection = context["churn_selection"]
+    assert selection["near_chance"] is True
+    assert "chance line" in selection["rationale"]
 
 
 def test_empty_state_reports_pending() -> None:
@@ -305,3 +376,181 @@ def test_comparison_scorecard_text_blanks_missing_metrics() -> None:
     rfm_row = text.loc[text["model"] == "RFM"].iloc[0]
     assert rfm_row["silhouette"] == ""
     assert "nan" not in text.to_string().lower()
+
+
+def _churn_bundle() -> dict:
+    """A small trained-bundle stand-in with the evaluation artifacts reports read."""
+    import numpy as np
+
+    from churn.evaluation import classification_metrics
+
+    rng = np.random.default_rng(42)
+    y_true = np.array([0] * 20 + [1] * 20)
+    proba = np.clip(
+        np.concatenate([rng.normal(0.3, 0.1, 20), rng.normal(0.7, 0.1, 20)]), 0.01, 0.99
+    )
+    return {
+        "model_name": "rf",
+        "suggested_threshold": 0.45,
+        "calibration": "sigmoid on validation",
+        "cutoff": "2024-06-01",
+        "horizon_days": 90,
+        "splits": {"train": 60, "val": 15, "test": 40},
+        "test_metrics": classification_metrics(y_true, proba, threshold=0.45),
+        "val_metrics": classification_metrics(y_true, proba, threshold=0.45),
+        "test_proba": proba,
+        "test_y": y_true,
+        "importance": pd.DataFrame(
+            {
+                "feature": ["recency_days", "frequency", "monetary"],
+                "importance": [0.12, 0.05, 0.01],
+            }
+        ),
+    }
+
+
+def test_churn_evaluation_detail_reaches_context_and_exports() -> None:
+    """Curves, confusion, importance, and model detail travel to every export."""
+    state = _sample_state()
+    bundle = _churn_bundle()
+    state["churn_bundles"] = {"rf": bundle}
+    state["churn_model_metadata"]["evaluation"] = {
+        "model": "rf",
+        "threshold": 0.45,
+        "test_metrics": bundle["test_metrics"],
+        "val_metrics": bundle["val_metrics"],
+        "splits": bundle["splits"],
+        "calibration": bundle["calibration"],
+        "cutoff": bundle["cutoff"],
+        "horizon_days": bundle["horizon_days"],
+        "roc": [{"fpr": 0.0, "tpr": 0.0}, {"fpr": 0.2, "tpr": 0.8}, {"fpr": 1.0, "tpr": 1.0}],
+        "calibration_curve": [{"mean_predicted": 0.2, "observed_rate": 0.15, "count": 10}],
+        "gain": [{"decile": 1, "cum_gain": 0.5}, {"decile": 2, "cum_gain": 1.0}],
+        "importance": [
+            {"feature": "recency_days", "importance": 0.12},
+            {"feature": "frequency", "importance": 0.05},
+        ],
+    }
+    context = build_report_context(state)
+    evaluation = context["churn_evaluation"]
+    assert evaluation["model"] == "rf"
+    assert evaluation["roc"] is not None and not evaluation["roc"].empty
+    assert evaluation["calibration_curve"] is not None
+    assert evaluation["gain"] is not None
+    assert evaluation["importance"] is not None
+    assert evaluation["confusion"]["tp"] >= 0
+    assert context["input_fingerprint"]
+
+    details = context_tables(context)["Churn_Model_Details"]
+    assert "Test ROC-AUC" in set(details["metric"])
+    assert "Churn_Feature_Importance" in context_tables(context)
+
+    html_report = render_html_report(context, figures_html={}, mask_ids=True)
+    for title in (
+        "ROC curve — churn model",
+        "Calibration curve — churn model",
+        "Confusion matrix — churn model",
+        "Cumulative gain — churn model",
+        "Global feature importance — churn model",
+        "Scored model detail",
+    ):
+        assert title in html_report, title
+
+    charts = render_report_charts(context)
+    assert {
+        "churn_roc",
+        "churn_calibration",
+        "churn_confusion",
+        "churn_gain",
+        "churn_importance",
+    } <= set(charts)
+    assert build_pdf_bytes(context, chart_images=charts)[:4] == b"%PDF"
+    docx = build_docx_bytes(context, chart_images=charts)
+    document = zipfile.ZipFile(io.BytesIO(docx)).read("word/document.xml").decode("utf-8")
+    assert "Scored model detail" in document
+
+
+def test_churn_evaluation_falls_back_to_cached_payload() -> None:
+    """A session restored from cache keeps its churn charts without bundles."""
+    from services.churn_service import evaluation_payload
+
+    state = _sample_state()
+    payload = evaluation_payload(_churn_bundle())
+    state["churn_model_metadata"].update(
+        {"metrics": payload["test_metrics"], "evaluation": payload, "horizon_days": 90}
+    )
+    context = build_report_context(state)
+    evaluation = context["churn_evaluation"]
+    assert evaluation["roc"] is not None
+    assert "churn_roc" in render_report_charts(context)
+    # Flat cached metrics still yield a detail block even without curve payloads.
+    state["churn_model_metadata"].pop("evaluation")
+    fallback = build_report_context(state)
+    assert fallback["churn_evaluation"]["roc"] is None
+    assert not churn_details_table(fallback).empty
+
+
+def test_churn_details_flag_a_saturated_threshold() -> None:
+    """A threshold that flags every test customer is called out beside the confusion."""
+    state = _sample_state()
+    state["churn_model_metadata"]["evaluation"] = {
+        "model": "rf",
+        "threshold": 0.05,
+        "test_metrics": {
+            "roc_auc": 0.51,
+            "pr_auc": 0.86,
+            "precision": 0.86,
+            "recall": 1.0,
+            "f1": 0.93,
+            "balanced_accuracy": 0.5,
+            "n": 40,
+            "positive_rate": 0.875,
+            "confusion": {"tn": 0, "fp": 5, "fn": 0, "tp": 35},
+        },
+    }
+    details = churn_details_table(build_report_context(state))
+    values = details.set_index("metric")["value"]
+    assert "flags every test customer" in values["Threshold behaviour"]
+    assert "TN 0" in values["Confusion (test)"]
+
+    # Non-saturated thresholds keep the table free of the caveat row.
+    state["churn_model_metadata"]["evaluation"]["test_metrics"]["confusion"] = {
+        "tn": 4,
+        "fp": 1,
+        "fn": 2,
+        "tp": 33,
+    }
+    clean = churn_details_table(build_report_context(state))
+    assert "Threshold behaviour" not in set(clean["metric"])
+
+
+def test_readiness_requires_churn_curves_not_just_metadata() -> None:
+    """Flat metrics alone must not report the evaluation checklist as ready."""
+    state = _sample_state()
+    fresh = build_report_context(state)
+    lines = {label: ready for label, ready, _ in report_readiness_lines(fresh)}
+    assert lines["Churn model evaluation"] is False
+
+    state["churn_model_metadata"]["evaluation"] = {
+        "model": "rf",
+        "threshold": 0.45,
+        "test_metrics": {"roc_auc": 0.71, "precision": 0.6, "recall": 0.5, "n": 40},
+        "roc": [{"fpr": 0.0, "tpr": 0.0}, {"fpr": 1.0, "tpr": 1.0}],
+    }
+    lines = {
+        label: ready for label, ready, _ in report_readiness_lines(build_report_context(state))
+    }
+    assert lines["Churn model evaluation"] is True
+
+
+def test_report_fingerprint_tracks_input_changes() -> None:
+    """The source revision changes when data, scores, or metadata change."""
+    state = _sample_state()
+    first = build_report_context(state)["input_fingerprint"]
+    assert build_report_context(state)["input_fingerprint"] == first
+    changed = dict(state)
+    changed["churn_scores"] = state["churn_scores"].assign(churn_probability=[0.1, 0.2, 0.3])
+    assert build_report_context(changed)["input_fingerprint"] != first
+    repriced = dict(state)
+    repriced["churn_model_metadata"] = {**state["churn_model_metadata"], "threshold": 0.61}
+    assert build_report_context(repriced)["input_fingerprint"] != first

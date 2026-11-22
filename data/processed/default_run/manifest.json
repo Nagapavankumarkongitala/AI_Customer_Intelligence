@@ -3,7 +3,7 @@
   "cache_version": 6,
   "source_mtime": 1792501887.0295424,
   "source_size": 17557335,
-  "built_at": "2026-10-20T23:46:30.169986",
+  "built_at": "2026-11-17T20:21:36.049214",
   "rows": 250000,
   "customers": 39903,
   "cleaned_rows": 245989,
@@ -12,7 +12,6 @@
   "lrfm_segments": 10,
   "segment_history_granularity": "quarterly",
   "segment_history_periods": 8,
-  "segment_transition_rows": 790,
   "segmentation_models": [
     "kmeans",
     "gmm",
@@ -23,6 +22,7 @@
   "selected_segmentation_model": "gmm",
   "churn_models": [
     "histgb",
+    "lightgbm",
     "logreg",
     "random_forest",
     "xgboost"
@@ -32,9 +32,5 @@
   "churn_rate": 0.8604,
   "retention_customers": 39903,
   "segmentation_path": "models\\segmentation\\default_gmm_k5.joblib",
-  "churn_path": "models\\churn\\default_histgb_2026-07-08.joblib",
-  "segmentation_recommendation": {
-    "operational_pick": "AI:gmm",
-    "rationale": "Best statistical separation: AI:kmeans. Best stability: AI:gmm. Best interpretability: AI:gmm. Best revenue differentiation: AI:kmeans. Operational pick: AI:gmm (cleared stability \u2265 0.5, min share \u2265 0.05, noise < 15.0%). A silhouette-only rule would have chosen AI:kmeans; override it below if the evidence says otherwise."
-  }
+  "churn_path": "models\\churn\\default_histgb_2026-07-08.joblib"
 }

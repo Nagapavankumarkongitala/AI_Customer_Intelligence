@@ -118,6 +118,7 @@ def main() -> int:
                 "calibration": b["calibration"],
                 "cutoff": b["cutoff"],
                 "horizon_days": b["horizon_days"],
+                "evaluation": churn_service.evaluation_payload(b),
             }
             for name, b in bundles.items()
         },

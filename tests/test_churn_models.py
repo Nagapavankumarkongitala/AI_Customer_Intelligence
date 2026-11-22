@@ -14,7 +14,12 @@ from churn.evaluation import (
 )
 from churn.explainability import customer_risk_drivers, feature_names_of, shap_values
 from churn.predict import assign_band, score_customers
-from services.churn_service import available_models, time_split, train_churn_model
+from services.churn_service import (
+    available_models,
+    model_selection_rows,
+    time_split,
+    train_churn_model,
+)
 from utils.exceptions import CustomerIntelligenceError, InsufficientDataError
 
 EXPECTED_SCORE_COLS = [
@@ -84,6 +89,33 @@ def test_time_split_order_and_minimum() -> None:
                 labeling=small.labeling,
             )
         )
+
+
+def test_model_selection_rows_normalize_bundles_and_cached_metadata() -> None:
+    """Training bundles and persisted metadata produce the same reportable rows."""
+    bundles = {
+        "rf": {
+            "test_metrics": {"roc_auc": 0.61, "pr_auc": 0.52, "f1": 0.44, "recall": 0.39},
+            "suggested_threshold": 0.42,
+        },
+        "logreg": {
+            "test_metrics": {"roc_auc": 0.57, "pr_auc": 0.48, "f1": 0.41, "recall": 0.36},
+            "suggested_threshold": 0.35,
+        },
+    }
+    cached = {
+        "rf": {
+            "metrics": bundles["rf"]["test_metrics"],
+            "threshold": 0.42,
+        },
+        "logreg": {
+            "metrics": bundles["logreg"]["test_metrics"],
+            "threshold": 0.35,
+        },
+    }
+    assert model_selection_rows(bundles) == model_selection_rows(cached)
+    assert [row["model"] for row in model_selection_rows(bundles)] == ["logreg", "rf"]
+    assert model_selection_rows(bundles)[1]["roc_auc"] == 0.61
 
 
 def test_baseline_models_separate_cleanly() -> None:
@@ -313,3 +345,25 @@ def test_customer_drivers_pick_risky_side() -> None:
     drivers = customer_risk_drivers(row, medians, importance, {"frequency": -1})
     assert any("recency_days" in d for d in drivers)
     assert not any("frequency" in d for d in drivers)  # high frequency is protective
+
+
+def test_evaluation_payload_is_json_safe_and_report_complete() -> None:
+    """A trained bundle serializes curves, confusion, metrics, and importances."""
+    import json
+
+    from services.churn_service import evaluation_payload
+
+    bundle = train_churn_model(_dataset(), "logreg", calibrate=False)
+    payload = evaluation_payload(bundle)
+    json.dumps(payload)  # report caches persist this as JSON
+    assert payload["model"] == "logreg"
+    assert payload["roc"] and {"fpr", "tpr"} <= set(payload["roc"][0])
+    assert payload["calibration_curve"]
+    assert payload["gain"][-1]["cum_gain"] == 1.0
+    assert payload["importance"]
+    assert payload["test_metrics"]["confusion"]["tp"] >= 0
+    assert payload["splits"]["test"] > 0
+    # Existing flat metadata still normalizes through the same selection rows.
+    assert (
+        model_selection_rows({"logreg": bundle})[0]["roc_auc"] == payload["test_metrics"]["roc_auc"]
+    )

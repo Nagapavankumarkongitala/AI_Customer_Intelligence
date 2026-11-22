@@ -1,6 +1,6 @@
 # Model Card — default_histgb_2026-07-08
 
-Date: 2026-10-21
+Date: 2026-11-17
 
 ## Purpose
 Leakage-safe churn classification with histgb.

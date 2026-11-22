@@ -16,7 +16,12 @@ import pandas as pd
 from churn.baseline_models import BASELINE_ESTIMATORS, build_model_pipeline, oversample_minority
 from churn.calibration import calibrate_on_validation
 from churn.dataset_builder import ChurnDataset
-from churn.evaluation import classification_metrics, suggest_threshold
+from churn.evaluation import (
+    calibration_table,
+    classification_metrics,
+    lift_gain_table,
+    suggest_threshold,
+)
 from churn.explainability import global_importance
 from churn.predict import score_customers
 from churn.train_lightgbm import MODEL_NAME as LGBM_NAME
@@ -191,6 +196,88 @@ def _optional_float(value: Any) -> float | None:
     return number if np.isfinite(number) else None
 
 
+def _json_safe(value: Any) -> Any:
+    """Recursively coerce numpy scalars/arrays into JSON-serializable values."""
+    if isinstance(value, Mapping):
+        return {str(key): _json_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(item) for item in value]
+    if isinstance(value, np.generic):
+        return value.item()
+    if isinstance(value, np.ndarray):
+        return [_json_safe(item) for item in value.tolist()]
+    if isinstance(value, float) and not np.isfinite(value):
+        return None
+    return value
+
+
+def evaluation_payload(bundle: Mapping[str, Any]) -> dict[str, Any]:
+    """Serializable evaluation detail for reports, exports, and model cards.
+
+    Captures the curves, confusion counts, and feature importances the churn
+    page renders, so every downstream view can show the same evaluation without
+    re-training or holding the estimator. Storing this payload in
+    ``churn_model_metadata['evaluation']`` is what keeps the report current when
+    a model is retrained or a different candidate is scored.
+    """
+    raw_y = bundle.get("test_y")
+    raw_proba = bundle.get("test_proba")
+    test_y = np.asarray([] if raw_y is None else raw_y, dtype=int)
+    test_proba = np.asarray([] if raw_proba is None else raw_proba, dtype=float)
+    roc_points: list[dict[str, float]] = []
+    calibration_rows: list[dict[str, Any]] = []
+    gain_rows: list[dict[str, Any]] = []
+    if len(test_y) and len(test_y) == len(test_proba):
+        try:
+            calibration_rows = [
+                {str(key): _json_safe(value) for key, value in row.items()}
+                for row in calibration_table(test_y, test_proba).to_dict(orient="records")
+            ]
+            gain_rows = [
+                {str(key): _json_safe(value) for key, value in row.items()}
+                for row in lift_gain_table(test_y, test_proba).to_dict(orient="records")
+            ]
+            if len(np.unique(test_y)) > 1:
+                from sklearn.metrics import roc_curve
+
+                fpr, tpr, _ = roc_curve(test_y, test_proba)
+                # Evenly thin the curve so cached metadata stays small; the
+                # endpoints and overall shape are preserved for the report.
+                if len(fpr) > 250:
+                    picks = np.linspace(0, len(fpr) - 1, 250).round().astype(int)
+                    fpr, tpr = fpr[picks], tpr[picks]
+                roc_points = [
+                    {"fpr": round(float(x), 5), "tpr": round(float(y), 5)}
+                    for x, y in zip(fpr, tpr, strict=True)
+                ]
+        except (ValueError, TypeError):
+            # Sparse or single-class test slices leave the curves empty; the
+            # metrics and confusion counts still travel.
+            calibration_rows, gain_rows, roc_points = [], [], []
+    importance = bundle.get("importance")
+    importance_rows: list[dict[str, Any]] = []
+    if isinstance(importance, pd.DataFrame) and not importance.empty:
+        keep = [column for column in ("feature", "importance") if column in importance.columns]
+        importance_rows = [
+            {str(key): _json_safe(value) for key, value in row.items()}
+            for row in importance[keep].head(25).to_dict(orient="records")
+        ]
+    return {
+        "model": str(bundle.get("model_name") or ""),
+        "threshold": _optional_float(bundle.get("suggested_threshold")),
+        "calibration": str(bundle.get("calibration") or ""),
+        "cutoff": str(bundle.get("cutoff") or ""),
+        "horizon_days": int(bundle.get("horizon_days") or 0),
+        "splits": _json_safe(dict(bundle.get("splits") or {})),
+        "test_metrics": _json_safe(dict(bundle.get("test_metrics") or {})),
+        "val_metrics": _json_safe(dict(bundle.get("val_metrics") or {})),
+        "roc": roc_points,
+        "calibration_curve": calibration_rows,
+        "gain": gain_rows,
+        "importance": importance_rows,
+    }
+
+
 def score_all_customers(
     bundle: dict,
     scoring_frame: pd.DataFrame,
@@ -222,6 +309,7 @@ def save_churn_run(bundle: dict, run_name: str) -> str:
         "calibration": bundle["calibration"],
         "cutoff": bundle["cutoff"],
         "horizon_days": bundle["horizon_days"],
+        "evaluation": evaluation_payload(bundle),
     }
     path = save_model(bundle["pipeline"], f"models/churn/{run_name}.joblib", metadata)
     from utils.model_card import churn_card_metadata, write_model_card

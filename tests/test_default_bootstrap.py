@@ -2,6 +2,7 @@
 
 import json
 
+import pandas as pd
 import pytest
 
 from services import bootstrap_service, state_service
@@ -34,6 +35,30 @@ def test_load_populates_contract_keys() -> None:
         assert state[key] is not None, key
     assert state["retention_results"]["summary"]
     assert state["churn_model_metadata"]["model"] == manifest["selected_churn_model"]
+    # Page 07 gates on the live dataset object, not the summary dict: without
+    # this restore the churn page alone reports "No churn dataset yet".
+    from churn.dataset_builder import ChurnDataset
+
+    dataset = state["churn_dataset_obj"]
+    assert isinstance(dataset, ChurnDataset)
+    assert not dataset.frame.empty
+    assert len(dataset.frame) == state["churn_dataset"]["customers"]
+    assert dataset.feature_cols and dataset.categorical_cols
+    assert dataset.labeling is not None
+    assert dataset.labeling.cutoff == pd.Timestamp(state["churn_dataset"]["cutoff"])
+    assert dataset.leakage_ok is True
+    candidates = state["churn_model_metadata"]["candidates"]
+    assert candidates, "default run preloads the churn candidate comparison"
+    from services.churn_service import available_models
+
+    # Every estimator available in this environment must be in the cached run
+    # (lightgbm included once its optional dependency is installed).
+    expected_models = {name for name, warning in available_models().items() if warning is None}
+    assert set(manifest["churn_models"]) == expected_models
+    assert {row["model"] for row in candidates} == expected_models
+    assert any(
+        row["model"] == manifest["selected_churn_model"] for row in candidates
+    ), "the selected churn model is in the candidate set"
     history_state = state["segment_history"]
     assert history_state["table"], "default run preloads quarterly segment history"
     assert history_state["granularity"] == "quarterly"

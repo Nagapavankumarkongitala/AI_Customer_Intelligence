@@ -17,6 +17,7 @@ action or a model *causes* an outcome.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
@@ -67,6 +68,30 @@ def _top_row(frame: pd.DataFrame | None, by: str, ascending: bool = False) -> pd
     if frame is None or by not in frame.columns:
         return None
     return frame.sort_values(by, ascending=ascending).iloc[0]
+
+
+def _threshold_saturation(metrics: Mapping[str, Any], evaluation: Mapping[str, Any]) -> str:
+    """Caveat when the chosen threshold flags every held-out customer.
+
+    Recall cannot fall below 100% once a threshold predicts churn for the whole
+    test split, so precision and F1 mostly restate the base rate. Saying so
+    keeps a near-chance model from looking strong in the narrative.
+    """
+    confusion = metrics.get("confusion") or evaluation.get("confusion") or {}
+    if not isinstance(confusion, Mapping):
+        return ""
+    try:
+        true_negatives = int(confusion.get("tn") or 0)
+        flagged = int(confusion.get("tp") or 0) + int(confusion.get("fp") or 0)
+    except (TypeError, ValueError):
+        return ""
+    if true_negatives or not flagged:
+        return ""
+    return (
+        "At this threshold every test customer is flagged, so recall cannot fall below "
+        "100%; with a high base rate, precision and F1 mostly restate that base rate — "
+        "read the ranking and risk bands rather than the hard classification."
+    )
 
 
 def summary_insights(context: dict[str, Any]) -> tuple[Insight, ...]:
@@ -292,13 +317,94 @@ def _churn_insights(context: dict[str, Any]) -> tuple[Insight, ...]:
             )
         )
     meta = context.get("churn_metadata") or {}
-    if meta:
+    selection = context.get("churn_selection") or {}
+    if selection:
+        out.append(
+            Insight(
+                f"Churn model {selection.get('selected', meta.get('model', '–'))} · "
+                f"{formatting.fmt_int(selection.get('n_candidates', 0))} candidate(s) compared",
+                f"{selection.get('rationale', '')} Threshold {meta.get('threshold', '–')} · "
+                f"cutoff {meta.get('cutoff', '–')}. Predictors use transactions on or before the "
+                "cutoff only, and the label is activity after it — leakage-safe by construction.",
+            )
+        )
+    elif meta:
         out.append(
             Insight(
                 f"Model {meta.get('model', '–')} · threshold {meta.get('threshold', '–')} · "
                 f"cutoff {meta.get('cutoff', '–')}",
                 "Predictors use transactions on or before the cutoff only, and the label is "
                 "activity after it — leakage-safe by construction.",
+            )
+        )
+    evaluation = context.get("churn_evaluation") or {}
+    metrics = evaluation.get("test_metrics") or {}
+    dataset = context.get("churn_dataset") or {}
+    if dataset.get("customers"):
+        excluded = dataset.get("excluded_short_history")
+        excluded_text = (
+            f" · {formatting.fmt_int(excluded)} excluded for short history"
+            if excluded is not None
+            else ""
+        )
+        out.append(
+            Insight(
+                f"Churn labels: {formatting.fmt_int(dataset.get('customers'))} customers · "
+                f"{formatting.fmt_pct(dataset.get('churn_rate'))} labeled churned"
+                f"{excluded_text}",
+                "Labels come from activity inside the outcome window after the cutoff; "
+                "customers without enough pre-cutoff history are excluded rather than "
+                "imputed, so the labeled base is the honest training population.",
+            )
+        )
+    if metrics.get("roc_auc") is not None:
+        bits = [
+            f"ROC-AUC {formatting.fmt_float(metrics.get('roc_auc'), 3)}",
+            f"PR-AUC {formatting.fmt_float(metrics.get('pr_auc'), 3)}",
+            f"F1 {formatting.fmt_float(metrics.get('f1'), 3)}",
+        ]
+        n = metrics.get("n")
+        if n:
+            bits.append(f"{formatting.fmt_int(n)} held-out customers")
+        auc = float(metrics["roc_auc"])
+        detail = (
+            f"Recall {formatting.fmt_pct(metrics.get('recall'))} at threshold "
+            f"{formatting.fmt_float(evaluation.get('threshold'), 2)} · balanced accuracy "
+            f"{formatting.fmt_pct(metrics.get('balanced_accuracy'))} · Brier "
+            f"{formatting.fmt_float(metrics.get('brier'), 3)}. Ranking and threshold "
+            "metrics come from the held-out test split, so they describe the scored model, "
+            "not its training fit."
+        )
+        saturation = _threshold_saturation(metrics, evaluation)
+        if saturation:
+            detail = f"{detail} {saturation}"
+        out.append(
+            Insight(
+                "Test performance — " + " · ".join(bits),
+                detail,
+                tone=_tone("warning" if auc < 0.55 else "info"),
+            )
+        )
+    if evaluation.get("cutoff") or evaluation.get("horizon_days"):
+        window = formatting.fmt_int(evaluation.get("horizon_days"))
+        out.append(
+            Insight(
+                f"Outcome window: cutoff {evaluation.get('cutoff') or '–'} + {window} days",
+                f"Probabilities are calibrated {evaluation.get('calibration') or 'not recorded'} "
+                "on the validation split. Predictors use transactions on or before the cutoff "
+                "only; labels come from activity after it, and the split is cohort-ordered so "
+                "both classes appear in every fold.",
+            )
+        )
+    importance = evaluation.get("importance")
+    if isinstance(importance, pd.DataFrame) and not importance.empty:
+        top = importance.iloc[0]
+        out.append(
+            Insight(
+                f"'{top['feature']}' is the strongest global predictor",
+                "Permutation importance ranks how much the model leans on each feature; it "
+                "describes the model, not a cause of churn, and correlated predictors share "
+                "credit.",
             )
         )
     return tuple(out)

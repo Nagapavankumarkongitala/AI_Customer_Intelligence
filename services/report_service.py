@@ -8,7 +8,9 @@ proxy, never CLV, and no causal retention impact is claimed.
 
 from __future__ import annotations
 
+import hashlib
 import html
+import json
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from io import BytesIO
@@ -18,7 +20,7 @@ import pandas as pd
 
 from analytics.demographics import DEFAULT_AGE_BANDS, assign_age_band
 from services import report_charts, report_narrative
-from services.churn_service import model_selection_rows
+from services.churn_service import evaluation_payload, model_selection_rows
 from services.comparison_service import (
     build_comparison,
     scorecard_as_text,
@@ -95,7 +97,14 @@ SECTION_CHARTS: Final[dict[str, tuple[str, ...]]] = {
         "comparison_value",
         "comparison_evenness",
     ),
-    "churn": ("risk_bands",),
+    "churn": (
+        "risk_bands",
+        "churn_roc",
+        "churn_calibration",
+        "churn_confusion",
+        "churn_gain",
+        "churn_importance",
+    ),
     "retention": (
         "value_risk_matrix",
         "revenue_at_risk",
@@ -134,12 +143,70 @@ CHART_EXPLANATIONS: dict[str, dict[str, str]] = {
     "risk_bands": {
         "title": "Customers per risk band",
         "what": "Scored customers grouped into low / medium / high / critical "
-        "churn-risk bands from the trained churn model.",
+        "churn-risk bands from the trained churn model, with the modeled "
+        "revenue at risk dotted on the right axis when retention results exist.",
         "how_to_read": "Bands come from predicted churn probability and the "
         "configured threshold. High and critical bars are the modeled "
-        "at-risk pool, not confirmed leavers.",
+        "at-risk pool, not confirmed leavers; the dotted line is historical "
+        "value × probability, not a forecast of loss.",
         "action": "Work the high and critical bars top-down by priority "
         "score; low bars stay on routine monitoring.",
+    },
+    "churn_roc": {
+        "title": "ROC curve — churn model",
+        "what": "True-positive rate against false-positive rate across every "
+        "decision threshold, measured on the held-out, cohort-ordered test split.",
+        "how_to_read": "A curve bowed toward the top-left separates churners from "
+        "retained customers better than chance. The diagonal is random "
+        "targeting; the AUC in the legend summarises the whole curve.",
+        "action": "Use it to judge ranking quality before choosing a threshold; "
+        "near-0.5 means scores rank barely better than chance and should "
+        "prioritize rather than predict individuals.",
+    },
+    "churn_calibration": {
+        "title": "Calibration curve — churn model",
+        "what": "Observed churn rate against mean predicted probability per "
+        "probability bin on the test split; bubble size is the bin's customer "
+        "count.",
+        "how_to_read": "Points on the diagonal mean a 30% score really behaves "
+        "like 30% churn. Points above the line are under-confident; below the "
+        "line are over-confident.",
+        "action": "Read this before budgeting on raw probabilities; sigmoid "
+        "calibration on validation keeps the numbers interpretable, but drift "
+        "shows here first.",
+    },
+    "churn_confusion": {
+        "title": "Confusion matrix — churn model",
+        "what": "Counts of correct and incorrect classifications at the chosen "
+        "decision threshold on the test split.",
+        "how_to_read": "False negatives are churners the campaign would miss; "
+        "false positives are retained customers who receive an unnecessary "
+        "offer. Both are costs, not accidents.",
+        "action": "Set the threshold from the cost of a missed churner versus "
+        "the cost of an extra offer, then re-check this matrix when either "
+        "cost changes.",
+    },
+    "churn_gain": {
+        "title": "Cumulative gain — churn model",
+        "what": "Share of all test-split churners captured as customers are "
+        "worked from highest to lowest predicted risk, against random "
+        "targeting.",
+        "how_to_read": "A curve above the dashed random line means targeting the "
+        "top deciles finds churners faster. The gap is the model's practical "
+        "value for campaign sizing.",
+        "action": "Cut the outreach list where the curve flattens; working past "
+        "that point buys little extra capture for the same effort.",
+    },
+    "churn_importance": {
+        "title": "Global feature importance — churn model",
+        "what": "Permutation importance per predictor: how much test ranking "
+        "degrades when that feature's values are shuffled.",
+        "how_to_read": "Long bars are features the model leans on. Importance "
+        "describes the model, not a business cause, and correlated predictors "
+        "share credit.",
+        "action": "Use the top features to sanity-check data quality and to "
+        "frame retention conversations; do not read them as levers that "
+        "guarantee an outcome.",
     },
     "value_risk_matrix": {
         "title": "Value–risk matrix",
@@ -406,7 +473,30 @@ def churn_selection_display(table: pd.DataFrame) -> pd.DataFrame:
         display["threshold"] = [formatting.fmt_float(v, 2) for v in display["threshold"]]
     if "selected" in display.columns:
         display["selected"] = ["yes" if value else "" for value in display["selected"]]
-    return display
+    return display.rename(
+        columns={
+            "model": "Model",
+            "roc_auc": "ROC-AUC",
+            "pr_auc": "PR-AUC",
+            "f1": "F1",
+            "recall": "Recall",
+            "threshold": "Threshold",
+            "selected": "Operational pick",
+        }
+    )
+
+
+def churn_selection_table(metadata: Mapping[str, Any], bundles: Any = None) -> pd.DataFrame:
+    """Readable candidate scores with the operational pick flagged.
+
+    Shared by the churn page and the report exports so the table on screen is
+    the same one written into the report: every candidate's held-out scores plus
+    a ``Operational pick`` column marking the model actually used for scoring.
+    """
+    selection = _churn_selection(metadata, bundles)
+    if selection is None:
+        return pd.DataFrame()
+    return churn_selection_display(selection["table"])
 
 
 def _churn_selection(metadata: Mapping[str, Any], bundles: Any) -> dict[str, Any] | None:
@@ -470,6 +560,217 @@ def _churn_selection(metadata: Mapping[str, Any], bundles: Any) -> dict[str, Any
         "rationale": rationale,
         "table": table,
     }
+
+
+def _optional_number(value: Any) -> float | None:
+    """Finite float or None for optional numeric fields."""
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if pd.notna(number) else None
+
+
+def _records_frame(value: Any) -> pd.DataFrame | None:
+    """Frame from a list of record dicts, or None when empty/unsupported."""
+    if not isinstance(value, (list, tuple)) or not value:
+        return None
+    frame = pd.DataFrame([row for row in value if isinstance(row, Mapping)])
+    return frame if not frame.empty else None
+
+
+def _churn_evaluation(
+    metadata: Mapping[str, Any], bundles: Any, selected: str
+) -> dict[str, Any] | None:
+    """Evaluation detail for the scored churn model, from bundles or cached metadata.
+
+    Bundles win because they carry the raw test predictions; the cached
+    ``evaluation`` payload is the fallback for sessions restored from the
+    default-run cache. Flat metrics still produce a detail block when neither
+    curve payload exists, so old caches degrade to numbers instead of blanks.
+    """
+    payload: Mapping[str, Any] | None = None
+    model = selected or str(metadata.get("model") or "")
+    if isinstance(bundles, Mapping) and bundles:
+        names = [model] if model in bundles else [str(name) for name in bundles]
+        for name in names:
+            record = bundles.get(name)
+            if not isinstance(record, Mapping):
+                continue
+            try:
+                candidate = evaluation_payload(record)
+            except (KeyError, ValueError, TypeError):
+                candidate = None
+            if candidate:
+                payload, model = candidate, str(name)
+                break
+    if payload is None:
+        stored = metadata.get("evaluation")
+        evaluations = metadata.get("evaluations")
+        if isinstance(stored, Mapping) and stored:
+            payload = stored
+        elif isinstance(evaluations, Mapping):
+            record = evaluations.get(model)
+            payload = record if isinstance(record, Mapping) else None
+        if payload:
+            model = str(payload.get("model") or model)
+    if payload is None and isinstance(metadata.get("metrics"), Mapping):
+        metrics = metadata.get("metrics")
+        payload = {
+            "model": model,
+            "threshold": metadata.get("threshold"),
+            "calibration": metadata.get("calibration"),
+            "cutoff": metadata.get("cutoff"),
+            "horizon_days": metadata.get("horizon_days"),
+            "test_metrics": metrics,
+        }
+    if not isinstance(payload, Mapping) or not payload:
+        return None
+    metrics = payload.get("test_metrics")
+    metrics = dict(metrics) if isinstance(metrics, Mapping) else {}
+    val_metrics = payload.get("val_metrics")
+    val_metrics = dict(val_metrics) if isinstance(val_metrics, Mapping) else {}
+    splits = payload.get("splits")
+    splits = dict(splits) if isinstance(splits, Mapping) else {}
+    return {
+        "model": str(payload.get("model") or model or metadata.get("model") or ""),
+        "threshold": _optional_number(metadata.get("threshold", payload.get("threshold"))),
+        "calibration": str(payload.get("calibration") or metadata.get("calibration") or ""),
+        "cutoff": str(payload.get("cutoff") or metadata.get("cutoff") or ""),
+        "horizon_days": int(payload.get("horizon_days") or metadata.get("horizon_days") or 0),
+        "splits": splits,
+        "test_metrics": metrics,
+        "val_metrics": val_metrics,
+        "confusion": dict(metrics.get("confusion") or {}),
+        "roc": _records_frame(payload.get("roc")),
+        "calibration_curve": _records_frame(payload.get("calibration_curve")),
+        "gain": _records_frame(payload.get("gain")),
+        "importance": _records_frame(payload.get("importance")),
+    }
+
+
+def churn_details_table(context: dict[str, Any]) -> pd.DataFrame:
+    """One metric-per-row table describing the scored churn model.
+
+    Shared by the HTML, PDF, Word, and Excel exports so every format reports
+    the same threshold, window, splits, and test metrics.
+    """
+    evaluation = context.get("churn_evaluation") or {}
+    if not evaluation:
+        return pd.DataFrame()
+    metrics = evaluation.get("test_metrics") or {}
+    val_metrics = evaluation.get("val_metrics") or {}
+    splits = evaluation.get("splits") or {}
+    confusion = evaluation.get("confusion") or {}
+    dataset = context.get("churn_dataset") or {}
+    leakage = dataset.get("leakage_ok")
+    split_text = (
+        " · ".join(f"{name} {formatting.fmt_int(value)}" for name, value in splits.items())
+        if splits
+        else "70% / 15% / 15% (cohort order)"
+    )
+    confusion_text = (
+        " · ".join(f"{key.upper()} {formatting.fmt_int(value)}" for key, value in confusion.items())
+        if confusion
+        else "–"
+    )
+    threshold_behaviour = ""
+    try:
+        flagged = int(confusion.get("tp") or 0) + int(confusion.get("fp") or 0)
+        if confusion and not int(confusion.get("tn") or 0) and flagged:
+            threshold_behaviour = (
+                "flags every test customer — rank the probabilities, don't classify on them"
+            )
+    except (TypeError, ValueError):
+        threshold_behaviour = ""
+    rows = [
+        ("Scored model", str(evaluation.get("model") or "–")),
+        ("Decision threshold", formatting.fmt_float(evaluation.get("threshold"), 2)),
+        (
+            "Cutoff date",
+            str(evaluation.get("cutoff") or "–"),
+        ),
+        (
+            "Outcome window",
+            f"{formatting.fmt_int(evaluation.get('horizon_days'))} days",
+        ),
+        ("Splits (customers)", split_text),
+        ("Calibration", str(evaluation.get("calibration") or "not recorded")),
+        ("Labeled customers", formatting.fmt_int(dataset.get("customers"))),
+        ("Labeled churn rate", formatting.fmt_pct(dataset.get("churn_rate"))),
+        (
+            "Excluded (short history)",
+            formatting.fmt_int(dataset.get("excluded_short_history")),
+        ),
+        (
+            "Leakage proof",
+            "verified" if leakage else ("not recorded" if leakage is None else "LEAKED"),
+        ),
+        ("Test customers", formatting.fmt_int(metrics.get("n"))),
+        ("Test churn rate", formatting.fmt_pct(metrics.get("positive_rate"))),
+        ("Test ROC-AUC", formatting.fmt_float(metrics.get("roc_auc"), 3)),
+        ("Test PR-AUC", formatting.fmt_float(metrics.get("pr_auc"), 3)),
+        ("Test precision", formatting.fmt_pct(metrics.get("precision"))),
+        ("Test recall", formatting.fmt_pct(metrics.get("recall"))),
+        ("Test F1", formatting.fmt_float(metrics.get("f1"), 3)),
+        (
+            "Test balanced accuracy",
+            formatting.fmt_pct(metrics.get("balanced_accuracy")),
+        ),
+        ("Test log loss", formatting.fmt_float(metrics.get("log_loss"), 3)),
+        ("Test Brier score", formatting.fmt_float(metrics.get("brier"), 3)),
+        ("Validation ROC-AUC", formatting.fmt_float(val_metrics.get("roc_auc"), 3)),
+        ("Confusion (test)", confusion_text),
+    ]
+    if threshold_behaviour:
+        rows.insert(len(rows) - 1, ("Threshold behaviour", threshold_behaviour))
+    return pd.DataFrame(rows, columns=["metric", "value"])
+
+
+def _frame_signature(frame: pd.DataFrame) -> int:
+    """Stable integer signature for a frame (content hash, shape fallback)."""
+    try:
+        return int(pd.util.hash_pandas_object(frame, index=False).sum())
+    except (TypeError, ValueError, AttributeError):
+        return int(len(frame))
+
+
+def _input_fingerprint(state: Mapping[str, Any]) -> str:
+    """Short hash of the inputs the report derives from.
+
+    Every export stamps it, so a reader can tell whether a downloaded report
+    predates a retrain or a re-scoring even when the generated-at time looks
+    recent. Streamlit re-runs the report page on each change, so this is how
+    "the report updates whenever the results change" becomes verifiable.
+    """
+    digest = hashlib.sha256()
+    for key in (
+        "clean_data",
+        "customer_features",
+        "rfm_results",
+        "lrfm_results",
+        "segmented_customers",
+        "churn_scores",
+    ):
+        frame = state.get(key)
+        if isinstance(frame, pd.DataFrame):
+            digest.update(
+                f"{key}:{frame.shape[0]}x{frame.shape[1]}:{_frame_signature(frame)};".encode()
+            )
+    retention = state.get("retention_results")
+    if isinstance(retention, Mapping) and retention.get("table"):
+        try:
+            table = pd.DataFrame(retention["table"])
+            digest.update(f"retention:{_frame_signature(table)};".encode())
+        except (ValueError, TypeError):
+            pass
+    for key in ("churn_model_metadata", "cleaning_audit", "column_mapping"):
+        try:
+            blob = json.dumps(state.get(key) or {}, sort_keys=True, default=str)
+        except (TypeError, ValueError):
+            blob = str(state.get(key))
+        digest.update(f"{key}:{blob};".encode())
+    return digest.hexdigest()[:12]
 
 
 def build_report_context(state: Mapping[str, Any]) -> dict[str, Any]:
@@ -545,6 +846,16 @@ def build_report_context(state: Mapping[str, Any]) -> dict[str, Any]:
         except (KeyError, ValueError):
             hvhr = None
 
+    risk_revenue: dict[str, float] = {}
+    if retention is not None and {"risk_band", "revenue_at_risk"} <= set(retention.columns):
+        try:
+            risk_revenue = {
+                str(band): float(total)
+                for band, total in retention.groupby("risk_band")["revenue_at_risk"].sum().items()
+            }
+        except (KeyError, ValueError, TypeError):
+            risk_revenue = {}
+
     retention_summary: dict[str, Any] = {}
     if retention is not None:
         stored = state.get("retention_results")
@@ -590,9 +901,17 @@ def build_report_context(state: Mapping[str, Any]) -> dict[str, Any]:
         metadata if isinstance(metadata, Mapping) else {},
         state.get("churn_bundles"),
     )
+    churn_evaluation = _churn_evaluation(
+        metadata if isinstance(metadata, Mapping) else {},
+        state.get("churn_bundles"),
+        str((churn_selection or {}).get("selected") or ""),
+    )
+    churn_dataset = state.get("churn_dataset")
+    churn_dataset = dict(churn_dataset) if isinstance(churn_dataset, Mapping) else {}
 
     return {
         "generated_at": datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC"),
+        "input_fingerprint": _input_fingerprint(state),
         "readiness": readiness,
         "kpis": kpis,
         "trends": trends,
@@ -608,11 +927,14 @@ def build_report_context(state: Mapping[str, Any]) -> dict[str, Any]:
         "ai_portfolio": ai_portfolio,
         "demographics": _demographics(features),
         "risk_mix": risk_mix,
+        "risk_revenue": risk_revenue,
         "hvhr": hvhr,
         "history": history,
         "retention_summary": retention_summary,
         "churn_metadata": dict(metadata) if isinstance(metadata, dict) else {},
+        "churn_dataset": churn_dataset,
         "churn_selection": churn_selection,
+        "churn_evaluation": churn_evaluation,
         "cleaning_audit": dict(audit) if isinstance(audit, dict) else {},
         "column_mapping": dict(mapping) if isinstance(mapping, dict) else {},
         "treatments": _treatments(audit if isinstance(audit, Mapping) else {}),
@@ -682,9 +1004,18 @@ def context_tables(
             tables[name] = frame.copy()
     risk_mix = context.get("risk_mix") or {}
     if risk_mix:
+        risk_revenue = context.get("risk_revenue") or {}
         tables["Risk_Bands"] = pd.DataFrame(
             [
-                {"risk_band": band, "customers": formatting.fmt_int(count)}
+                {
+                    "risk_band": band,
+                    "customers": formatting.fmt_int(count),
+                    "revenue_at_risk": (
+                        formatting.fmt_money_compact(risk_revenue.get(band))
+                        if band in risk_revenue
+                        else "–"
+                    ),
+                }
                 for band, count in risk_mix.items()
             ]
         )
@@ -692,6 +1023,19 @@ def context_tables(
     selection_table = selection.get("table")
     if isinstance(selection_table, pd.DataFrame) and not selection_table.empty:
         tables["Churn_Model_Selection"] = churn_selection_display(selection_table)
+    details = churn_details_table(context)
+    if not details.empty:
+        tables["Churn_Model_Details"] = details
+    evaluation = context.get("churn_evaluation") or {}
+    importance = evaluation.get("importance")
+    if isinstance(importance, pd.DataFrame) and not importance.empty:
+        tables["Churn_Feature_Importance"] = importance.head(20).copy()
+    calibration = evaluation.get("calibration_curve")
+    if isinstance(calibration, pd.DataFrame) and not calibration.empty:
+        tables["Churn_Calibration"] = calibration.copy()
+    gain = evaluation.get("gain")
+    if isinstance(gain, pd.DataFrame) and not gain.empty:
+        tables["Churn_Gain"] = gain.copy()
     retention = context.get("retention")
     if retention is not None and not retention.empty:
         ranked = (
@@ -845,10 +1189,12 @@ def render_html_report(
     )
 
     def _fig(key: str) -> str:
+        exp = CHART_EXPLANATIONS.get(key, {})
+        title = f"<h3>{html.escape(exp.get('title', key))}</h3>" if exp else ""
         snippet = figures_html.get(key, "")
         if snippet:
-            return f"<div class='fig'>{snippet}</div>"
-        return "<p class='muted'>Chart unavailable — complete the source page first.</p>"
+            return f"{title}<div class='fig'>{snippet}</div>"
+        return f"{title}<p class='muted'>Chart unavailable — complete the source page first.</p>"
 
     def _explain(key: str) -> str:
         exp = CHART_EXPLANATIONS.get(key, {})
@@ -982,10 +1328,22 @@ def render_html_report(
                 "the selected row is the scored model.</p>"
                 f"{churn_selection_display(selection_table).to_html(index=False, border=0, classes='tbl')}"
             )
+        details = churn_details_table(context)
+        details_html = (
+            "<h3>Scored model detail</h3>"
+            "<p class='muted'>Threshold, window, splits, and test metrics for the "
+            "model that produced the churn scores above.</p>"
+            f"{details.to_html(index=False, border=0, classes='tbl')}"
+            if not details.empty
+            else ""
+        )
+        churn_charts_html = "".join(
+            f"{_fig(key)}{_explain(key)}" for key in SECTION_CHARTS["churn"]
+        )
         built.append(
             f"<section><h2>{_section_heading('churn', 'Churn risk calculated')}</h2>"
-            f"{_insights('churn')}{selection_html}"
-            f"{_fig('risk_bands')}{_explain('risk_bands')}</section>"
+            f"{_insights('churn')}{selection_html}{details_html}"
+            f"{churn_charts_html}</section>"
         )
     if "retention" in sections:
         built.append(
@@ -1076,7 +1434,8 @@ table.tbl th{{background:{skin['th_bg']};}}
 </style></head>
 <body>
 <h1>Customer Intelligence Report</h1>
-<p class="muted">Generated {html.escape(str(context.get('generated_at', '')))} · {html.escape(masked_note)} ·
+<p class="muted">Generated {html.escape(str(context.get('generated_at', '')))} · source revision
+{html.escape(str(context.get('input_fingerprint', '–')))} · {html.escape(masked_note)} ·
 Historical monetary value is a value proxy, never CLV. Retention reasons never claim causal impact.</p>
 {body}
 </body></html>"""
@@ -1200,7 +1559,8 @@ def build_pdf_bytes(
     story: list[Any] = [
         Paragraph("Customer Intelligence Report", styles["Title"]),
         Paragraph(
-            f"Generated {html.escape(str(context.get('generated_at', '')))}. "
+            f"Generated {html.escape(str(context.get('generated_at', '')))} · source revision "
+            f"{html.escape(str(context.get('input_fingerprint', '–')))}. "
             "Historical value is a proxy, never CLV. Actions are decision support only.",
             styles["Normal"],
         ),
@@ -1304,19 +1664,6 @@ def build_pdf_bytes(
         story.append(
             Paragraph(_section_heading(section, SECTION_LABELS[section]), styles["Heading2"])
         )
-        metadata = context.get("churn_metadata") or {}
-        if section == "churn" and metadata:
-            story.append(
-                Paragraph(
-                    f"Model <b>{html.escape(str(metadata.get('model', '–')))}</b> · threshold "
-                    f"{html.escape(str(metadata.get('threshold', '–')))} · cutoff "
-                    f"{html.escape(str(metadata.get('cutoff', '–')))}. Predictors use transactions "
-                    "on or before the cutoff only; the label is activity after it — leakage-safe "
-                    "by construction.",
-                    styles["Normal"],
-                )
-            )
-            story.append(Spacer(1, 4))
         if section == "comparison":
             comparison = context.get("comparison") or {}
             if comparison:
@@ -1344,6 +1691,19 @@ def build_pdf_bytes(
                     _table(cross.astype(str), "Customer flow (counts)", max_rows=12, level=3)
         for item in report_narrative.section_insights(context, section):
             _insight(item)
+        if section == "churn":
+            selection = context.get("churn_selection") or {}
+            selection_table = selection.get("table")
+            if isinstance(selection_table, pd.DataFrame) and not selection_table.empty:
+                _table(
+                    churn_selection_display(selection_table),
+                    "Model selection",
+                    max_rows=10,
+                    level=3,
+                )
+            details = churn_details_table(context)
+            if not details.empty:
+                _table(details, "Scored model detail", max_rows=20, level=3)
         for key in SECTION_CHARTS[section]:
             _chart(key)
 
@@ -1482,7 +1842,8 @@ def build_docx_bytes(
     document.add_heading("Customer Intelligence Report", level=0)
     meta = document.add_paragraph()
     meta.add_run(
-        f"Generated {context.get('generated_at', '')}. Historical value is a proxy, never CLV. "
+        f"Generated {context.get('generated_at', '')} · source revision "
+        f"{context.get('input_fingerprint', '–')}. Historical value is a proxy, never CLV. "
         "Actions are decision support only."
     ).italic = True
     meta.add_run(
@@ -1563,13 +1924,6 @@ def build_docx_bytes(
         if section not in sections:
             continue
         document.add_heading(_section_heading(section, SECTION_LABELS[section]), level=1)
-        metadata = context.get("churn_metadata") or {}
-        if section == "churn" and metadata:
-            document.add_paragraph(
-                f"Model {metadata.get('model', '–')} · threshold {metadata.get('threshold', '–')} · "
-                f"cutoff {metadata.get('cutoff', '–')}. Predictors use transactions on or before "
-                "the cutoff only; the label is activity after it — leakage-safe by construction."
-            ).italic = True
         if section == "comparison":
             comparison = context.get("comparison") or {}
             if comparison:
@@ -1591,6 +1945,19 @@ def build_docx_bytes(
                     _table(cross.astype(str), "Customer flow (counts)", level=3)
         for item in report_narrative.section_insights(context, section):
             _insight(item)
+        if section == "churn":
+            selection = context.get("churn_selection") or {}
+            selection_table = selection.get("table")
+            if isinstance(selection_table, pd.DataFrame) and not selection_table.empty:
+                _table(
+                    churn_selection_display(selection_table),
+                    "Model selection",
+                    max_rows=10,
+                    level=3,
+                )
+            details = churn_details_table(context)
+            if not details.empty:
+                _table(details, "Scored model detail", max_rows=20, level=3)
         for key in SECTION_CHARTS[section]:
             _chart(key)
 
@@ -1684,6 +2051,11 @@ def available_chart_engine() -> str | None:
 def report_readiness_lines(context: dict[str, Any]) -> list[tuple[str, bool, str]]:
     """Checklist rows of (label, ready, hint) for the page."""
     readiness = context.get("readiness") or {}
+    evaluation = context.get("churn_evaluation") or {}
+    evaluation_ready = any(
+        evaluation.get(key) is not None
+        for key in ("roc", "calibration_curve", "gain", "importance")
+    )
     return [
         ("Clean data", bool(readiness.get("clean_data")), "Finish Data Quality & Cleaning."),
         (
@@ -1697,6 +2069,11 @@ def report_readiness_lines(context: dict[str, Any]) -> list[tuple[str, bool, str
             "Run Advanced Segmentation.",
         ),
         ("Churn scores", bool(readiness.get("churn")), "Train and score on Churn Prediction."),
+        (
+            "Churn model evaluation",
+            evaluation_ready,
+            "Retrain or re-score on Churn Prediction so its evaluation charts populate.",
+        ),
         (
             "Retention actions",
             bool(readiness.get("retention")),
@@ -1718,6 +2095,7 @@ __all__ = [
     "build_docx_bytes",
     "build_pdf_bytes",
     "build_report_context",
+    "churn_details_table",
     "context_tables",
     "context_to_excel_bytes",
     "render_html_report",

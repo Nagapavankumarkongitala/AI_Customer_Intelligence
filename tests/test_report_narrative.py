@@ -144,3 +144,81 @@ def test_narrative_survives_an_empty_context() -> None:
     assert recommendations(empty) == ()
     for section in ("overview", "segments", "churn", "retention", "appendix"):
         assert section_insights(empty, section) == ()
+
+
+def test_churn_section_reports_model_evaluation_detail() -> None:
+    """Test metrics, window, calibration, and the top predictor are narrated."""
+    state = _state()
+    state["churn_model_metadata"] = {
+        "model": "rf",
+        "threshold": 0.45,
+        "cutoff": "2024-04-01",
+        "horizon_days": 90,
+        "metrics": {"roc_auc": 0.71, "pr_auc": 0.62, "f1": 0.55, "recall": 0.4},
+        "evaluation": {
+            "model": "rf",
+            "threshold": 0.45,
+            "cutoff": "2024-04-01",
+            "horizon_days": 90,
+            "calibration": "sigmoid on validation",
+            "test_metrics": {
+                "roc_auc": 0.71,
+                "pr_auc": 0.62,
+                "f1": 0.55,
+                "recall": 0.4,
+                "balanced_accuracy": 0.66,
+                "brier": 0.18,
+                "n": 120,
+            },
+            "importance": [{"feature": "recency_days", "importance": 0.21}],
+        },
+    }
+    from services.report_service import build_report_context
+
+    context = build_report_context(state)
+    items = section_insights(context, "churn")
+    titles = " ".join(item.title for item in items)
+    details = " ".join(item.detail for item in items)
+    assert "Test performance" in titles
+    assert "ROC-AUC 0.710" in titles
+    assert "Outcome window" in titles
+    assert "strongest global predictor" in titles
+    assert "sigmoid on validation" in details
+    for banned in BANNED_CAUSAL:
+        assert banned not in (titles + details).lower()
+
+
+def test_churn_narrative_flags_a_threshold_that_flags_everyone() -> None:
+    """A saturated threshold must not read as a strong, high-recall model."""
+    state = _state()
+    state["churn_model_metadata"] = {
+        "model": "rf",
+        "threshold": 0.05,
+        "cutoff": "2024-07-08",
+        "horizon_days": 90,
+        "evaluation": {
+            "model": "rf",
+            "threshold": 0.05,
+            "cutoff": "2024-07-08",
+            "horizon_days": 90,
+            "calibration": "sigmoid on validation",
+            "test_metrics": {
+                "roc_auc": 0.51,
+                "pr_auc": 0.86,
+                "f1": 0.93,
+                "recall": 1.0,
+                "precision": 0.86,
+                "balanced_accuracy": 0.5,
+                "brier": 0.12,
+                "n": 500,
+                "confusion": {"tn": 0, "fp": 70, "fn": 0, "tp": 430},
+            },
+        },
+    }
+    from services.report_service import build_report_context
+
+    context = build_report_context(state)
+    details = " ".join(item.detail for item in section_insights(context, "churn"))
+    assert "every test customer is flagged" in details
+    for banned in BANNED_CAUSAL:
+        assert banned not in details.lower()
