@@ -264,6 +264,43 @@ def strategy_distribution_bar(table: pd.DataFrame) -> px.Figure:
     return fig
 
 
+@styled(height=420)
+def strategy_segment_customer_bar(
+    coverage: pd.DataFrame,
+    title: str = "Customers per strategy by segment",
+) -> px.Figure:
+    """Stacked customer counts per segment for every playbook strategy.
+
+    ``coverage`` comes from ``services.dashboard_service.strategy_segment_customer_counts``
+    and keeps playbook order top-to-bottom. Segment hues stay consistent with the
+    rest of the app; hover names the rule and the segment behind each stack.
+    """
+    if coverage.empty:
+        return empty_figure(title, "No segment labels for the current selection.")
+    colors = {str(name): tokens.segment_color(str(name)) for name in coverage["segment"].unique()}
+    fig = px.bar(
+        coverage,
+        x="customers",
+        y="strategy",
+        color="segment",
+        orientation="h",
+        barmode="stack",
+        color_discrete_map=colors,
+        hover_data=["rule"],
+        title=title,
+        labels={
+            "customers": "Customers",
+            "strategy": "",
+            "segment": "Segment",
+            "rule": "Rule",
+        },
+    )
+    # Playbook order reads top-down; the theme drops the redundant axis title.
+    fig.update_yaxes(autorange="reversed")
+    fig.update_xaxes(dtick=1, rangemode="tozero")
+    return fig
+
+
 @styled
 def priority_histogram(table: pd.DataFrame) -> go.Figure:
     """Distribution of retention priority scores with a cumulative (Pareto) share.

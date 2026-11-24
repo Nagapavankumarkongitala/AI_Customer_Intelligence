@@ -6,6 +6,7 @@ import streamlit as st
 import yaml
 
 from components.cached import cached_build_cluster_profile
+from components.chart_export import plotly_chart
 from components.control_guides import (
     INTRO,
     RUN_HELP,
@@ -321,14 +322,14 @@ metric_row(
 emb_l, emb_r = st.columns([1, 1])
 with emb_l:
     with chart_section("Clusters (PCA 2D)"):
-        st.plotly_chart(
+        plotly_chart(
             without_title(pca_scatter(prepared_state["matrix"], run["labels"])),
             width="stretch",
         )
 with emb_r:
     with chart_section("Clusters (UMAP 2D)"):
         try:
-            st.plotly_chart(
+            plotly_chart(
                 without_title(umap_scatter(prepared_state["matrix"], run["labels"])),
                 width="stretch",
             )
@@ -338,7 +339,7 @@ if run["model"] == "autoencoder":
     from deep_learning.latent_space_visualization import latent_scatter
 
     with chart_section("Latent space (autoencoder)"):
-        st.plotly_chart(
+        plotly_chart(
             without_title(latent_scatter(run["fitted"]["latent"], run["labels"])),
             width="stretch",
         )
@@ -358,10 +359,10 @@ profile["business_name"] = profile["business_name"].fillna("Noise")
 prof_l, prof_r = st.columns([1, 1])
 with prof_l:
     with chart_section("Customers per cluster"):
-        st.plotly_chart(without_title(cluster_size_bar(profile)), width="stretch")
+        plotly_chart(without_title(cluster_size_bar(profile)), width="stretch")
 with prof_r:
     with chart_section("Cluster profile (median, z-scored per feature)"):
-        st.plotly_chart(without_title(profile_heatmap(profile)), width="stretch")
+        plotly_chart(without_title(profile_heatmap(profile)), width="stretch")
 with st.expander("Cluster profile table", expanded=False):
     st.dataframe(profile.drop(columns=["member_ids"], errors="ignore"), width="stretch")
 

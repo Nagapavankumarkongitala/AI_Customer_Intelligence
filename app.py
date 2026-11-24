@@ -15,6 +15,7 @@ from components.cached import (
     cached_segment_portfolio,
     cached_trend_tables,
 )
+from components.chart_export import plotly_chart
 from components.empty_state import chart_section, empty_state
 from components.export_buttons import csv_download_button
 from components.filters import date_range_filter, multiselect_filter
@@ -33,6 +34,7 @@ from services.dashboard_service import (
     filter_segment_trends,
     fixed_label_history,
     mask_customer_id,
+    strategy_segment_customer_counts,
 )
 from services.retention_service import default_matrix_report
 from services.segment_explain_service import build_segment_explanations
@@ -54,6 +56,7 @@ from visualization.retention_charts import (
     priority_histogram,
     revenue_at_risk_bar,
     strategy_distribution_bar,
+    strategy_segment_customer_bar,
     value_risk_heatmap,
 )
 from visualization.rfm_charts import (
@@ -160,14 +163,14 @@ def _segment_portfolio_section(
     left, right = st.columns(2)
     with left:
         with chart_section("Customer vs revenue share by segment"):
-            st.plotly_chart(
+            plotly_chart(
                 without_title(portfolio_bar_fig(table, segment_col)),
                 width="stretch",
                 key=f"{key_prefix}_share",
             )
     with right:
         with chart_section("Revenue per segment"):
-            st.plotly_chart(
+            plotly_chart(
                 without_title(revenue_by_segment_bar(table, segment_col)),
                 width="stretch",
                 key=f"{key_prefix}_revenue",
@@ -433,7 +436,7 @@ with overview_tab:
                     secondary = "active_customers"
             fig = revenue_trend_fig(rev_frame, secondary=secondary, forecast_periods=3)
             fig = _compact(shade_quarters(fig, rev_frame["month"]))
-            st.plotly_chart(fig, width="stretch")
+            plotly_chart(fig, width="stretch")
     with row1_b:
         use_ai_segments = st.toggle(
             "Use AI segments",
@@ -453,7 +456,7 @@ with overview_tab:
                 else None
             )
             if chart_portfolio is not None and not chart_portfolio.empty:
-                st.plotly_chart(
+                plotly_chart(
                     _compact(segment_share_bar(chart_portfolio, segment_col, "customers")),
                     width="stretch",
                 )
@@ -471,7 +474,7 @@ with overview_tab:
         with chart_section("Customers per risk band"):
             if "risk_band" in master_f.columns:
                 revenue_col = "revenue_at_risk" if "revenue_at_risk" in master_f.columns else None
-                st.plotly_chart(
+                plotly_chart(
                     _compact(risk_band_bar(master_f, revenue_col=revenue_col)), width="stretch"
                 )
             else:
@@ -490,7 +493,7 @@ with overview_tab:
                 "recommended_action",
             }
             if ret_f is not None and not ret_f.empty and matrix_cols.issubset(ret_f.columns):
-                st.plotly_chart(_compact(value_risk_heatmap(ret_f)), width="stretch")
+                plotly_chart(_compact(value_risk_heatmap(ret_f)), width="stretch")
             else:
                 empty_state(
                     "No retention actions yet",
@@ -508,7 +511,7 @@ with overview_tab:
                 region_rev["average_order_value"] = region_rev["revenue"] / region_rev[
                     "orders"
                 ].where(region_rev["orders"] > 0, 1)
-                st.plotly_chart(
+                plotly_chart(
                     _compact(
                         revenue_geo_bar(
                             region_rev,
@@ -541,7 +544,7 @@ with overview_tab:
                             .reset_index()
                             .rename(columns={"value": "average_order_value"})
                         )
-                        st.plotly_chart(
+                        plotly_chart(
                             _compact(age_band_bar(bands, value_col="average_order_value")),
                             width="stretch",
                         )
@@ -552,7 +555,7 @@ with overview_tab:
                             .rename_axis("age_band")
                             .reset_index(name="customers")
                         )
-                        st.plotly_chart(_compact(age_band_bar(bands)), width="stretch")
+                        plotly_chart(_compact(age_band_bar(bands)), width="stretch")
                 else:
                     empty_state(
                         "No age bands yet",
@@ -567,7 +570,7 @@ with overview_tab:
                         .rename_axis("gender")
                         .reset_index(name="customers")
                     )
-                    st.plotly_chart(_compact(gender_bar(gender_tbl)), width="stretch")
+                    plotly_chart(_compact(gender_bar(gender_tbl)), width="stretch")
                 else:
                     empty_state(
                         "No gender data yet",
@@ -639,10 +642,10 @@ with trends_tab:
     trend_left, trend_right = st.columns(2)
     with trend_left:
         with chart_section("Customer activity trend"):
-            st.plotly_chart(without_title(activity_trend_fig(trends["activity"])), width="stretch")
+            plotly_chart(without_title(activity_trend_fig(trends["activity"])), width="stretch")
     with trend_right:
         with chart_section("New vs returning customers"):
-            st.plotly_chart(without_title(new_returning_fig(trends["cohort"])), width="stretch")
+            plotly_chart(without_title(new_returning_fig(trends["cohort"])), width="stretch")
     activity_months = sorted(str(month) for month in trends["activity"]["month"].unique())
     bridge_months = activity_months[1:]
     bridge_month = (
@@ -672,7 +675,7 @@ with trends_tab:
                 "A month-over-month bridge needs two months with RFM segment labels.",
             )
         else:
-            st.plotly_chart(
+            plotly_chart(
                 without_title(segment_mom_waterfall_fig(rfm_bridge)),
                 width="stretch",
                 key="trends_rfm_segment_mom",
@@ -690,7 +693,7 @@ with trends_tab:
                 "A month-over-month bridge needs two months with AI segment labels.",
             )
         else:
-            st.plotly_chart(
+            plotly_chart(
                 without_title(segment_mom_waterfall_fig(ai_bridge)),
                 width="stretch",
                 key="trends_ai_segment_mom",
@@ -763,7 +766,7 @@ with churn_tab:
         )
         with chart_section("Customers per risk band"):
             churn_revenue_col = "revenue_at_risk" if "revenue_at_risk" in master_f.columns else None
-            st.plotly_chart(
+            plotly_chart(
                 without_title(risk_band_bar(master_f, revenue_col=churn_revenue_col)),
                 width="stretch",
             )
@@ -810,18 +813,48 @@ with retention_tab:
         ret_left, ret_right = st.columns(2)
         with ret_left:
             with chart_section("Customers per recommended action"):
-                st.plotly_chart(without_title(strategy_distribution_bar(ret_f)), width="stretch")
+                plotly_chart(without_title(strategy_distribution_bar(ret_f)), width="stretch")
         with ret_right:
             with chart_section("Revenue at risk per action"):
-                st.plotly_chart(without_title(revenue_at_risk_bar(ret_f)), width="stretch")
+                plotly_chart(without_title(revenue_at_risk_bar(ret_f)), width="stretch")
         with chart_section("Priority score distribution"):
-            st.plotly_chart(without_title(priority_histogram(ret_f)), width="stretch")
+            plotly_chart(without_title(priority_histogram(ret_f)), width="stretch")
         strategy_matrix = _strategy_matrix()
         if strategy_matrix is not None:
             section_header(
                 "Strategy playbook",
                 "One card per strategy rule, with the customers it currently owns.",
             )
+            st.caption(
+                "Each bar is the customers assigned to a playbook strategy, split by "
+                "segment. Hover a stack for the rule and segment; zero means the strategy "
+                "is defined but unused in the current filter."
+            )
+            rfm_counts = strategy_segment_customer_counts(
+                ret_f, master_f, strategy_matrix, "rfm_segment"
+            )
+            ai_counts = strategy_segment_customer_counts(
+                ret_f, master_f, strategy_matrix, "ai_segment"
+            )
+            coverage_left, coverage_right = st.columns(2)
+            with coverage_left:
+                with chart_section("RFM customers per strategy"):
+                    plotly_chart(
+                        without_title(
+                            strategy_segment_customer_bar(rfm_counts, "RFM customers per strategy")
+                        ),
+                        width="stretch",
+                        key="ret_rfm_segment_customers",
+                    )
+            with coverage_right:
+                with chart_section("AI customers per strategy"):
+                    plotly_chart(
+                        without_title(
+                            strategy_segment_customer_bar(ai_counts, "AI customers per strategy")
+                        ),
+                        width="stretch",
+                        key="ret_ai_segment_customers",
+                    )
             render_strategy_playbook(ret_f, strategy_matrix)
         with st.expander("Ranked customers (top 200)", expanded=False):
             ranked = ret_f.sort_values("retention_priority_score", ascending=False).head(200)

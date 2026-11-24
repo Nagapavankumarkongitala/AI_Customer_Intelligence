@@ -11,6 +11,7 @@ foundation (source profile and cleaning treatments) and the method notes.
 import pandas as pd
 import streamlit as st
 
+from components.chart_export import plotly_chart
 from components.empty_state import chart_section, empty_state
 from components.insight_box import insight_box
 from components.metric_card import Metric, metric_row
@@ -243,7 +244,7 @@ def _render_overview() -> None:
         ]
     )
     with chart_section("Revenue trend"):
-        st.plotly_chart(
+        plotly_chart(
             _register("revenue_trend", without_title(revenue_area_fig(revenue))),
             width="stretch",
             key="rep_revenue_trend",
@@ -253,7 +254,7 @@ def _render_overview() -> None:
     with left:
         with chart_section("Customer activity trend"):
             if isinstance(activity, pd.DataFrame) and not activity.empty:
-                st.plotly_chart(
+                plotly_chart(
                     _register("activity_trend", without_title(activity_trend_fig(activity))),
                     width="stretch",
                     key="rep_activity",
@@ -264,7 +265,7 @@ def _render_overview() -> None:
     with right:
         with chart_section("New vs returning customers"):
             if isinstance(cohort, pd.DataFrame) and not cohort.empty:
-                st.plotly_chart(
+                plotly_chart(
                     _register("new_returning", without_title(new_returning_fig(cohort))),
                     width="stretch",
                     key="rep_cohort",
@@ -281,7 +282,7 @@ def _render_segment_charts() -> None:
     left, right = st.columns(2)
     with left:
         with chart_section("Customers per segment"):
-            st.plotly_chart(
+            plotly_chart(
                 _register(
                     "segment_distribution",
                     without_title(segment_distribution_bar(portfolio, "rfm_segment")),
@@ -292,7 +293,7 @@ def _render_segment_charts() -> None:
         _explain("segment_distribution")
     with right:
         with chart_section("Revenue per segment"):
-            st.plotly_chart(
+            plotly_chart(
                 _register(
                     "revenue_by_segment",
                     without_title(revenue_by_segment_bar(portfolio, "rfm_segment")),
@@ -311,7 +312,7 @@ def _render_segment_trends() -> None:
     if rfm_hist.empty:
         return
     with chart_section("Segment trends over time"):
-        st.plotly_chart(
+        plotly_chart(
             _register("segment_trends", without_title(segment_trend_ribbon(rfm_hist))),
             width="stretch",
             key="rep_seg_trends",
@@ -331,7 +332,7 @@ def _render_demographics() -> None:
     with left:
         with chart_section("Customers per age band"):
             if isinstance(age_bands, pd.DataFrame) and not age_bands.empty:
-                st.plotly_chart(
+                plotly_chart(
                     _register("demographics_age", without_title(age_band_bar(age_bands))),
                     width="stretch",
                     key="rep_demo_age",
@@ -342,7 +343,7 @@ def _render_demographics() -> None:
     with middle:
         with chart_section("Customers by gender"):
             if isinstance(gender, pd.DataFrame) and not gender.empty:
-                st.plotly_chart(
+                plotly_chart(
                     _register("demographics_gender", without_title(gender_bar(gender))),
                     width="stretch",
                     key="rep_demo_gender",
@@ -353,7 +354,7 @@ def _render_demographics() -> None:
     with right:
         with chart_section("Top regions by customers"):
             if isinstance(region, pd.DataFrame) and not region.empty:
-                st.plotly_chart(
+                plotly_chart(
                     _register("demographics_region", without_title(top_geo_bar(region, "region"))),
                     width="stretch",
                     key="rep_demo_region",
@@ -443,7 +444,7 @@ def _render_comparison() -> None:
         for col, (metric, chart_key, title) in zip(cols, metrics[start : start + 2], strict=False):
             with col:
                 with chart_section(title):
-                    st.plotly_chart(
+                    plotly_chart(
                         _register(
                             chart_key,
                             without_title(metric_comparison_bar(table, metric, title)),
@@ -454,7 +455,7 @@ def _render_comparison() -> None:
                 _explain(chart_key)
     if pair:
         with chart_section(f"Customer flow ({pair['reference']} → {pair['target']})"):
-            st.plotly_chart(
+            plotly_chart(
                 _register(
                     "comparison_flow",
                     without_title(
@@ -532,7 +533,7 @@ def _render_churn() -> None:
             retention[["customer_id", "revenue_at_risk"]], on="customer_id", how="left"
         )
     with chart_section("Customers per risk band"):
-        st.plotly_chart(
+        plotly_chart(
             _register(
                 "risk_bands",
                 without_title(
@@ -551,7 +552,7 @@ def _render_churn() -> None:
         """One evaluation chart with its shared reading guide."""
         with column:
             with chart_section(title):
-                st.plotly_chart(
+                plotly_chart(
                     _register(key, without_title(figure)),
                     width="stretch",
                     key=f"rep_{key}",
@@ -603,7 +604,7 @@ def _render_churn() -> None:
     importance = evaluation.get("importance")
     if isinstance(importance, pd.DataFrame) and not importance.empty:
         with chart_section("Global feature importance"):
-            st.plotly_chart(
+            plotly_chart(
                 _register(
                     "churn_importance",
                     without_title(importance_bar_fig(importance)),
@@ -658,7 +659,7 @@ def _render_retention() -> None:
         ]
     )
     with chart_section("Value–risk matrix"):
-        st.plotly_chart(
+        plotly_chart(
             _register("value_risk_matrix", without_title(value_risk_matrix(retention))),
             width="stretch",
             key="rep_matrix",
@@ -667,7 +668,7 @@ def _render_retention() -> None:
     left, right = st.columns(2)
     with left:
         with chart_section("Revenue at risk per action"):
-            st.plotly_chart(
+            plotly_chart(
                 _register("revenue_at_risk", without_title(revenue_at_risk_bar(retention))),
                 width="stretch",
                 key="rep_rar",
@@ -675,7 +676,7 @@ def _render_retention() -> None:
         _explain("revenue_at_risk")
     with right:
         with chart_section("Customers per recommended action"):
-            st.plotly_chart(
+            plotly_chart(
                 _register(
                     "strategy_distribution", without_title(strategy_distribution_bar(retention))
                 ),
@@ -684,7 +685,7 @@ def _render_retention() -> None:
             )
         _explain("strategy_distribution")
     with chart_section("Priority score distribution"):
-        st.plotly_chart(
+        plotly_chart(
             _register("priority_histogram", without_title(priority_histogram(retention))),
             width="stretch",
             key="rep_priority",

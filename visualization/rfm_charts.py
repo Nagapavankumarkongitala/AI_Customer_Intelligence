@@ -59,26 +59,38 @@ def segment_distribution_bar(profile: pd.DataFrame, segment_col: str = "segment"
 
 @styled
 def revenue_by_segment_bar(profile: pd.DataFrame, segment_col: str = "segment") -> px.Figure:
-    """Revenue contribution per segment, in segment hues.
+    """Revenue contribution per segment, in segment hues and compact money.
 
-    Values ride on the bars and the legend names every segment, so both axes
-    stay clean: no y-axis, no x tick labels. The shared theme still supplies
-    fonts, grid, and margins.
+    Bar labels use the active money notation — Indian by default, so amounts
+    read ``₹1.5K`` / ``₹2.5L`` / ``₹1.25Cr`` instead of long digit strings. The
+    legend names every segment and hover keeps the exact grouped amount, so both
+    axes stay clean: no y-axis, no x tick labels.
     """
     if profile.empty:
         return empty_figure("Revenue per segment")
     col = segment_col if segment_col in profile.columns else profile.columns[0]
+    plot_frame = profile.copy()
+    label_col = "_revenue_label"
+    exact_col = "_revenue_exact"
+    plot_frame[label_col] = plot_frame["revenue"].map(formatting.fmt_money_compact)
+    plot_frame[exact_col] = plot_frame["revenue"].map(formatting.fmt_money)
     fig = px.bar(
-        profile,
+        plot_frame,
         x=col,
         y="revenue",
         color=col,
-        text="revenue",
-        **_segment_map_or_sequence(profile[col]),
+        text=label_col,
+        custom_data=[exact_col],
+        **_segment_map_or_sequence(plot_frame[col]),
         title="Revenue per segment",
         labels={col: "Segment", "revenue": "Revenue"},
     )
-    fig.update_traces(texttemplate="%{y:,.0f}", textposition="outside", textfont_size=13)
+    fig.update_traces(
+        texttemplate="%{text}",
+        textposition="outside",
+        textfont_size=13,
+        hovertemplate="<b>%{x}</b><br>Revenue: %{customdata[0]}<extra></extra>",
+    )
     top = float(profile["revenue"].max())
     fig.update_yaxes(visible=False, range=[0, top * 1.12 if top > 0 else 1])
     fig.update_xaxes(title_text="", showticklabels=False)

@@ -13,6 +13,7 @@ from typing import Any
 import pandas as pd
 import streamlit as st
 
+from components.chart_export import plotly_chart
 from visualization.rfm_charts import segment_transition_sankey
 from visualization.theme import apply_chart_theme, without_title
 
@@ -68,8 +69,9 @@ def render_sankey_pair(
         if left_transitions.empty:
             st.info(left_empty_message)
         else:
-            st.plotly_chart(
+            plotly_chart(
                 _transition_figure(left_transitions, height),
+                title=left_title,
                 width="stretch",
                 key=f"{key_prefix}_left",
             )
@@ -78,8 +80,9 @@ def render_sankey_pair(
         if right_transitions.empty:
             st.info(right_empty_message)
         else:
-            st.plotly_chart(
+            plotly_chart(
                 _transition_figure(right_transitions, height),
+                title=right_title,
                 width="stretch",
                 key=f"{key_prefix}_right",
             )
@@ -91,16 +94,20 @@ def render_trend_pair(
     *,
     model: str | None,
     key_prefix: str,
+    left_title: str = "Customer segment trend",
+    right_title: str = "Segment transitions",
     height: int = 460,
     empty_message: str = DEFAULT_EMPTY_MESSAGE,
 ) -> None:
     """Draw a trend figure and its model's transition Sankey in one row.
 
     ``left_fig`` is an already-themed factory figure; the caller decides which
-    trend view it shows. The right figure is skipped with guidance when the
-    history predates transition capture, when no customers were present at both
-    ends of a pair, or when the selected source has no re-scored transitions
-    (``model=None``, used for fixed AI labelings).
+    trend view it shows. ``left_title`` / ``right_title`` name the two PNG
+    exports, since these charts have no HTML section heading of their own. The
+    right figure is skipped with guidance when the history predates transition
+    capture, when no customers were present at both ends of a pair, or when the
+    selected source has no re-scored transitions (``model=None``, used for fixed
+    AI labelings).
     """
     flows = transitions
     if model is None:
@@ -110,12 +117,12 @@ def render_trend_pair(
     left, right = st.columns(2)
     with left:
         left_fig.update_layout(height=height)
-        st.plotly_chart(left_fig, width="stretch", key=f"{key_prefix}_trend")
+        plotly_chart(left_fig, title=left_title, width="stretch", key=f"{key_prefix}_trend")
     with right:
         if flows.empty:
             st.info(empty_message)
         else:
             fig = without_title(segment_transition_sankey(flows))
             fig.update_layout(height=height, margin={"b": 64})
-            st.plotly_chart(fig, width="stretch", key=f"{key_prefix}_sankey")
+            plotly_chart(fig, title=right_title, width="stretch", key=f"{key_prefix}_sankey")
     st.caption(TRANSITION_CAPTION)

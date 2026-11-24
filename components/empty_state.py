@@ -11,10 +11,15 @@ from __future__ import annotations
 import html
 from collections.abc import Iterator
 from contextlib import contextmanager
+from contextvars import ContextVar
 
 import streamlit as st
 
 from visualization import tokens
+
+#: Heading of the ``chart_section`` currently rendering, used by the PNG export
+#: helper so downloaded charts carry the same title the operator sees on screen.
+chart_title: ContextVar[str | None] = ContextVar("chart_title", default=None)
 
 
 def empty_state_html(title: str, body: str) -> str:
@@ -54,6 +59,15 @@ def chart_section_html(title: str, caption: str | None = None) -> str:
 
 @contextmanager
 def chart_section(title: str, caption: str | None = None) -> Iterator[None]:
-    """Frame a figure (or a pair) with its title and caption, then yield."""
+    """Frame a figure (or a pair) with its title and caption, then yield.
+
+    The heading is also published through :data:`chart_title` so a
+    :func:`components.chart_export.plotly_chart` call inside the block can title
+    its PNG export with the exact text shown above the chart.
+    """
+    token = chart_title.set(title)
     st.markdown(chart_section_html(title, caption), unsafe_allow_html=True)
-    yield
+    try:
+        yield
+    finally:
+        chart_title.reset(token)

@@ -14,6 +14,7 @@ from churn.evaluation import (
     lift_gain_table,
 )
 from churn.explainability import ShapBudgetExceeded, logreg_effects, shap_values
+from components.chart_export import plotly_chart
 from components.empty_state import chart_section, empty_state
 from components.filters import control_group, controls_expander
 from components.metric_card import Metric, metric_row
@@ -234,13 +235,13 @@ if bundles:
     eval_l, eval_r = st.columns([1, 1])
     with eval_l:
         with chart_section("ROC curve"):
-            st.plotly_chart(
+            plotly_chart(
                 without_title(roc_curve_fig(bundle["test_y"], bundle["test_proba"])),
                 width="stretch",
             )
     with eval_r:
         with chart_section("Calibration curve"):
-            st.plotly_chart(
+            plotly_chart(
                 without_title(
                     calibration_curve_fig(calibration_table(bundle["test_y"], bundle["test_proba"]))
                 ),
@@ -249,13 +250,13 @@ if bundles:
     perf_l, perf_r = st.columns([1, 1])
     with perf_l:
         with chart_section("Confusion matrix"):
-            st.plotly_chart(
+            plotly_chart(
                 without_title(confusion_fig(bundle["test_metrics"]["confusion"])),
                 width="stretch",
             )
     with perf_r:
         with chart_section("Cumulative gain"):
-            st.plotly_chart(
+            plotly_chart(
                 without_title(
                     gain_chart_fig(lift_gain_table(bundle["test_y"], bundle["test_proba"]))
                 ),
@@ -268,7 +269,7 @@ if bundles:
 
     section_header("Explainability")
     with chart_section("Global feature importance"):
-        st.plotly_chart(without_title(importance_bar_fig(bundle["importance"])), width="stretch")
+        plotly_chart(without_title(importance_bar_fig(bundle["importance"])), width="stretch")
     if detail == "logreg":
         with st.expander("Coefficients & odds ratios", expanded=False):
             st.dataframe(logreg_effects(bundle["pipeline"]), width="stretch")
@@ -333,13 +334,11 @@ elif cached_evaluation := metadata.get("evaluation"):
         if frame.empty:
             continue
         with chart_section(title):
-            st.plotly_chart(
-                without_title(factory(frame)), width="stretch", key=f"churn_cached_{key}"
-            )
+            plotly_chart(without_title(factory(frame)), width="stretch", key=f"churn_cached_{key}")
     cached_confusion = cached_metrics.get("confusion") or {}
     if cached_confusion:
         with chart_section("Confusion matrix"):
-            st.plotly_chart(
+            plotly_chart(
                 without_title(confusion_fig(cached_confusion)),
                 width="stretch",
                 key="churn_cached_confusion",
@@ -347,7 +346,7 @@ elif cached_evaluation := metadata.get("evaluation"):
     importance = pd.DataFrame(cached_evaluation.get("importance") or [])
     if not importance.empty:
         with chart_section("Global feature importance"):
-            st.plotly_chart(
+            plotly_chart(
                 without_title(importance_bar_fig(importance)),
                 width="stretch",
                 key="churn_cached_importance",
@@ -358,7 +357,7 @@ if scores is not None:
     risk_l, risk_r = st.columns([1, 2])
     with risk_l:
         with chart_section("Customers per risk band"):
-            st.plotly_chart(without_title(risk_band_bar(scores)), width="stretch")
+            plotly_chart(without_title(risk_band_bar(scores)), width="stretch")
     with risk_r:
         with st.expander("Scored customers (top 200)", expanded=False):
             render_table(scores.head(200), risk_cols=("risk_band",))

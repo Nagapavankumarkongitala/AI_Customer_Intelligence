@@ -4,6 +4,7 @@ import pandas as pd
 import pytest
 import yaml
 
+from retention_engine.strategy_mapper import load_matrix
 from services.dashboard_service import (
     apply_filters,
     build_master,
@@ -15,6 +16,7 @@ from services.dashboard_service import (
     segment_activity_trend,
     segment_mom_bridge,
     segment_portfolio,
+    strategy_segment_customer_counts,
     trend_tables,
 )
 from utils.config import load_config, validate_config
@@ -51,6 +53,7 @@ def _master() -> pd.DataFrame:
             "age": [25, 40, 60],
             "region": ["West", "North", "West"],
             "rfm_segment": ["Champions", "Lost Customers", "Champions"],
+            "ai_segment": ["Premium Active", "Core Dormant", "Premium Active"],
             "churn_probability": [0.1, 0.9, 0.2],
             "risk_band": ["low", "critical", "low"],
             "customer_value_tier": ["High", "Medium", "High"],
@@ -190,6 +193,33 @@ def test_high_risk_overlap_case() -> None:
     assert len(out) == 1
     assert out["customer_id"].iloc[0] == "•••"
     assert out["revenue_at_risk"].iloc[0] == 270.0
+
+
+def test_strategy_segment_customer_counts_are_long_form() -> None:
+    """Every strategy keeps segment-level customer counts in playbook order."""
+    matrix = load_matrix("retention_strategies.yaml")
+    master = build_master(_master())
+    retention = pd.DataFrame(
+        {
+            "customer_id": ["C1", "C2", "C3"],
+            "strategy_rule": ["recognition_growth", "recognition_growth", "vip_intervention"],
+        }
+    )
+    rfm = strategy_segment_customer_counts(retention, master, matrix, "rfm_segment")
+    assert list(rfm.columns) == ["strategy", "rule", "segment", "customers"]
+    assert list(dict.fromkeys(rfm["rule"])) == [rule.name for rule in matrix.rules]
+    recognition = rfm.loc[rfm["rule"] == "recognition_growth"].set_index("segment")["customers"]
+    assert recognition.to_dict() == {"Champions": 1, "Lost Customers": 1}
+    vip = rfm.loc[rfm["rule"] == "vip_intervention"].set_index("segment")["customers"]
+    assert vip.to_dict() == {"Champions": 1}
+    unused = rfm.loc[rfm["rule"] == "routine_nurture"].iloc[0]
+    assert unused["segment"] == "No customers" and unused["customers"] == 0
+
+    ai = strategy_segment_customer_counts(retention, master, matrix, "ai_segment")
+    ai_recognition = ai.loc[ai["rule"] == "recognition_growth"].set_index("segment")["customers"]
+    assert ai_recognition.to_dict() == {"Premium Active": 1, "Core Dormant": 1}
+    missing = strategy_segment_customer_counts(retention, master, matrix, "no_such_segment")
+    assert missing.empty and "customers" in missing.columns
 
 
 def test_config_validation() -> None:

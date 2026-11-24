@@ -13,6 +13,7 @@ from dataclasses import dataclass
 import pandas as pd
 
 from analytics.demographics import DEFAULT_AGE_BANDS, assign_age_band
+from retention_engine.strategy_mapper import StrategyMatrix
 from services.feature_service import TRANSITION_COLUMNS, period_bounds
 from utils.validators import require_min_rows
 
@@ -84,6 +85,89 @@ def build_master(
     if "age" in master.columns:
         master["age_band"] = assign_age_band(master["age"], DEFAULT_AGE_BANDS)
     return master
+
+
+def strategy_segment_customer_counts(
+    retention: pd.DataFrame,
+    master: pd.DataFrame,
+    matrix: StrategyMatrix,
+    segment_col: str,
+) -> pd.DataFrame:
+    """Count customers in each segment for every playbook strategy.
+
+    Long-form output: one row per (strategy, segment) with the customer count,
+    sorted in playbook order and then by segment size so stacks line up across
+    strategies. Rules with no matched customers keep a zero-count
+    ``No customers`` row. Missing segment columns yield an empty frame with the
+    same schema, so the UI can render a titled empty state.
+
+    Args:
+        retention: Filtered retention table from page 08 (customer grain).
+        master: Filtered customer master carrying the segment label columns.
+        matrix: Loaded strategy matrix that defines the playbook vocabulary.
+        segment_col: ``rfm_segment`` or ``ai_segment`` in ``master``.
+
+    Returns:
+        Columns: strategy (human-readable action), rule, segment, customers.
+    """
+    columns = ["strategy", "rule", "segment", "customers"]
+    empty = pd.DataFrame(columns=columns)
+    if retention.empty or master.empty or segment_col not in master.columns or not matrix.rules:
+        return empty
+    key_col = "strategy_rule" if "strategy_rule" in retention.columns else "recommended_action"
+    if key_col not in retention.columns or "customer_id" not in retention.columns:
+        return empty
+
+    joined = retention[["customer_id", key_col]].merge(
+        master[["customer_id", segment_col]], on="customer_id", how="left"
+    )
+    joined = joined.dropna(subset=[key_col, segment_col]).drop_duplicates()
+    labels = joined[segment_col].astype(str).str.strip()
+    joined = joined.loc[labels.ne("")].copy()
+    joined[segment_col] = labels.loc[labels.ne("")]
+
+    grouped = (
+        joined.groupby([key_col, segment_col], sort=False).size().reset_index(name="customers")
+    )
+    grouped[key_col] = grouped[key_col].astype(str)
+    grouped[segment_col] = grouped[segment_col].astype(str)
+    totals = grouped.groupby(segment_col)["customers"].sum().to_dict()
+    segment_order = {
+        name: index
+        for index, name in enumerate(sorted(totals, key=lambda name: (-int(totals[name]), name)))
+    }
+
+    rows: list[dict] = []
+    for rule_position, rule in enumerate(matrix.rules):
+        key = rule.name if key_col == "strategy_rule" else rule.action
+        subset = grouped.loc[grouped[key_col].eq(key)]
+        if subset.empty:
+            rows.append(
+                {
+                    "strategy": rule.action,
+                    "rule": rule.name,
+                    "segment": "No customers",
+                    "customers": 0,
+                    "_order": (rule_position, 999),
+                }
+            )
+            continue
+        for _, row in subset.iterrows():
+            segment = str(row[segment_col])
+            rows.append(
+                {
+                    "strategy": rule.action,
+                    "rule": rule.name,
+                    "segment": segment,
+                    "customers": int(row["customers"]),
+                    "_order": (rule_position, segment_order.get(segment, 998)),
+                }
+            )
+    rows.sort(key=lambda row: row["_order"])
+    return pd.DataFrame(
+        [{key: value for key, value in row.items() if key != "_order"} for row in rows],
+        columns=columns,
+    )
 
 
 def apply_filters(

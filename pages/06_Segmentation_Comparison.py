@@ -8,6 +8,7 @@ from analytics.segmentation_comparison import (
     churn_rate_by_segment,
     crosstab_counts,
 )
+from components.chart_export import plotly_chart
 from components.empty_state import chart_section, empty_state
 from components.filters import controls_expander
 from components.insight_box import insight_box
@@ -87,7 +88,7 @@ for i in range(0, len(metrics), 2):
     for col, (metric, title) in zip(cols, pair, strict=True):
         with col:
             with chart_section(title):
-                st.plotly_chart(
+                plotly_chart(
                     without_title(metric_comparison_bar(table, metric, title)),
                     width="stretch",
                     key=f"cmp_{metric}",
@@ -126,7 +127,7 @@ with agree_l:
         )
 with agree_r:
     with chart_section(f"Customer flow ({ref} → {target})"):
-        st.plotly_chart(without_title(sankey_mapping(ct, ref, target)), width="stretch")
+        plotly_chart(without_title(sankey_mapping(ct, ref, target)), width="stretch")
 with st.expander("Cross-tabulation (counts)", expanded=False):
     st.dataframe(ct, width="stretch")
 

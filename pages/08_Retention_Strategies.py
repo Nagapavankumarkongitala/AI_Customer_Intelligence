@@ -3,6 +3,7 @@
 import streamlit as st
 
 from components.cached import cached_build_retention_table, cached_export_campaign
+from components.chart_export import plotly_chart
 from components.empty_state import chart_section, empty_state
 from components.filters import controls_expander, multiselect_filter
 from components.metric_card import Metric, metric_row
@@ -170,17 +171,17 @@ render_strategy_playbook(view, matrix)
 ret_l, ret_r = st.columns([1, 1])
 with ret_l:
     with chart_section("Value–risk matrix"):
-        st.plotly_chart(without_title(value_risk_matrix(view)), width="stretch")
+        plotly_chart(without_title(value_risk_matrix(view)), width="stretch")
 with ret_r:
     with chart_section("Revenue at risk per action"):
-        st.plotly_chart(without_title(revenue_at_risk_bar(view)), width="stretch")
+        plotly_chart(without_title(revenue_at_risk_bar(view)), width="stretch")
 strat_l, strat_r = st.columns([1, 1])
 with strat_l:
     with chart_section("Customers per recommended action"):
-        st.plotly_chart(without_title(strategy_distribution_bar(view)), width="stretch")
+        plotly_chart(without_title(strategy_distribution_bar(view)), width="stretch")
 with strat_r:
     with chart_section("Priority score distribution"):
-        st.plotly_chart(without_title(priority_histogram(view)), width="stretch")
+        plotly_chart(without_title(priority_histogram(view)), width="stretch")
 
 with st.expander("Ranked customers (top 200 of filter)", expanded=False):
     render_table(

@@ -9,6 +9,7 @@ from components.cached import (
     cached_run_segment_tests,
     cached_segment_composition,
 )
+from components.chart_export import plotly_chart
 from components.empty_state import chart_section, empty_state
 from components.metric_card import Metric, metric_row
 from components.page_header import page_header, section_header
@@ -96,13 +97,13 @@ if has_age or has_gender:
     with demo_a:
         with chart_section("Age distribution"):
             if has_age:
-                st.plotly_chart(without_title(age_histogram(features["age"])), width="stretch")
+                plotly_chart(without_title(age_histogram(features["age"])), width="stretch")
             else:
                 empty_state("No age data yet", "Age appears here after profiling.")
     with demo_b:
         with chart_section("Customers per age band"):
             if has_age:
-                st.plotly_chart(
+                plotly_chart(
                     without_title(age_band_bar(profile.tables["age_bands"])),
                     width="stretch",
                 )
@@ -111,9 +112,7 @@ if has_age or has_gender:
     with demo_c:
         with chart_section("Customers by gender"):
             if has_gender:
-                st.plotly_chart(
-                    without_title(gender_bar(profile.tables["gender"])), width="stretch"
-                )
+                plotly_chart(without_title(gender_bar(profile.tables["gender"])), width="stretch")
             else:
                 empty_state("No gender data yet", "Gender appears here after profiling.")
 
@@ -130,7 +129,7 @@ if not geo_levels:
 geo_path = [lvl for lvl in ("region", "country", "state", "city") if lvl in features.columns]
 if len(geo_path) >= 2:
     with chart_section("Customer hierarchy (" + " → ".join(geo_path) + ")"):
-        st.plotly_chart(
+        plotly_chart(
             without_title(geo_treemap(features, geo_path)),
             width="stretch",
             key="geo_treemap",
@@ -148,7 +147,7 @@ for tab, level in zip(geo_tab, geo_levels, strict=True):
         geo_l, geo_r = st.columns([1, 1])
         with geo_l:
             with chart_section(f"Top {plural_geo_level(level)} by customers"):
-                st.plotly_chart(
+                plotly_chart(
                     without_title(top_geo_bar(table, level)),
                     width="stretch",
                     key=f"geo_top_{level}",
@@ -156,7 +155,7 @@ for tab, level in zip(geo_tab, geo_levels, strict=True):
         with geo_r:
             if "revenue" in table.columns:
                 with chart_section(f"Top {plural_geo_level(level)} by revenue"):
-                    st.plotly_chart(
+                    plotly_chart(
                         without_title(revenue_geo_bar(table, level)),
                         width="stretch",
                         key=f"geo_rev_{level}",
@@ -176,7 +175,7 @@ if segments is not None:
         for col, (column, comp) in zip(cols, pair, strict=True):
             with col:
                 with chart_section(f"{column} mix by segment"):
-                    st.plotly_chart(
+                    plotly_chart(
                         without_title(stacked_composition_bar(comp, column)),
                         width="stretch",
                         key=f"comp_{column}",

@@ -5,6 +5,7 @@ import pandas as pd
 import pytest
 
 from deep_learning.latent_space_visualization import latent_scatter
+from utils import formatting
 from visualization import (
     churn_charts,
     demographic_charts,
@@ -203,6 +204,28 @@ def test_segment_charts_use_stable_hues() -> None:
         assert fig.data[0].textfont.size == 13
 
 
+def test_revenue_by_segment_bar_labels_use_compact_money() -> None:
+    """Revenue labels abbreviate to K/L/Cr while hover keeps exact amounts."""
+    original = formatting.get_notation()
+    formatting.set_notation(formatting.NOTATION_INDIAN)
+    try:
+        profile = pd.DataFrame(
+            {
+                "segment": ["A", "B", "C"],
+                "revenue": [1500.0, 250000.0, 12_500_000.0],
+            }
+        )
+        fig = rfm_charts.revenue_by_segment_bar(profile)
+        labels = [str(value) for trace in fig.data for value in _trace_values(trace.text)]
+        assert labels == ["₹1.5K", "₹2.5L", "₹1.25Cr"]
+        assert all(trace.texttemplate == "%{text}" for trace in fig.data)
+        hover = [str(value) for trace in fig.data for value in np.asarray(trace.customdata).ravel()]
+        assert "₹1,500" in hover
+        assert "₹1,25,00,000" in hover
+    finally:
+        formatting.set_notation(original)
+
+
 def test_segment_share_donut() -> None:
     """Donut carries segment hues, a hole, and the total in its center."""
     from visualization import tokens
@@ -323,6 +346,42 @@ def test_action_charts_use_stable_hues() -> None:
     assert _trace_colors(retention_charts.value_risk_matrix(table)) == expected
     assert _trace_colors(retention_charts.revenue_at_risk_bar(table)) == expected
     assert _trace_colors(retention_charts.strategy_distribution_bar(table)) == expected
+
+
+def test_strategy_segment_customer_bar_stacks_segment_counts() -> None:
+    """Each strategy is a stacked bar of customer counts by segment."""
+    from visualization import tokens
+
+    coverage = pd.DataFrame(
+        {
+            "strategy": ["VIP", "VIP", "Routine"],
+            "rule": ["vip_intervention", "vip_intervention", "routine_nurture"],
+            "segment": ["Champions", "At Risk", "No customers"],
+            "customers": [2, 1, 0],
+        }
+    )
+    fig = retention_charts.strategy_segment_customer_bar(coverage, "RFM customers per strategy")
+    assert fig.layout.title.text == "RFM customers per strategy"
+    assert fig.layout.barmode == "stack"
+    assert fig.layout.yaxis.autorange == "reversed"
+    assert all(trace.type == "bar" and trace.orientation == "h" for trace in fig.data)
+    totals: dict[str, int] = {}
+    for trace in fig.data:
+        totals[str(trace.y[0])] = totals.get(str(trace.y[0]), 0) + int(_trace_values(trace.x)[0])
+    assert totals == {"VIP": 3, "Routine": 0}
+    assert _trace_colors(fig) == {
+        "Champions": tokens.segment_color("Champions"),
+        "At Risk": tokens.segment_color("At Risk"),
+        "No customers": tokens.segment_color("No customers"),
+    }
+    hover = [str(value) for trace in fig.data for value in np.asarray(trace.customdata).ravel()]
+    assert any("vip_intervention" in value for value in hover)
+
+    empty = retention_charts.strategy_segment_customer_bar(
+        pd.DataFrame(), "AI customers per strategy"
+    )
+    assert empty.layout.title.text == "AI customers per strategy"
+    assert len(empty.data) == 0 and empty.layout.annotations
 
 
 def test_geo_titles_use_english_plurals() -> None:

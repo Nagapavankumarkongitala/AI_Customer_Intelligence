@@ -7,6 +7,7 @@ import streamlit as st
 import yaml
 
 from components.cached import cached_run_segment_trends_with_labels, cached_segment_profile
+from components.chart_export import plotly_chart
 from components.empty_state import chart_section, empty_state
 from components.metric_card import Metric, metric_row
 from components.page_header import page_header, section_header
@@ -235,14 +236,14 @@ for tab, key in ((tab_rfm, "rfm_results"), (tab_lrfm, "lrfm_results")):
             seg_l, seg_r = st.columns([1, 1])
             with seg_l:
                 with chart_section("Customers per segment"):
-                    st.plotly_chart(
+                    plotly_chart(
                         _compact(segment_distribution_bar(profile)),
                         width="stretch",
                         key=f"{key}_seg_dist",
                     )
             with seg_r:
                 with chart_section("Revenue per segment"):
-                    st.plotly_chart(
+                    plotly_chart(
                         _compact(revenue_by_segment_bar(profile)),
                         width="stretch",
                         key=f"{key}_revenue",
@@ -296,6 +297,8 @@ for tab, key in ((tab_rfm, "rfm_results"), (tab_lrfm, "lrfm_results")):
                             transition_frame(hist_state),
                             model=flows_model,
                             key_prefix=f"{key}_trendpair",
+                            left_title=f"{trend_view} segment trend",
+                            right_title=f"{source} segment transitions",
                             empty_message=(
                                 "Saved AI labels are fixed, so there are no re-scored "
                                 "transitions to draw. Choose RFM or LRFM for the Sankey."
@@ -313,7 +316,7 @@ for tab, key in ((tab_rfm, "rfm_results"), (tab_lrfm, "lrfm_results")):
             )
             with chart_section(rel_view):
                 if rel_view == "Scatter matrix":
-                    st.plotly_chart(
+                    plotly_chart(
                         rfm_scatter_matrix(enriched),
                         width="stretch",
                         key=f"{key}_relmatrix",
@@ -321,7 +324,7 @@ for tab, key in ((tab_rfm, "rfm_results"), (tab_lrfm, "lrfm_results")):
                     if len(enriched) > 2000:
                         st.caption("Scatter matrix shows a 2,000-customer sample.")
                 elif rel_view == "3D scatter":
-                    st.plotly_chart(
+                    plotly_chart(
                         rfm_scatter_3d(enriched),
                         width="stretch",
                         key=f"{key}_rel3d",
@@ -329,7 +332,7 @@ for tab, key in ((tab_rfm, "rfm_results"), (tab_lrfm, "lrfm_results")):
                     if len(enriched) > 2000:
                         st.caption("3D scatter shows a 2,000-customer sample.")
                 else:
-                    st.plotly_chart(
+                    plotly_chart(
                         _compact(rfm_parallel_plot(enriched)),
                         width="stretch",
                         key=f"{key}_parcoords",
