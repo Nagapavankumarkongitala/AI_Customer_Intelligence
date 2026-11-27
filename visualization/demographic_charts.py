@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 
+import numpy as np
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
@@ -40,18 +41,57 @@ def plural_geo_level(level: str) -> str:
 
 
 @styled
-def age_histogram(ages: pd.Series) -> px.Figure:
-    """Distribution of customer ages."""
+def age_histogram(ages: pd.Series, values: pd.Series | None = None) -> go.Figure:
+    """Distribution of customer ages, optionally with mean customer value.
+
+    When ``values`` (typically ``monetary_value``) is supplied, a dotted line
+    on a second axis shows the average value in each age bin. The customer
+    count stays the primary measure so the shape of the population is unchanged.
+    """
     clean = pd.to_numeric(ages, errors="coerce").dropna()
     if clean.empty:
         return empty_figure("Age distribution")
-    return px.histogram(
-        clean,
-        nbins=20,
-        title="Age distribution",
-        labels={"value": "Age", "count": "Customers"},
-        color_discrete_sequence=[PRIMARY],
+    if values is None:
+        return px.histogram(
+            clean,
+            nbins=20,
+            title="Age distribution",
+            labels={"value": "Age", "count": "Customers"},
+            color_discrete_sequence=[PRIMARY],
+        )
+
+    aligned = pd.to_numeric(values, errors="coerce").reindex(clean.index)
+    counts, edges = np.histogram(clean.to_numpy(), bins=20)
+    centers = (edges[:-1] + edges[1:]) / 2
+    bucket = np.digitize(clean.to_numpy(), edges[1:-1], right=False)
+    means = [
+        float(aligned[bucket == i].dropna().mean()) if (bucket == i).any() else 0.0
+        for i in range(len(centers))
+    ]
+    fig = go.Figure()
+    fig.add_bar(
+        x=centers,
+        y=counts,
+        name="Customers",
+        marker={"color": PRIMARY},
+        hovertemplate="Age %{x:.0f}<br>Customers %{y:,}<extra></extra>",
     )
+    fig.add_scatter(
+        x=centers,
+        y=means,
+        name="Avg customer value",
+        yaxis="y2",
+        mode="lines+markers",
+        line={"color": MUTED, "width": 2, "dash": "dot"},
+        marker={"size": 6, "color": MUTED},
+        hovertemplate="Age %{x:.0f}<br>Avg value %{y:,.0f}<extra></extra>",
+    )
+    fig.update_layout(
+        title="Age distribution",
+        yaxis={"title": "Customers"},
+        yaxis2={"title": "Avg customer value", "overlaying": "y", "side": "right"},
+    )
+    return fig
 
 
 @styled
@@ -119,19 +159,51 @@ def age_band_bar(age_bands: pd.DataFrame, value_col: str | None = None) -> go.Fi
 
 
 @styled
-def gender_bar(gender: pd.DataFrame) -> px.Figure:
-    """Customer counts by gender."""
+def gender_bar(gender: pd.DataFrame, value_col: str | None = None) -> go.Figure:
+    """Customer counts by gender, optionally with revenue on a second axis."""
     if gender.empty:
         return empty_figure("Customers by gender")
-    return px.bar(
-        gender,
-        x="gender",
-        y="customers",
-        color="gender",
-        color_discrete_sequence=PRIMARY_DISCRETE,
-        title="Customers by gender",
-        labels={"gender": "Gender", "customers": "Customers"},
+    has_value = value_col is not None and value_col in gender.columns
+    if not has_value:
+        return px.bar(
+            gender,
+            x="gender",
+            y="customers",
+            color="gender",
+            color_discrete_sequence=PRIMARY_DISCRETE,
+            title="Customers by gender",
+            labels={"gender": "Gender", "customers": "Customers"},
+        )
+
+    frame = gender.copy()
+    colors = [PRIMARY_DISCRETE[i % len(PRIMARY_DISCRETE)] for i in range(len(frame))]
+    fig = make_subplots(specs=[[{"secondary_y": True}]])
+    fig.add_trace(
+        go.Bar(
+            x=frame["gender"].tolist(),
+            y=frame["customers"].tolist(),
+            name="Customers",
+            marker={"color": colors},
+            hovertemplate="%{x}<br>Customers %{y:,}<extra></extra>",
+        ),
+        secondary_y=False,
     )
+    fig.add_trace(
+        go.Scatter(
+            x=frame["gender"].tolist(),
+            y=frame[value_col].astype(float).tolist(),
+            name=value_col.replace("_", " ").title(),
+            mode="lines+markers",
+            line={"color": MUTED, "width": 2, "dash": "dot"},
+            marker={"size": 8, "color": MUTED},
+            hovertemplate="%{x}<br>%{y:,.0f}<extra></extra>",
+        ),
+        secondary_y=True,
+    )
+    fig.update_layout(title="Customers by gender")
+    fig.update_yaxes(title_text="Customers", secondary_y=False)
+    fig.update_yaxes(title_text=value_col.replace("_", " ").title(), secondary_y=True)
+    return fig
 
 
 @styled

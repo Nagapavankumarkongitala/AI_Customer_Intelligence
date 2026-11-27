@@ -9,7 +9,7 @@ from components.cached import (
     cached_run_segment_tests,
     cached_segment_composition,
 )
-from components.chart_export import plotly_chart
+from components.chart_export import download_png_button, plotly_chart
 from components.empty_state import chart_section, empty_state
 from components.metric_card import Metric, metric_row
 from components.page_header import page_header, section_header
@@ -93,26 +93,100 @@ if has_age or has_gender:
                 Metric("Median age", formatting.fmt_int(summary["median_age"])),
             ]
         )
+    has_value = "monetary_value" in features.columns
+    # Toggle state is read before the figures are built; the widgets themselves
+    # are mounted under each chart so they share the row with the download icon.
+    age_value = bool(st.session_state.get("demo_age_value", False)) and has_value
+    band_value = (
+        bool(st.session_state.get("demo_age_band_value", False))
+        and "avg_value" in profile.tables.get("age_bands", pd.DataFrame()).columns
+    )
+    gender_value = (
+        bool(st.session_state.get("demo_gender_value", False))
+        and "revenue" in profile.tables.get("gender", pd.DataFrame()).columns
+    )
+
     demo_a, demo_b, demo_c = st.columns(3)
     with demo_a:
         with chart_section("Age distribution"):
             if has_age:
-                plotly_chart(without_title(age_histogram(features["age"])), width="stretch")
+                fig = without_title(
+                    age_histogram(
+                        features["age"],
+                        values=features["monetary_value"] if age_value else None,
+                    )
+                )
+                plotly_chart(fig, width="stretch", show_download=False, key="demo_age_hist")
+                with st.container(
+                    horizontal=True,
+                    wrap=False,
+                    horizontal_alignment="distribute",
+                    vertical_alignment="center",
+                ):
+                    st.toggle(
+                        "Overlay customer value",
+                        value=False,
+                        key="demo_age_value",
+                        disabled=not has_value,
+                        help="Adds mean customer value per age bin on a second axis.",
+                    )
+                    download_png_button(fig, title="Age distribution", key="demo_age_download")
             else:
                 empty_state("No age data yet", "Age appears here after profiling.")
     with demo_b:
         with chart_section("Customers per age band"):
             if has_age:
-                plotly_chart(
-                    without_title(age_band_bar(profile.tables["age_bands"])),
-                    width="stretch",
+                fig = without_title(
+                    age_band_bar(
+                        profile.tables["age_bands"],
+                        value_col="avg_value" if band_value else None,
+                    )
                 )
+                plotly_chart(fig, width="stretch", show_download=False, key="demo_age_band")
+                with st.container(
+                    horizontal=True,
+                    wrap=False,
+                    horizontal_alignment="distribute",
+                    vertical_alignment="center",
+                ):
+                    st.toggle(
+                        "Overlay customer value",
+                        value=False,
+                        key="demo_age_band_value",
+                        disabled=not has_value,
+                        help="Adds mean customer value per age band on a second axis.",
+                    )
+                    download_png_button(
+                        fig, title="Customers per age band", key="demo_age_band_download"
+                    )
             else:
                 empty_state("No age bands yet", "Age bands appear here after profiling.")
     with demo_c:
         with chart_section("Customers by gender"):
             if has_gender:
-                plotly_chart(without_title(gender_bar(profile.tables["gender"])), width="stretch")
+                fig = without_title(
+                    gender_bar(
+                        profile.tables["gender"],
+                        value_col="revenue" if gender_value else None,
+                    )
+                )
+                plotly_chart(fig, width="stretch", show_download=False, key="demo_gender")
+                with st.container(
+                    horizontal=True,
+                    wrap=False,
+                    horizontal_alignment="distribute",
+                    vertical_alignment="center",
+                ):
+                    st.toggle(
+                        "Overlay customer value",
+                        value=False,
+                        key="demo_gender_value",
+                        disabled=not has_value,
+                        help="Adds revenue by gender on a second axis.",
+                    )
+                    download_png_button(
+                        fig, title="Customers by gender", key="demo_gender_download"
+                    )
             else:
                 empty_state("No gender data yet", "Gender appears here after profiling.")
 

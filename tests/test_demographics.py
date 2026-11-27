@@ -65,6 +65,8 @@ def test_profile_tables_and_revenue() -> None:
     """Gender/geo tables carry counts, shares, and revenue; age stats present."""
     profile = build_demographic_profile(_features())
     assert profile.tables["age_summary"]["median_age"].iloc[0] == 31.0
+    age_bands = profile.tables["age_bands"]
+    assert age_bands.loc[age_bands["age_band"] == "25–34", "avg_value"].iloc[0] == 1300.0
     gender = profile.tables["gender"]
     assert gender.loc[gender["gender"] == "Male", "customers"].iloc[0] == 3
     assert gender["revenue"].sum() == 5000.0

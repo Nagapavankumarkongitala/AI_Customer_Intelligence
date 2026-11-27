@@ -889,6 +889,24 @@ def test_age_band_bar_orders_chronologically_and_adds_value_overlay() -> None:
     assert list(_trace_values(with_value.data[1].y)) == [300.0, 500.0, 700.0, 900.0]
 
 
+def test_age_histogram_and_gender_bar_can_overlay_customer_value() -> None:
+    """Demographic controls add a muted second-axis value line when asked."""
+    ages = pd.Series([22, 28, 34, 45, 60])
+    values = pd.Series([100.0, 400.0, 1500.0, 800.0, 200.0])
+    histogram = demographic_charts.age_histogram(ages, values=values)
+    assert len(histogram.data) == 2
+    assert histogram.data[1].name == "Avg customer value"
+    assert histogram.data[1].yaxis == "y2"
+
+    gender = pd.DataFrame(
+        {"gender": ["Male", "Female"], "customers": [3, 2], "revenue": [3000.0, 2000.0]}
+    )
+    overlay = demographic_charts.gender_bar(gender, value_col="revenue")
+    assert len(overlay.data) == 2
+    assert overlay.data[1].name == "Revenue"
+    assert list(_trace_values(overlay.data[1].y)) == [3000.0, 2000.0]
+
+
 def test_revenue_geo_bar_sorts_and_overlays_secondary_metric() -> None:
     """Horizontal geo bars rank largest-first and can carry a companion dot."""
     geo = pd.DataFrame(

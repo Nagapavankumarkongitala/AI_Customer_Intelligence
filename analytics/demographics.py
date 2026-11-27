@@ -124,8 +124,20 @@ def build_demographic_profile(
             ]
         )
         banded = assign_age_band(features["age"], bands)
-        age_bands = banded.value_counts().rename_axis("age_band").reset_index(name="customers")
+        banded_frame = features.assign(_age_band=banded)
+        age_bands = (
+            banded_frame["_age_band"]
+            .value_counts()
+            .rename_axis("age_band")
+            .reset_index(name="customers")
+        )
         age_bands["pct"] = _pct(age_bands["customers"]).values
+        if has_revenue:
+            age_bands["avg_value"] = (
+                age_bands["age_band"]
+                .map(banded_frame.groupby("_age_band")["monetary_value"].mean())
+                .round(2)
+            )
         profile.tables["age_bands"] = age_bands
     if "gender" in features.columns:
         gender = features["gender"].fillna("Unknown").astype(str).str.strip().replace("", "Unknown")

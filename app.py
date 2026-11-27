@@ -15,7 +15,7 @@ from components.cached import (
     cached_segment_portfolio,
     cached_trend_tables,
 )
-from components.chart_export import plotly_chart
+from components.chart_export import download_png_button, plotly_chart
 from components.empty_state import chart_section, empty_state
 from components.export_buttons import csv_download_button
 from components.filters import date_range_filter, multiselect_filter
@@ -420,15 +420,13 @@ with overview_tab:
     with row1_a:
         with chart_section("Revenue trend"):
             rev_frame = trends["revenue"]
+            # The toggle is mounted under the chart so it shares the toolbar
+            # with the download icon. Reading its key here lets the figure use
+            # the value from the previous interaction on this rerun.
+            show_volume = bool(st.session_state.get("overview_revenue_volume", False))
             # Customer count is the one driver we hold monthly, so it is the only
             # context series offered: churn is a per-customer snapshot with no
             # monthly history, and a made-up series would be worse than none.
-            show_volume = st.toggle(
-                "Overlay customer volume",
-                value=False,
-                key="overview_revenue_volume",
-                help="Adds active customers on a second axis, so volume vs value is visible.",
-            )
             secondary = None
             if show_volume and "month" in trends["activity"].columns:
                 rev_frame = rev_frame.merge(trends["activity"], on="month", how="left")
@@ -436,18 +434,22 @@ with overview_tab:
                     secondary = "active_customers"
             fig = revenue_trend_fig(rev_frame, secondary=secondary, forecast_periods=3)
             fig = _compact(shade_quarters(fig, rev_frame["month"]))
-            plotly_chart(fig, width="stretch")
+            plotly_chart(fig, width="stretch", show_download=False)
+            with st.container(
+                horizontal=True,
+                wrap=False,
+                horizontal_alignment="distribute",
+                vertical_alignment="center",
+            ):
+                st.toggle(
+                    "Overlay customer value",
+                    value=False,
+                    key="overview_revenue_volume",
+                    help="Adds active customers on a second axis, so volume vs value is visible.",
+                )
+                download_png_button(fig, title="Revenue trend", key="overview_revenue_download")
     with row1_b:
-        use_ai_segments = st.toggle(
-            "Use AI segments",
-            value=False,
-            key="overview_ai_segment_source",
-            disabled=not has_ai_segments,
-            help=(
-                "Show the saved AI segmentation instead of RFM segments. "
-                "Save a run on page 05 to enable this switch."
-            ),
-        )
+        use_ai_segments = bool(st.session_state.get("overview_ai_segment_source", False))
         with chart_section("Customers per segment"):
             segment_col = "ai_segment" if use_ai_segments and has_ai_segments else "rfm_segment"
             chart_portfolio = (
@@ -455,11 +457,12 @@ with overview_tab:
                 if segment_col in master_f.columns
                 else None
             )
+            chart_figure = None
             if chart_portfolio is not None and not chart_portfolio.empty:
-                plotly_chart(
-                    _compact(segment_share_bar(chart_portfolio, segment_col, "customers")),
-                    width="stretch",
+                chart_figure = _compact(
+                    segment_share_bar(chart_portfolio, segment_col, "customers")
                 )
+                plotly_chart(chart_figure, width="stretch", show_download=False)
             elif segment_col == "ai_segment":
                 empty_state(
                     "No AI segments yet",
@@ -470,6 +473,28 @@ with overview_tab:
                     "No RFM segments yet",
                     "RFM segments appear here after page 03 scoring.",
                 )
+            with st.container(
+                horizontal=True,
+                wrap=False,
+                horizontal_alignment="distribute",
+                vertical_alignment="center",
+            ):
+                st.toggle(
+                    "Use AI segments",
+                    value=False,
+                    key="overview_ai_segment_source",
+                    disabled=not has_ai_segments,
+                    help=(
+                        "Show the saved AI segmentation instead of RFM segments. "
+                        "Save a run on page 05 to enable this switch."
+                    ),
+                )
+                if chart_figure is not None:
+                    download_png_button(
+                        chart_figure,
+                        title="Customers per segment",
+                        key="overview_segment_download",
+                    )
     with row1_c:
         with chart_section("Customers per risk band"):
             if "risk_band" in master_f.columns:
