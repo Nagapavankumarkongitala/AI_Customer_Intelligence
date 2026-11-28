@@ -14,6 +14,7 @@ from visualization.theme import (
     MUTED,
     PRIMARY,
     PRIMARY_DISCRETE,
+    apply_chart_theme,
     empty_figure,
     styled,
 )
@@ -217,28 +218,37 @@ def value_risk_heatmap(
     return fig
 
 
-@styled
 def revenue_at_risk_bar(table: pd.DataFrame) -> px.Figure:
     """Revenue at risk per recommended action, largest first."""
     if table.empty:
-        return empty_figure("Revenue at risk per action")
+        return apply_chart_theme(empty_figure("Revenue at risk per action"))
     grouped = (
-        table.groupby("recommended_action")["revenue_at_risk"]
+        table.groupby("recommended_action", as_index=False)["revenue_at_risk"]
         .sum()
-        .reset_index()
-        .sort_values("revenue_at_risk", ascending=False)
+        .sort_values("revenue_at_risk", ascending=True)
         .reset_index(drop=True)
     )
-    fig = px.bar(
-        grouped,
-        x="recommended_action",
-        y="revenue_at_risk",
-        color="recommended_action",
-        **_action_map_or_sequence(grouped["recommended_action"]),
-        title="Revenue at risk per action",
+    actions = grouped["recommended_action"].astype(str)
+    colors = [tokens.action_color(a) for a in actions]
+    fig = go.Figure(
+        go.Bar(
+            x=grouped["revenue_at_risk"],
+            y=actions,
+            orientation="h",
+            marker_color=colors,
+            text=[_compact_money(v) for v in grouped["revenue_at_risk"]],
+            textposition="outside",
+            cliponaxis=False,
+            hovertemplate="%{y}<br>%{x:,.0f} at risk<extra></extra>",
+        )
     )
-    # The legend already names every action, so the category labels only repeat it.
-    fig.update_xaxes(title_text="", showticklabels=False)
+    fig.update_layout(
+        title="Revenue at risk per action",
+        xaxis_title="Revenue at risk",
+        yaxis_title="",
+        bargap=0.3,
+    )
+    fig.update_yaxes(type="category")
     return fig
 
 
@@ -249,55 +259,122 @@ def strategy_distribution_bar(table: pd.DataFrame) -> px.Figure:
         return empty_figure("Customers per recommended action")
     counts = table["recommended_action"].value_counts().reset_index()
     counts.columns = ["action", "customers"]
-    # value_counts is already descending; sort defensively so order never drifts.
-    counts = counts.sort_values("customers", ascending=False).reset_index(drop=True)
-    fig = px.bar(
-        counts,
-        x="action",
-        y="customers",
-        color="action",
-        **_action_map_or_sequence(counts["action"]),
-        title="Customers per recommended action",
+    counts = counts.sort_values("customers", ascending=True).reset_index(drop=True)
+    actions = counts["action"].astype(str)
+    colors = [tokens.action_color(a) for a in actions]
+    fig = go.Figure(
+        go.Bar(
+            x=counts["customers"],
+            y=actions,
+            orientation="h",
+            marker_color=colors,
+            text=[f"{int(v):,}" for v in counts["customers"]],
+            textposition="outside",
+            cliponaxis=False,
+            hovertemplate="%{y}<br>%{x:,} customers<extra></extra>",
+        )
     )
-    # The legend already names every action, so the category labels only repeat it.
-    fig.update_xaxes(title_text="", showticklabels=False)
+    fig.update_layout(
+        title="Customers per recommended action",
+        xaxis_title="Customers",
+        yaxis_title="",
+        bargap=0.3,
+    )
+    fig.update_yaxes(type="category")
+    fig = apply_chart_theme(fig)
+    fig.update_layout(margin_r=60)
     return fig
 
 
-@styled(height=420)
 def strategy_segment_customer_bar(
     coverage: pd.DataFrame,
     title: str = "Customers per strategy by segment",
 ) -> px.Figure:
-    """Stacked customer counts per segment for every playbook strategy.
+    """Heatmap of customer counts per strategy and segment.
 
-    ``coverage`` comes from ``services.dashboard_service.strategy_segment_customer_counts``
-    and keeps playbook order top-to-bottom. Segment hues stay consistent with the
-    rest of the app; hover names the rule and the segment behind each stack.
+    ``coverage`` comes from ``services.dashboard_service.strategy_segment_customer_counts``.
+    Strategies are ordered by total customers descending; segments by total descending.
+    Annotated counts make the matrix readable without hovering.
     """
     if coverage.empty:
-        return empty_figure(title, "No segment labels for the current selection.")
-    colors = {str(name): tokens.segment_color(str(name)) for name in coverage["segment"].unique()}
-    fig = px.bar(
-        coverage,
-        x="customers",
-        y="strategy",
-        color="segment",
-        orientation="h",
-        barmode="stack",
-        color_discrete_map=colors,
-        hover_data=["rule"],
-        title=title,
-        labels={
-            "customers": "Customers",
-            "strategy": "",
-            "segment": "Segment",
-            "rule": "Rule",
-        },
+        return apply_chart_theme(
+            empty_figure(title, "No segment labels for the current selection."), height=420
+        )
+    cov = coverage.copy()
+    cov["strategy"] = cov["strategy"].astype(str)
+    cov["segment"] = cov["segment"].astype(str)
+    cov["customers"] = pd.to_numeric(cov["customers"], errors="coerce").fillna(0).astype(int)
+
+    strategy_order = (
+        cov.groupby("strategy")["customers"].sum().sort_values(ascending=False).index.tolist()
     )
-    # Playbook order reads top-down; the theme drops the redundant axis title.
+    segment_order = (
+        cov.groupby("segment")["customers"].sum().sort_values(ascending=False).index.tolist()
+    )
+    matrix = cov.pivot_table(
+        index="strategy", columns="segment", values="customers", aggfunc="sum", fill_value=0
+    ).reindex(index=strategy_order, columns=segment_order, fill_value=0)
+    rule_source = (
+        cov["rule"].astype(str) if "rule" in cov.columns else pd.Series("", index=cov.index)
+    )
+    rule_matrix = (
+        cov.assign(_rule=rule_source)
+        .pivot_table(
+            index="strategy",
+            columns="segment",
+            values="_rule",
+            aggfunc=lambda values: " / ".join(sorted({str(v) for v in values if str(v)})),
+            fill_value="",
+        )
+        .reindex(index=strategy_order, columns=segment_order, fill_value="")
+    )
+    z = matrix.values
+    max_val = int(z.max()) if z.size else 0
+    fig = go.Figure(
+        go.Heatmap(
+            z=z,
+            x=matrix.columns.tolist(),
+            y=matrix.index.tolist(),
+            customdata=rule_matrix.values,
+            colorscale=tokens.sequential_scale(),
+            hoverongaps=False,
+            hovertemplate=(
+                "Strategy=%{y}<br>Segment=%{x}<br>Customers=%{z:,}<br>"
+                "Rule=%{customdata}<extra></extra>"
+            ),
+            colorbar={"title": "Customers", "thickness": 12},
+        )
+    )
+    fig.update_layout(title=title, xaxis_title="Segment", yaxis_title="")
     fig.update_yaxes(autorange="reversed")
-    fig.update_xaxes(dtick=1, rangemode="tozero")
+    fig.update_xaxes(tickangle=-25)
+    fig = apply_chart_theme(fig, height=420)
+    # Per-cell labels with contrast-aware color.
+    scale = tokens.sequential_scale()
+    denom = max(max_val, 1)
+    xs, ys, labels, label_colors = [], [], [], []
+    for i, strategy in enumerate(matrix.index.tolist()):
+        for j, segment in enumerate(matrix.columns.tolist()):
+            v = int(z[i][j])
+            if v <= 0:
+                continue
+            xs.append(segment)
+            ys.append(strategy)
+            labels.append(f"{v:,}")
+            label_colors.append(tokens.readable_ink(_blend(scale, v / denom)))
+    if labels:
+        fig.add_trace(
+            go.Scatter(
+                x=xs,
+                y=ys,
+                mode="text",
+                text=labels,
+                textfont={"size": 10, "color": label_colors},
+                hoverinfo="skip",
+                showlegend=False,
+            )
+        )
+    fig.update_layout(margin_b=90)
     return fig
 
 

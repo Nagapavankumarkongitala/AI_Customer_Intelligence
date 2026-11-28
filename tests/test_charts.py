@@ -344,14 +344,20 @@ def test_action_charts_use_stable_hues() -> None:
         "Routine nurture and monitoring": tokens.action_color("Routine nurture and monitoring"),
     }
     assert _trace_colors(retention_charts.value_risk_matrix(table)) == expected
-    assert _trace_colors(retention_charts.revenue_at_risk_bar(table)) == expected
-    assert _trace_colors(retention_charts.strategy_distribution_bar(table)) == expected
+
+    rev = retention_charts.revenue_at_risk_bar(table)
+    rev_actions = [str(v) for v in rev.data[0].y]
+    rev_colors = list(rev.data[0].marker.color)
+    assert {a: c for a, c in zip(rev_actions, rev_colors, strict=True)} == expected
+
+    dist = retention_charts.strategy_distribution_bar(table)
+    dist_actions = [str(v) for v in dist.data[0].y]
+    dist_colors = list(dist.data[0].marker.color)
+    assert {a: c for a, c in zip(dist_actions, dist_colors, strict=True)} == expected
 
 
-def test_strategy_segment_customer_bar_stacks_segment_counts() -> None:
-    """Each strategy is a stacked bar of customer counts by segment."""
-    from visualization import tokens
-
+def test_strategy_segment_customer_bar_renders_heatmap() -> None:
+    """Strategy-segment counts render as an annotated heatmap."""
     coverage = pd.DataFrame(
         {
             "strategy": ["VIP", "VIP", "Routine"],
@@ -362,18 +368,14 @@ def test_strategy_segment_customer_bar_stacks_segment_counts() -> None:
     )
     fig = retention_charts.strategy_segment_customer_bar(coverage, "RFM customers per strategy")
     assert fig.layout.title.text == "RFM customers per strategy"
-    assert fig.layout.barmode == "stack"
-    assert fig.layout.yaxis.autorange == "reversed"
-    assert all(trace.type == "bar" and trace.orientation == "h" for trace in fig.data)
-    totals: dict[str, int] = {}
-    for trace in fig.data:
-        totals[str(trace.y[0])] = totals.get(str(trace.y[0]), 0) + int(_trace_values(trace.x)[0])
-    assert totals == {"VIP": 3, "Routine": 0}
-    assert _trace_colors(fig) == {
-        "Champions": tokens.segment_color("Champions"),
-        "At Risk": tokens.segment_color("At Risk"),
-        "No customers": tokens.segment_color("No customers"),
-    }
+    heatmaps = [t for t in fig.data if t.type == "heatmap"]
+    assert len(heatmaps) == 1
+    hm = heatmaps[0]
+    assert "VIP" in list(hm.y)
+    assert "Champions" in list(hm.x)
+    # annotations are rendered as a text scatter overlay
+    text_traces = [t for t in fig.data if getattr(t, "mode", "") == "text"]
+    assert text_traces and "2" in list(text_traces[0].text)
     hover = [str(value) for trace in fig.data for value in np.asarray(trace.customdata).ravel()]
     assert any("vip_intervention" in value for value in hover)
 
@@ -546,9 +548,10 @@ def _retention_table() -> pd.DataFrame:
 def test_revenue_at_risk_bar_sorted_descending() -> None:
     """Actions order largest-first so the biggest exposure leads the chart."""
     fig = retention_charts.revenue_at_risk_bar(_retention_table())
-    names = [trace.name for trace in fig.data]
-    # Nurture 60, Reactivation 1400, VIP 4500 -> ascending input, descending output.
-    assert names == ["VIP", "Reactivation", "Nurture"]
+    # Horizontal bars: last y value renders at top; largest should lead.
+    names = [str(v) for v in fig.data[0].y]
+    assert names == ["Nurture", "Reactivation", "VIP"]
+    assert list(fig.data[0].x) == sorted(fig.data[0].x)
 
 
 def test_value_risk_matrix_has_priority_quadrant() -> None:

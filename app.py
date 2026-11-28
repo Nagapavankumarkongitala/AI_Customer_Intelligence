@@ -7,6 +7,7 @@ from components.cached import (
     cached_apply_filters,
     cached_build_master,
     cached_compute_kpis,
+    cached_default_matrix_report,
     cached_high_value_high_risk,
     cached_period_deltas,
     cached_prepare_transactions,
@@ -36,7 +37,6 @@ from services.dashboard_service import (
     mask_customer_id,
     strategy_segment_customer_counts,
 )
-from services.retention_service import default_matrix_report
 from services.segment_explain_service import build_segment_explanations
 from utils import formatting
 from utils.config import load_config
@@ -115,7 +115,7 @@ def _retention_frame() -> pd.DataFrame | None:
 def _strategy_matrix() -> StrategyMatrix | None:
     """Loaded strategy matrix, or None when the file is missing or uncovered."""
     try:
-        matrix, report = default_matrix_report()
+        matrix, report = cached_default_matrix_report()
     except (ValueError, FileNotFoundError):
         return None
     return None if report.get("uncovered") else matrix
@@ -268,11 +268,17 @@ has_ai_segments = "ai_segment" in master_f.columns and master_f["ai_segment"].no
 ai_portfolio = cached_segment_portfolio(master_f, "ai_segment") if has_ai_segments else None
 hvhr = cached_high_value_high_risk(master_f)
 
-overview_tab, trends_tab, segments_tab, churn_tab, retention_tab = st.tabs(
-    ["Business Overview", "Customer Trends", "Segments", "Churn Risk", "Retention"]
+selected_tab = st.segmented_control(
+    "Dashboard section",
+    ["Business Overview", "Customer Trends", "Segments", "Churn Risk", "Retention"],
+    default="Business Overview",
+    selection_mode="single",
+    label_visibility="collapsed",
+    key="dashboard_tab",
 )
+selected_tab = selected_tab or "Business Overview"
 
-with overview_tab:
+if selected_tab == "Business Overview":
     rev_delta = _delta(deltas.get("total_revenue"))
     cust_delta = _delta(deltas.get("total_customers"))
     aov_delta = _delta(deltas.get("average_order_value"))
@@ -653,7 +659,7 @@ with overview_tab:
                     "Insights appear as RFM, churn, and retention results arrive.",
                 )
 
-with trends_tab:
+elif selected_tab == "Customer Trends":
     section_header("Customer trends", "Activity and cohort mix over time.")
     cohort = trends["cohort"]
     metric_row(
@@ -726,7 +732,7 @@ with trends_tab:
     with st.expander("Monthly revenue table", expanded=False):
         render_table(trends["revenue"], money_cols=("revenue",))
 
-with segments_tab:
+elif selected_tab == "Segments":
     section_header("Segments", "Portfolio mix and revenue contribution.")
     _segment_portfolio_section(
         "RFM segments",
@@ -765,7 +771,7 @@ with segments_tab:
             "Save an AI segmentation run on page 05 to explain its groups here.",
         )
 
-with churn_tab:
+elif selected_tab == "Churn Risk":
     section_header("Churn risk", "Where predicted churn concentrates.")
     if "risk_band" not in master_f.columns:
         empty_state(
@@ -806,7 +812,7 @@ with churn_tab:
                     "Nothing in the current filters needs VIP intervention.",
                 )
 
-with retention_tab:
+elif selected_tab == "Retention":
     section_header("Retention", "Actions for the filtered customers.")
     if ret_f is None or ret_f.empty:
         empty_state(
@@ -861,6 +867,25 @@ with retention_tab:
             ai_counts = strategy_segment_customer_counts(
                 ret_f, master_f, strategy_matrix, "ai_segment"
             )
+
+            def _sort_strategy_counts(df):
+                if df.empty or "strategy" not in df.columns:
+                    return df
+                order = (
+                    df.groupby("strategy", sort=False)["customers"]
+                    .sum()
+                    .sort_values(ascending=False)
+                    .index.tolist()
+                )
+                return (
+                    df.assign(_s=df["strategy"].map({s: i for i, s in enumerate(order)}))
+                    .sort_values(["_s", "customers"], ascending=[True, False])
+                    .drop(columns="_s")
+                    .reset_index(drop=True)
+                )
+
+            rfm_counts = _sort_strategy_counts(rfm_counts)
+            ai_counts = _sort_strategy_counts(ai_counts)
             coverage_left, coverage_right = st.columns(2)
             with coverage_left:
                 with chart_section("RFM customers per strategy"):
@@ -871,6 +896,8 @@ with retention_tab:
                         width="stretch",
                         key="ret_rfm_segment_customers",
                     )
+                with st.expander("RFM strategy-segment table", expanded=False):
+                    render_table(rfm_counts, int_cols=("customers",))
             with coverage_right:
                 with chart_section("AI customers per strategy"):
                     plotly_chart(
@@ -880,6 +907,8 @@ with retention_tab:
                         width="stretch",
                         key="ret_ai_segment_customers",
                     )
+                with st.expander("AI strategy-segment table", expanded=False):
+                    render_table(ai_counts, int_cols=("customers",))
             render_strategy_playbook(ret_f, strategy_matrix)
         with st.expander("Ranked customers (top 200)", expanded=False):
             ranked = ret_f.sort_values("retention_priority_score", ascending=False).head(200)

@@ -44,7 +44,7 @@ from services.feature_service import (
     segment_profile,
 )
 from services.profiling_service import compute_quality
-from services.retention_service import build_retention_table, export_campaign
+from services.retention_service import build_retention_table, default_matrix_report, export_campaign
 
 
 @st.cache_data(show_spinner=False)
@@ -234,3 +234,13 @@ def cached_export_campaign(
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Campaign audience plus channel summary for the filtered view."""
     return export_campaign(table, top_n=top_n, min_priority=min_priority)
+
+
+@st.cache_data(show_spinner=False)
+def cached_default_matrix_report(
+    matrix_path: str = "retention_strategies.yaml",
+    tiers: tuple[str, ...] = ("Low", "Medium", "High"),
+    bands: tuple[str, ...] = ("low", "medium", "high", "critical"),
+):
+    """Load and validate the default retention strategy matrix."""
+    return default_matrix_report(matrix_path=matrix_path, tiers=tiers, bands=bands)
